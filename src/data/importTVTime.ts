@@ -76,7 +76,7 @@ async function importShows(force: boolean): Promise<void> {
     }
   }
 
-  await pool(pending, 8, async (s) => {
+  await pool(pending, 5, async (s) => {
     // Resolve by TheTVDB id first, then fall back to a title search (recovers
     // shows whose TheTVDB id has no TMDB cross-link).
     let summary = await findShowByTvdbId(s.tvdbId)
@@ -144,7 +144,7 @@ async function importMoviesPhase(force: boolean): Promise<void> {
   }
 
   if (pending.length) {
-    await pool(pending, 8, async (mv) => {
+    await pool(pending, 5, async (mv) => {
       // Match by title + year, then retry without the year constraint.
       let summary = await searchMovieByName(mv.n, mv.y)
       if (!summary && mv.y) summary = await searchMovieByName(mv.n)

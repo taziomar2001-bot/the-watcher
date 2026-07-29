@@ -15,15 +15,55 @@ const IMG = 'https://image.tmdb.org/t/p'
 
 const img = (path: string | null, size = 'w500') => (path ? `${IMG}/${size}${path}` : undefined)
 
-async function api<T>(path: string, params: Record<string, string | number> = {}): Promise<T> {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+// Exponential backoff with jitter (capped) for transient failures.
+const backoff = (attempt: number) => Math.min(8000, 300 * 2 ** attempt) + Math.floor(Math.random() * 200)
+
+/**
+ * TMDB fetch with automatic retry. Recovers from rate-limiting (429) and
+ * transient server/network errors (5xx, dropped connections) — honouring the
+ * Retry-After header — so bursts (e.g. the background import) never cause a
+ * season/episode fetch to be silently lost.
+ */
+async function api<T>(path: string, params: Record<string, string | number> = {}, attempt = 0): Promise<T> {
   const url = new URL(API + path)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v))
   if (KEY && !TOKEN) url.searchParams.set('api_key', KEY)
-  const res = await fetch(url.toString(), {
-    headers: TOKEN ? { Authorization: `Bearer ${TOKEN}`, accept: 'application/json' } : { accept: 'application/json' },
-  })
+
+  let res: Response
+  try {
+    res = await fetch(url.toString(), {
+      headers: TOKEN ? { Authorization: `Bearer ${TOKEN}`, accept: 'application/json' } : { accept: 'application/json' },
+    })
+  } catch (e) {
+    if (attempt < 5) {
+      await sleep(backoff(attempt))
+      return api(path, params, attempt + 1)
+    }
+    throw e
+  }
+
+  if ((res.status === 429 || res.status >= 500) && attempt < 6) {
+    const retryAfter = Number(res.headers.get('retry-after'))
+    await sleep(retryAfter > 0 ? retryAfter * 1000 : backoff(attempt))
+    return api(path, params, attempt + 1)
+  }
   if (!res.ok) throw new Error(`TMDB ${res.status} on ${path}`)
   return res.json() as Promise<T>
+}
+
+/** Bounded-concurrency map that propagates the first error (never silently drops). */
+async function mapPool<T, R>(items: T[], limit: number, fn: (t: T, i: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let i = 0
+  const run = async () => {
+    while (i < items.length) {
+      const idx = i++
+      results[idx] = await fn(items[idx], idx)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run))
+  return results
 }
 
 const GENRE_CACHE: Record<'tv' | 'movie', Record<number, string>> = { tv: {}, movie: {} }
@@ -90,32 +130,31 @@ export async function getShow(id: string): Promise<Show | undefined> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = await api<any>(`/tv/${id}`)
   const base = await mapShow(r, gm)
-  // Fetch each season's episodes (skip specials / season 0).
-  const seasons: Season[] = []
-  for (const s of r.seasons ?? []) {
-    if (s.season_number === 0) continue
-    try {
+  // Every real season (skip specials / season 0), fetched with bounded
+  // concurrency. A season fetch that fails after retries propagates, so a
+  // partial show is NEVER returned or cached — the whole load simply retries.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seasonNumbers: number[] = (r.seasons ?? []).map((s: any) => s.season_number).filter((n: number) => n !== 0)
+  const seasons: Season[] = await mapPool(seasonNumbers, 4, async (sn) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sd = await api<any>(`/tv/${id}/season/${sn}`)
+    const episodes: Episode[] = (sd.episodes ?? []).map(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sd = await api<any>(`/tv/${id}/season/${s.season_number}`)
-      const episodes: Episode[] = (sd.episodes ?? []).map(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (e: any): Episode => ({
-          id: `${id}_s${e.season_number}e${e.episode_number}`,
-          season: e.season_number,
-          number: e.episode_number,
-          title: e.name,
-          overview: e.overview,
-          airDate: e.air_date || undefined,
-          airTime: '03:00',
-          still: img(e.still_path, 'w300'),
-          runtime: e.runtime,
-        }),
-      )
-      seasons.push({ season: s.season_number, name: s.name, episodes })
-    } catch {
-      /* ignore a failed season */
-    }
-  }
+      (e: any): Episode => ({
+        id: `${id}_s${e.season_number}e${e.episode_number}`,
+        season: e.season_number,
+        number: e.episode_number,
+        title: e.name,
+        overview: e.overview,
+        airDate: e.air_date || undefined,
+        airTime: '03:00',
+        still: img(e.still_path, 'w300'),
+        runtime: e.runtime,
+      }),
+    )
+    return { season: sn, name: sd.name, episodes }
+  })
+  seasons.sort((a, b) => a.season - b.season)
   return { ...base, seasons, totalEpisodes: seasons.reduce((n, s) => n + s.episodes.length, 0) }
 }
 

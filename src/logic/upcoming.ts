@@ -96,7 +96,7 @@ async function sync(force: boolean, onlyId?: string): Promise<void> {
 
   useUpcoming.getState()._apply({ building: true, progress: { done: 0, total: toFetch.length } })
   let done = 0
-  await pool(toFetch, 8, async (id) => {
+  await pool(toFetch, 4, async (id) => {
     const s = await getShow(id)
     if (s) {
       const all = s.seasons.flatMap((se) => se.episodes)
