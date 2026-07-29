@@ -1,129 +1,153 @@
-import { findShowByTvdbId, findMovieByTvdbId, showMeta, searchMovieByName } from './tmdb'
+import { create } from 'zustand'
+import { findShowByTvdbId, searchShowByName, findMovieByTvdbId, showMeta, searchMovieByName } from './tmdb'
 import { TV_TIME_SHOWS, TV_TIME_FAVORITE_MOVIE_TVDB_IDS, TV_TIME_MOVIES } from './tvTimeImport'
 import { useLibrary, type ImportedShow, type ImportedMovie, type LibraryItem } from '../store/useLibrary'
 import { USE_TMDB } from './catalog'
 
 // Run N promise-returning tasks with bounded concurrency.
-async function pool<T>(items: T[], limit: number, worker: (t: T, i: number) => Promise<void>) {
+async function pool<T>(items: T[], limit: number, worker: (t: T) => Promise<void>) {
   let idx = 0
   const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (idx < items.length) {
-      const cur = idx++
-      await worker(items[cur], cur)
-    }
+    while (idx < items.length) await worker(items[idx++])
   })
   await Promise.all(runners)
 }
 
-let runningShows = false
-let runningMovies = false
+// ---------------------------------------------------------------------------
+// Resumable, self-healing TV Time migration.
+//
+// The full history (471 shows, 1451 movies) ships baked into the app as
+// TheTVDB ids / titles. The FIRST time the app runs on an internet-connected
+// device it resolves each item to its TMDB counterpart (id + poster + totals +
+// ended status) and records it in a per-item ledger (importedShowIds /
+// importedMovieKeys). Every later launch skips everything already resolved, so
+// once the library is complete the migration makes zero network calls — the
+// resolved library is the permanent base, backed up to the account's cloud.
+//
+// Nothing is ever dropped silently: an item that fails to resolve is simply not
+// marked done, so it is retried on the next launch (and can be force-retried
+// from Settings). Merges never overwrite newer in-app activity.
+// ---------------------------------------------------------------------------
 
-/**
- * One-time migration of TV Time TV history. Resolves TheTVDB ids to TMDB ids
- * via /find. Runs once, live-mode only, self-guarding.
- */
-export async function runTVTimeImport(onProgress?: (done: number, total: number) => void): Promise<void> {
-  if (runningShows) return
-  const store = useLibrary.getState()
-  if (!USE_TMDB || store.tvTimeImported) return
-  runningShows = true
-
-  try {
-    const shows = TV_TIME_SHOWS
-    const total = shows.length
-    let done = 0
-    let batch: ImportedShow[] = []
-    const flush = () => {
-      if (batch.length) {
-        useLibrary.getState().applyImportedShows(batch)
-        batch = []
-      }
-    }
-
-    await pool(shows, 8, async (s) => {
-      const summary = await findShowByTvdbId(s.tvdbId)
-      if (summary) {
-        const item: LibraryItem = {
-          id: summary.id,
-          type: 'show',
-          title: summary.title || s.name,
-          poster: summary.poster,
-          backdrop: summary.backdrop,
-          year: summary.year,
-          seen: s.seen,
-          archived: s.archived,
-        }
-        if (s.seen > 0) {
-          // Fetch real episode/season totals + ended status for every watched show
-          // (archived included) in ONE cheap request so classification (green
-          // "Finished" / purple "Up to date" / yellow "in progress") is accurate
-          // immediately — without waiting on the heavy per-season Up & Coming sync.
-          const meta = await showMeta(summary.id)
-          const total = meta?.episodes ?? s.seen
-          item.totalEpisodes = total
-          item.seasonCount = meta?.seasons
-          item.ended = meta?.ended
-          // An ended show has all its episodes released, so caught-up == finished.
-          if (meta?.ended && total) item.releasedEpisodes = total
-          // Guard against TV Time's "seen everything" sentinel (e.g. 999) inflating
-          // counts — a show can't have more watched episodes than it has.
-          if (total && item.seen != null && item.seen > total) item.seen = total
-        }
-        batch.push({
-          id: summary.id,
-          item,
-          followed: s.followed || s.seen > 0,
-          favorite: s.favorite,
-          rating: s.rating,
-          followedAt: s.followedAt,
-          lastWatched: s.lastWatched,
-        })
-        if (batch.length >= 20) flush()
-      }
-      done++
-      onProgress?.(done, total)
-    })
-    flush()
-
-    // Best-effort favorite movies from the TV Time lists (TheTVDB movie ids).
-    const movieItems: LibraryItem[] = []
-    await pool(TV_TIME_FAVORITE_MOVIE_TVDB_IDS, 4, async (id) => {
-      const m = await findMovieByTvdbId(id)
-      if (m) movieItems.push({ id: m.id, type: 'movie', title: m.title, poster: m.poster, backdrop: m.backdrop, year: m.year })
-    })
-    if (movieItems.length) useLibrary.getState().applyImportedMovies(movieItems)
-
-    useLibrary.getState().setTvTimeImported(true)
-  } finally {
-    runningShows = false
-  }
+export interface ImportStatus {
+  running: boolean
+  phase: 'idle' | 'shows' | 'movies' | 'done'
+  showsTotal: number
+  showsResolved: number
+  showsFailed: number
+  moviesTotal: number
+  moviesResolved: number
+  moviesFailed: number
+  _set: (p: Partial<ImportStatus>) => void
 }
 
-/**
- * One-time migration of TV Time MOVIE history (watched / followed / runtimes /
- * dates). Resolves each title to a TMDB movie by name + year. Runs once,
- * live-mode only. Separate flag so already-imported accounts still get movies.
- */
-export async function runMovieImport(onProgress?: (done: number, total: number) => void): Promise<void> {
-  if (runningMovies) return
-  const store = useLibrary.getState()
-  if (!USE_TMDB || store.tvTimeMoviesImported) return
-  runningMovies = true
+/** Live progress of the migration (not persisted) — drives the Settings panel. */
+export const useImportStatus = create<ImportStatus>((set) => ({
+  running: false,
+  phase: 'idle',
+  showsTotal: 0,
+  showsResolved: 0,
+  showsFailed: 0,
+  moviesTotal: 0,
+  moviesResolved: 0,
+  moviesFailed: 0,
+  _set: (p) => set(p),
+}))
 
-  try {
-    const movies = TV_TIME_MOVIES
-    const total = movies.length
-    let done = 0
-    let batch: ImportedMovie[] = []
-    const flush = () => {
-      if (batch.length) {
-        useLibrary.getState().importMovies(batch)
-        batch = []
-      }
+const movieKey = (m: { n: string; y?: number }) => `${m.n}|${m.y ?? ''}`
+
+let running = false
+
+async function importShows(force: boolean): Promise<void> {
+  const st = useImportStatus.getState()
+  const ledger = useLibrary.getState().importedShowIds
+  const pending = TV_TIME_SHOWS.filter((s) => force || !ledger[String(s.tvdbId)])
+  st._set({ phase: 'shows', showsTotal: TV_TIME_SHOWS.length })
+  if (!pending.length) return
+
+  let resolved = 0
+  let failed = 0
+  let batch: ImportedShow[] = []
+  const doneIds: string[] = []
+  const flush = () => {
+    if (batch.length) {
+      useLibrary.getState().applyImportedShows(batch)
+      batch = []
     }
+  }
 
-    await pool(movies, 8, async (mv) => {
-      const summary = await searchMovieByName(mv.n, mv.y)
+  await pool(pending, 8, async (s) => {
+    // Resolve by TheTVDB id first, then fall back to a title search (recovers
+    // shows whose TheTVDB id has no TMDB cross-link).
+    let summary = await findShowByTvdbId(s.tvdbId)
+    if (!summary) summary = await searchShowByName(s.name)
+    if (summary) {
+      const item: LibraryItem = {
+        id: summary.id,
+        type: 'show',
+        title: summary.title || s.name,
+        poster: summary.poster,
+        backdrop: summary.backdrop,
+        year: summary.year,
+        seen: s.seen,
+        archived: s.archived,
+      }
+      if (s.seen > 0) {
+        // One cheap request gives real totals + ended status, so classification
+        // (green Finished / purple Up-to-date / yellow in-progress) is correct
+        // immediately — no dependency on the heavy Up & Coming sync.
+        const meta = await showMeta(summary.id)
+        const total = meta?.episodes ?? s.seen
+        item.totalEpisodes = total
+        item.seasonCount = meta?.seasons
+        item.ended = meta?.ended
+        if (meta?.ended && total) item.releasedEpisodes = total
+        // Cap TV Time's "seen everything" sentinel (e.g. 999) to real totals.
+        if (total && item.seen != null && item.seen > total) item.seen = total
+      }
+      batch.push({
+        id: summary.id,
+        item,
+        followed: s.followed || s.seen > 0,
+        favorite: s.favorite,
+        rating: s.rating,
+        followedAt: s.followedAt,
+        lastWatched: s.lastWatched,
+      })
+      doneIds.push(String(s.tvdbId))
+      resolved++
+      if (batch.length >= 20) flush()
+    } else {
+      failed++
+    }
+    useImportStatus.getState()._set({ showsResolved: resolved, showsFailed: failed })
+  })
+  flush()
+  if (doneIds.length) useLibrary.getState().markShowsResolved(doneIds)
+}
+
+async function importMoviesPhase(force: boolean): Promise<void> {
+  const st = useImportStatus.getState()
+  const ledger = useLibrary.getState().importedMovieKeys
+  const pending = TV_TIME_MOVIES.filter((m) => force || !ledger[movieKey(m)])
+  st._set({ phase: 'movies', moviesTotal: TV_TIME_MOVIES.length })
+
+  let resolved = 0
+  let failed = 0
+  let batch: ImportedMovie[] = []
+  const doneKeys: string[] = []
+  const flush = () => {
+    if (batch.length) {
+      useLibrary.getState().importMovies(batch)
+      batch = []
+    }
+  }
+
+  if (pending.length) {
+    await pool(pending, 8, async (mv) => {
+      // Match by title + year, then retry without the year constraint.
+      let summary = await searchMovieByName(mv.n, mv.y)
+      if (!summary && mv.y) summary = await searchMovieByName(mv.n)
       if (summary) {
         const item: LibraryItem = {
           id: summary.id,
@@ -144,100 +168,46 @@ export async function runMovieImport(onProgress?: (done: number, total: number) 
           followedAt: mv.fa,
           watchedAt: mv.wd ? Date.parse(mv.wd + 'T00:00:00') || undefined : undefined,
         })
+        doneKeys.push(movieKey(mv))
+        resolved++
         if (batch.length >= 25) flush()
+      } else {
+        failed++
       }
-      done++
-      onProgress?.(done, total)
+      useImportStatus.getState()._set({ moviesResolved: resolved, moviesFailed: failed })
     })
     flush()
+    if (doneKeys.length) useLibrary.getState().markMoviesResolved(doneKeys)
 
-    useLibrary.getState().setTvTimeMoviesImported(true)
-  } finally {
-    runningMovies = false
+    // Legacy favourite-movies pulled straight from the TV Time list by TheTVDB
+    // id (idempotent, add-only). Only while there's work to do, so a fully
+    // migrated library makes no calls at all. Cheap safety net for favourites.
+    const favItems: LibraryItem[] = []
+    await pool(TV_TIME_FAVORITE_MOVIE_TVDB_IDS, 4, async (id) => {
+      const m = await findMovieByTvdbId(id)
+      if (m) favItems.push({ id: m.id, type: 'movie', title: m.title, poster: m.poster, backdrop: m.backdrop, year: m.year })
+    })
+    if (favItems.length) useLibrary.getState().applyImportedMovies(favItems)
   }
 }
 
-export const MIGRATION_VERSION = 3
-let runningReconcile = false
-
 /**
- * Idempotent reconciliation for already-imported accounts. Enriches every
- * watched show with real episode totals + ended status (so Finished / Up-to-date
- * / in-progress colours are correct without the heavy Up & Coming sync), restores
- * the full favourites set, and restores favorite movies. Safe to run repeatedly.
+ * Resolve everything still outstanding (or, with force, re-resolve the whole
+ * history). Safe to call on every launch and to trigger manually — converges to
+ * a complete library, then does nothing.
  */
-export async function runReconcile(): Promise<void> {
-  if (runningReconcile) return
-  const store = useLibrary.getState()
-  if (!USE_TMDB || store.migrationVersion >= MIGRATION_VERSION) return
-  runningReconcile = true
+export async function runFullImport(force = false): Promise<void> {
+  if (running || !USE_TMDB) return
+  running = true
+  useImportStatus.getState()._set({ running: true })
   try {
-    // 1. Enrich EVERY watched show (not just archived) with real totals + ended
-    //    status in one cheap request each, so classification is correct up-front.
-    const watchedIds = Object.values(store.libraryShows)
-      .filter((it) => (it.seen ?? 0) > 0)
-      .map((it) => it.id)
-    await pool(watchedIds, 8, async (id) => {
-      const it = useLibrary.getState().libraryShows[id]
-      const meta = await showMeta(id)
-      const patch: Partial<LibraryItem> = { archived: false }
-      if (meta?.episodes) {
-        patch.totalEpisodes = meta.episodes
-        patch.seasonCount = meta.seasons
-      }
-      if (meta?.ended != null) patch.ended = meta.ended
-      const total = patch.totalEpisodes ?? it?.totalEpisodes
-      if (meta?.ended && total) patch.releasedEpisodes = total
-      if (total && it?.seen != null && it.seen > total) patch.seen = total
-      useLibrary.getState().patchLibraryShow(id, patch)
-    })
-
-    // 1b. Restore the full curated favourites set (union of every TV Time
-    //     favourite source — some were previously dropped). Resolve to TMDB ids.
-    const favShowIds: string[] = []
-    await pool(
-      TV_TIME_SHOWS.filter((s) => s.favorite),
-      6,
-      async (s) => {
-        const summary = await findShowByTvdbId(s.tvdbId)
-        if (summary) favShowIds.push(summary.id)
-      },
-    )
-    if (favShowIds.length) useLibrary.getState().setFavoriteShows(favShowIds)
-
-    // 2. Restore favorite movies (resolve the flagged titles, mark favorite).
-    const favMovies = TV_TIME_MOVIES.filter((m) => m.fav)
-    const favIds: string[] = []
-    await pool(favMovies, 6, async (mv) => {
-      const summary = await searchMovieByName(mv.n, mv.y)
-      if (summary) {
-        useLibrary.getState().importMovies([
-          {
-            id: summary.id,
-            item: {
-              id: summary.id,
-              type: 'movie',
-              title: summary.title || mv.n,
-              poster: summary.poster,
-              backdrop: summary.backdrop,
-              year: summary.year ?? mv.y,
-              runtime: mv.rt,
-              releaseDate: mv.rd,
-            },
-            watched: !!mv.w,
-            followed: true,
-            favorite: true,
-            followedAt: mv.fa,
-            watchedAt: mv.wd ? Date.parse(mv.wd + 'T00:00:00') || undefined : undefined,
-          },
-        ])
-        favIds.push(summary.id)
-      }
-    })
-    if (favIds.length) useLibrary.getState().setFavoriteMovies(favIds)
-
-    useLibrary.getState().setMigrationVersion(MIGRATION_VERSION)
+    await importShows(force)
+    if (!useLibrary.getState().tvTimeImported) useLibrary.getState().setTvTimeImported(true)
+    await importMoviesPhase(force)
+    if (!useLibrary.getState().tvTimeMoviesImported) useLibrary.getState().setTvTimeMoviesImported(true)
+    useImportStatus.getState()._set({ phase: 'done' })
   } finally {
-    runningReconcile = false
+    running = false
+    useImportStatus.getState()._set({ running: false })
   }
 }

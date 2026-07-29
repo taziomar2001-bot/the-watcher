@@ -30,6 +30,8 @@ const SYNC_KEYS = [
   'tvTimeImported',
   'tvTimeMoviesImported',
   'migrationVersion',
+  'importedShowIds',
+  'importedMovieKeys',
 ] as const
 
 type Snap = Record<string, unknown>

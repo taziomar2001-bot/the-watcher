@@ -8,7 +8,7 @@ import { SUPABASE_ENABLED } from './data/supabase'
 import { useLibrary } from './store/useLibrary'
 import { useToast } from './store/useToast'
 import { useSync } from './logic/sync'
-import { runTVTimeImport, runMovieImport, runReconcile } from './data/importTVTime'
+import { runFullImport } from './data/importTVTime'
 import { initSync } from './logic/sync'
 import { ensureUpcoming } from './logic/upcoming'
 
@@ -61,23 +61,21 @@ export default function App() {
     void initSync()
   }, [])
 
-  // One-time migration of TV Time history (shows, then movies), then warm the
-  // Up & Coming cache so that tab is instant when first opened.
+  // Resumable TV Time migration: resolves everything still outstanding, skips
+  // whatever is already baked in, then warms the Up & Coming cache. Converges to
+  // a complete library and afterwards makes no network calls.
   useEffect(() => {
     if (!USE_TMDB) return
     const toast = useToast.getState().show
     ;(async () => {
-      if (!useLibrary.getState().tvTimeImported) {
-        toast('Importing your shows…', { duration: 8000 })
-        await runTVTimeImport().catch(() => {})
+      const firstRun = !useLibrary.getState().tvTimeImported
+      if (firstRun) toast('Importing your library from TV Time…', { duration: 8000 })
+      await runFullImport().catch(() => {})
+      if (firstRun) {
+        const shows = Object.keys(useLibrary.getState().libraryShows).length
+        const movies = Object.keys(useLibrary.getState().libraryMovies).length
+        if (shows || movies) toast(`Imported ${shows.toLocaleString()} shows & ${movies.toLocaleString()} movies`, { duration: 5000 })
       }
-      if (!useLibrary.getState().tvTimeMoviesImported) {
-        toast('Importing your movies… this can take a minute', { duration: 8000 })
-        await runMovieImport().catch(() => {})
-        const n = Object.keys(useLibrary.getState().libraryMovies).length
-        if (n) toast(`Imported ${n.toLocaleString()} movies from TV Time`, { duration: 5000 })
-      }
-      await runReconcile().catch(() => {}) // fix statuses + restore favorite movies
       ensureUpcoming() // prefetch releases in the background
     })()
   }, [])

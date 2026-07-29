@@ -66,6 +66,10 @@ interface LibraryState {
   tvTimeImported: boolean
   tvTimeMoviesImported: boolean
   migrationVersion: number
+  // Per-item resolution ledger so the TV Time migration is resumable and never
+  // re-resolves an item twice. Keyed by TheTVDB id (shows) / "name|year" (movies).
+  importedShowIds: Record<string, true>
+  importedMovieKeys: Record<string, true>
 
   toggleWatchlistShow: (id: string, item?: LibraryItem) => void
   toggleWatchlistMovie: (id: string, item?: LibraryItem) => void
@@ -89,6 +93,8 @@ interface LibraryState {
   setTvTimeImported: (v: boolean) => void
   setTvTimeMoviesImported: (v: boolean) => void
   setMigrationVersion: (v: number) => void
+  markShowsResolved: (tvdbIds: string[]) => void
+  markMoviesResolved: (keys: string[]) => void
   patchLibraryShow: (id: string, patch: Partial<LibraryItem>) => void
   backfillSeen: (showId: string, orderedReleasedEpIds: string[], count: number) => void
 }
@@ -165,6 +171,8 @@ export const useLibrary = create<LibraryState>()(
       tvTimeImported: !USE_TMDB,
       tvTimeMoviesImported: !USE_TMDB,
       migrationVersion: USE_TMDB ? 0 : 999,
+      importedShowIds: {},
+      importedMovieKeys: {},
 
       toggleWatchlistShow: (id, item) =>
         set((s) => {
@@ -320,10 +328,12 @@ export const useLibrary = create<LibraryState>()(
             libraryShows[e.id] = { ...libraryShows[e.id], ...e.item }
             if (e.followed) watchlistShows[e.id] = true
             if (e.favorite) favoriteShows[e.id] = true
-            if (e.rating != null) ratings[e.id] = e.rating
-            if (e.followedAt) followedAt[e.id] = e.followedAt
-            if (e.lastWatched) lastWatched[e.id] = e.lastWatched
-            addedAt[e.id] = e.followedAt ?? e.lastWatched ?? addedAt[e.id] ?? 0
+            // Non-clobbering merges so re-running the import never overwrites
+            // the user's newer in-app activity (recent watches, own ratings).
+            if (e.rating != null && ratings[e.id] == null) ratings[e.id] = e.rating
+            if (e.followedAt) followedAt[e.id] = followedAt[e.id] ?? e.followedAt
+            if (e.lastWatched) lastWatched[e.id] = Math.max(lastWatched[e.id] ?? 0, e.lastWatched)
+            addedAt[e.id] = addedAt[e.id] ?? e.followedAt ?? e.lastWatched ?? 0
           }
           return { watchlistShows, favoriteShows, ratings, libraryShows, followedAt, lastWatched, addedAt }
         }),
@@ -352,15 +362,28 @@ export const useLibrary = create<LibraryState>()(
             if (e.followed || e.watched || e.favorite) watchlistMovies[e.id] = true // watched/favorite implies tracked
             if (e.watched) watchedMovies[e.id] = true
             if (e.favorite) favoriteMovies[e.id] = true
-            if (e.followedAt) followedAt[e.id] = e.followedAt
-            if (e.watchedAt) lastWatched[e.id] = e.watchedAt
-            addedAt[e.id] = e.followedAt ?? e.watchedAt ?? addedAt[e.id] ?? 0
+            // Non-clobbering (see applyImportedShows).
+            if (e.followedAt) followedAt[e.id] = followedAt[e.id] ?? e.followedAt
+            if (e.watchedAt) lastWatched[e.id] = Math.max(lastWatched[e.id] ?? 0, e.watchedAt)
+            addedAt[e.id] = addedAt[e.id] ?? e.followedAt ?? e.watchedAt ?? 0
           }
           return { watchlistMovies, watchedMovies, favoriteMovies, libraryMovies, followedAt, lastWatched, addedAt }
         }),
       setTvTimeImported: (v) => set(() => ({ tvTimeImported: v })),
       setTvTimeMoviesImported: (v) => set(() => ({ tvTimeMoviesImported: v })),
       setMigrationVersion: (v) => set(() => ({ migrationVersion: v })),
+      markShowsResolved: (tvdbIds) =>
+        set((s) => {
+          const importedShowIds = { ...s.importedShowIds }
+          tvdbIds.forEach((id) => (importedShowIds[id] = true))
+          return { importedShowIds }
+        }),
+      markMoviesResolved: (keys) =>
+        set((s) => {
+          const importedMovieKeys = { ...s.importedMovieKeys }
+          keys.forEach((k) => (importedMovieKeys[k] = true))
+          return { importedMovieKeys }
+        }),
       // Reconstruct per-episode watched state for an imported show (which only
       // has an aggregate seen-count) so season/episode indicators are consistent.
       // Runs only when the show has no per-episode watched data yet.

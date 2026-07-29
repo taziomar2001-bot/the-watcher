@@ -1,4 +1,5 @@
 import { SyncPanel } from './SyncPanel'
+import { ImportPanel } from './ImportPanel'
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   return (
@@ -12,6 +13,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="settings-body">
           <SyncPanel />
+          <ImportPanel />
           <div className="settings-note">
             The Watcher · your library is stored on this device and, when signed in, backed up to your private cloud.
           </div>

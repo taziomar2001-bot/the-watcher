@@ -209,6 +209,26 @@ export async function findMovieByTvdbId(tvdbId: number): Promise<ResolvedSummary
   }
 }
 
+/** Resolve a TV show by name (fallback when the TheTVDB id has no TMDB link). */
+export async function searchShowByName(name: string): Promise<ResolvedSummary | null> {
+  try {
+    const data = await api<{
+      results: { id: number; name: string; poster_path: string | null; backdrop_path: string | null; first_air_date?: string }[]
+    }>('/search/tv', { query: name, include_adult: 'false' })
+    const r = data.results?.[0]
+    if (!r) return null
+    return {
+      id: String(r.id),
+      title: r.name,
+      poster: img(r.poster_path),
+      backdrop: img(r.backdrop_path, 'w780'),
+      year: r.first_air_date ? Number(r.first_air_date.slice(0, 4)) : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
 /** Resolve a movie by title (+ optional year) to a TMDB movie summary. */
 export async function searchMovieByName(title: string, year?: number): Promise<ResolvedSummary | null> {
   try {
