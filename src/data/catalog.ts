@@ -89,7 +89,8 @@ export async function upcomingEpisodes(showIds?: string[]): Promise<UpcomingEpis
   let shows: Show[]
   if (USE_TMDB && showIds && showIds.length) {
     // In live mode, summaries carry no episodes — fetch full details per show.
-    shows = (await Promise.all(showIds.map((id) => tmdb.getShow(id)))).filter(Boolean) as Show[]
+    // Per-show catch so a single show that fails to load can't blank the list.
+    shows = (await Promise.all(showIds.map((id) => tmdb.getShow(id).catch(() => undefined)))).filter(Boolean) as Show[]
   } else {
     shows = (await allShows()).filter((s) => !showIds || showIds.includes(s.id))
   }

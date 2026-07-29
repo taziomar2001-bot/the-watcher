@@ -97,24 +97,30 @@ async function sync(force: boolean, onlyId?: string): Promise<void> {
   useUpcoming.getState()._apply({ building: true, progress: { done: 0, total: toFetch.length } })
   let done = 0
   await pool(toFetch, 4, async (id) => {
-    const s = await getShow(id)
-    if (s) {
-      const all = s.seasons.flatMap((se) => se.episodes)
-      const eps = all
-        .filter((e) => e.airDate && e.airDate >= todayIso)
-        .map((e) => ({ season: e.season, number: e.number, title: e.title, airDate: e.airDate as string }))
-      // Reuse the same normalized data to enrich the show's classification fields.
-      useLibrary.getState().patchLibraryShow(id, {
-        totalEpisodes: s.totalEpisodes || all.length,
-        releasedEpisodes: all.filter((e) => isReleased(e.airDate)).length,
-        ended: isEnded(s.status),
-      })
-      useUpcoming.getState()._patchShow(id, { title: s.title, poster: s.poster, eps }, Date.now())
-    } else {
-      useUpcoming.getState()._patchShow(id, { title: '', poster: undefined, eps: [] }, Date.now())
+    try {
+      const s = await getShow(id)
+      if (s) {
+        const all = s.seasons.flatMap((se) => se.episodes)
+        const eps = all
+          .filter((e) => e.airDate && e.airDate >= todayIso)
+          .map((e) => ({ season: e.season, number: e.number, title: e.title, airDate: e.airDate as string }))
+        // Reuse the same normalized data to enrich the show's classification fields.
+        useLibrary.getState().patchLibraryShow(id, {
+          totalEpisodes: s.totalEpisodes || all.length,
+          releasedEpisodes: all.filter((e) => isReleased(e.airDate)).length,
+          ended: isEnded(s.status),
+        })
+        useUpcoming.getState()._patchShow(id, { title: s.title, poster: s.poster, eps }, Date.now())
+      }
+      // If getShow throws (a show that couldn't fully load after retries) we do
+      // NOT record it: no fetchedAt is stored, so it's retried on the next sync,
+      // and — crucially — one failing show never aborts the rest of the batch.
+    } catch {
+      /* leave this show unfetched; it will be retried next sync */
+    } finally {
+      done++
+      if (done % 6 === 0) useUpcoming.getState()._apply({ progress: { done, total: toFetch.length } })
     }
-    done++
-    if (done % 6 === 0) useUpcoming.getState()._apply({ progress: { done, total: toFetch.length } })
   })
   useUpcoming.getState()._apply({ builtAt: Date.now(), building: false, progress: { done, total: toFetch.length } })
 }
