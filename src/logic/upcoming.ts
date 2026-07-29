@@ -46,6 +46,36 @@ const SHOW_TTL = 24 * 60 * 60 * 1000 // refetch a show's schedule at most daily
 const isReleased = (airDate?: string) => !airDate || new Date(airDate + 'T00:00:00') <= new Date()
 const isEnded = (status?: string) => /ended|canceled|cancelled/i.test(status || '')
 
+/**
+ * Every show whose upcoming episodes belong on the Up & Coming tab: anything the
+ * user follows OR has any watch history for — i.e. every non-stopped show that
+ * appears anywhere in the TV tab (Currently Watching, Up to Date, Not Watched
+ * Recently, Haven't Started). Stopped shows are the only exclusion. Shared by the
+ * sync and the render filter so the two never disagree.
+ */
+export function upcomingShowIds(lib: {
+  watchlistShows: Record<string, true>
+  libraryShows: Record<string, { seen?: number }>
+  stoppedShows: Record<string, true>
+}): string[] {
+  const ids = new Set<string>(Object.keys(lib.watchlistShows))
+  for (const [id, it] of Object.entries(lib.libraryShows)) if ((it.seen ?? 0) > 0) ids.add(id)
+  return [...ids].filter((id) => !lib.stoppedShows[id])
+}
+
+/** True when a show's upcoming episodes should appear (used by the render filter). */
+export function inUpcomingScope(
+  lib: {
+    watchlistShows: Record<string, true>
+    libraryShows: Record<string, { seen?: number }>
+    stoppedShows: Record<string, true>
+  },
+  id: string,
+): boolean {
+  if (lib.stoppedShows[id]) return false
+  return !!lib.watchlistShows[id] || (lib.libraryShows[id]?.seen ?? 0) > 0
+}
+
 async function pool<T>(items: T[], limit: number, worker: (t: T) => Promise<void>) {
   let i = 0
   await Promise.all(
@@ -65,7 +95,7 @@ let inFlight: Promise<void> | null = null
 async function sync(force: boolean, onlyId?: string): Promise<void> {
   const lib = useLibrary.getState()
   const store = useUpcoming.getState()
-  const wantedIds = Object.keys(lib.watchlistShows).filter((id) => !lib.stoppedShows[id])
+  const wantedIds = upcomingShowIds(lib)
   const wanted = new Set(wantedIds)
 
   // Prune shows that are no longer followed or are now stopped.
@@ -129,6 +159,18 @@ async function sync(force: boolean, onlyId?: string): Promise<void> {
 export function ensureUpcoming(force = false): void {
   if (inFlight) return
   inFlight = sync(force).finally(() => (inFlight = null))
+}
+
+/**
+ * Force a full re-sync and resolve when it finishes — for pull-to-refresh.
+ * Chains after any in-flight background sync so runs never overlap.
+ */
+export function refreshUpcoming(): Promise<void> {
+  const run = (): Promise<void> => {
+    inFlight = sync(true).finally(() => (inFlight = null))
+    return inFlight
+  }
+  return inFlight ? inFlight.then(run, run) : run()
 }
 
 /** Fetch a single show's schedule (call after following a new show). */

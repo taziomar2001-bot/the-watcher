@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
-import { useUpcoming, ensureUpcoming } from '../logic/upcoming'
+import { useUpcoming, ensureUpcoming, refreshUpcoming, inUpcomingScope } from '../logic/upcoming'
 import { useLibrary } from '../store/useLibrary'
 import { groupLabel, shortDate } from '../utils/dates'
 
@@ -17,6 +17,7 @@ interface UpItem {
   number?: number
 }
 const pad = (n: number) => String(n).padStart(2, '0')
+const PTR_THRESHOLD = 70
 
 export function UpComingScreen() {
   const nav = useNavigate()
@@ -24,11 +25,17 @@ export function UpComingScreen() {
   const building = useUpcoming((s) => s.building)
   const progress = useUpcoming((s) => s.progress)
   const watchlistShows = useLibrary((s) => s.watchlistShows)
+  const libraryShows = useLibrary((s) => s.libraryShows)
   const stoppedShows = useLibrary((s) => s.stoppedShows)
   const libraryMovies = useLibrary((s) => s.libraryMovies)
   const watchlistMovies = useLibrary((s) => s.watchlistMovies)
   const watchedMovies = useLibrary((s) => s.watchedMovies)
   const [visible, setVisible] = useState(50)
+
+  // Pull-to-refresh state.
+  const [pull, setPull] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const startY = useRef<number | null>(null)
 
   // Cache-first: renders from the persisted index immediately; refresh runs in bg.
   useEffect(() => {
@@ -41,7 +48,10 @@ export function UpComingScreen() {
     const todayIso = today.toISOString().slice(0, 10)
     const out: UpItem[] = []
     for (const [id, se] of Object.entries(byShow)) {
-      if (!watchlistShows[id] || stoppedShows[id]) continue // exclude unfollowed & stopped
+      // Every non-stopped show you follow OR have any watch history for — the
+      // same set the TV tab shows across Currently Watching / Up to Date /
+      // Not Watched Recently / Haven't Started.
+      if (!inUpcomingScope({ watchlistShows, libraryShows, stoppedShows }, id)) continue
       for (const e of se.eps) {
         out.push({
           id: `${id}_${e.season}_${e.number}`,
@@ -65,7 +75,7 @@ export function UpComingScreen() {
     const dedup = out.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)))
     dedup.sort((a, b) => a.date.localeCompare(b.date))
     return dedup
-  }, [byShow, watchlistShows, stoppedShows, libraryMovies, watchlistMovies, watchedMovies])
+  }, [byShow, watchlistShows, libraryShows, stoppedShows, libraryMovies, watchlistMovies, watchedMovies])
 
   const shown = items.slice(0, visible)
   const groups = useMemo(() => {
@@ -85,15 +95,71 @@ export function UpComingScreen() {
     }
   }
 
+  // ---- Pull-to-refresh (touch) ----
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    startY.current = e.currentTarget.scrollTop <= 0 && !refreshing ? e.touches[0].clientY : null
+  }
+  const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (startY.current == null || refreshing) return
+    const dy = e.touches[0].clientY - startY.current
+    setPull(dy > 0 && e.currentTarget.scrollTop <= 0 ? Math.min(dy * 0.5, 90) : 0)
+  }
+  const onTouchEnd = async () => {
+    const shouldRefresh = startY.current != null && pull >= PTR_THRESHOLD && !refreshing
+    startY.current = null
+    if (shouldRefresh) {
+      setRefreshing(true)
+      setPull(0)
+      try {
+        await refreshUpcoming()
+      } catch {
+        /* ignore */
+      }
+      setRefreshing(false)
+    } else {
+      setPull(0)
+    }
+  }
+
+  const indicatorH = refreshing ? 46 : pull
+  const dragging = startY.current != null && pull > 0
+
   return (
-    <div className="scroll-area route-fade" onScroll={onScroll}>
+    <div
+      className="scroll-area route-fade"
+      onScroll={onScroll}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      <style>{`@keyframes ptr-spin{to{transform:rotate(360deg)}} .ptr-spin{width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,.18);border-top-color:#f5c518;animation:ptr-spin .7s linear infinite}`}</style>
+
+      {/* Pull-to-refresh indicator */}
+      <div
+        style={{
+          height: indicatorH,
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#9aa0a6',
+          fontSize: 13,
+          fontWeight: 600,
+          transition: dragging ? 'none' : 'height .2s ease',
+        }}
+      >
+        {refreshing ? <span className="ptr-spin" /> : pull > 4 ? (pull >= PTR_THRESHOLD ? 'Release to refresh' : 'Pull to refresh') : null}
+      </div>
+
       <div className="app-header">
         <div>
           <h1>Up &amp; Coming</h1>
           <div className="sub">
-            {items.length === 0 && building
-              ? 'Gathering your releases…'
-              : `${items.length} upcoming ${items.length === 1 ? 'release' : 'releases'}${building ? ' · updating…' : ''}`}
+            {refreshing
+              ? 'Refreshing your releases…'
+              : items.length === 0 && building
+                ? 'Gathering your releases…'
+                : `${items.length} upcoming ${items.length === 1 ? 'release' : 'releases'}${building ? ' · updating…' : ''}`}
           </div>
         </div>
       </div>
@@ -111,7 +177,7 @@ export function UpComingScreen() {
           ))}
         </div>
       )}
-      {items.length === 0 && !building && (
+      {items.length === 0 && !building && !refreshing && (
         <div className="empty">
           <div className="empty-title">Nothing on the horizon</div>
           <div className="empty-sub">Upcoming episodes and movies from everything you follow will appear here</div>
