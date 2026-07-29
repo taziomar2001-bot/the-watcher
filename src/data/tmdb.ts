@@ -236,11 +236,16 @@ export async function searchMovieByName(title: string, year?: number): Promise<R
   }
 }
 
-/** Episode + season counts for a TMDB show (for imported progress + cards). */
-export async function showMeta(id: string): Promise<{ episodes?: number; seasons?: number } | undefined> {
+/** Episode + season counts (and ended flag) for a TMDB show — one cheap request.
+ *  Used to classify imported shows without the heavy per-season getShow fetch. */
+export async function showMeta(id: string): Promise<{ episodes?: number; seasons?: number; ended?: boolean } | undefined> {
   try {
-    const r = await api<{ number_of_episodes?: number; number_of_seasons?: number }>(`/tv/${id}`)
-    return { episodes: r.number_of_episodes, seasons: r.number_of_seasons }
+    const r = await api<{ number_of_episodes?: number; number_of_seasons?: number; status?: string }>(`/tv/${id}`)
+    return {
+      episodes: r.number_of_episodes,
+      seasons: r.number_of_seasons,
+      ended: /ended|canceled|cancelled/i.test(r.status || ''),
+    }
   } catch {
     return undefined
   }

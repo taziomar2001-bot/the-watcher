@@ -54,11 +54,20 @@ export async function runTVTimeImport(onProgress?: (done: number, total: number)
           archived: s.archived,
         }
         if (s.seen > 0) {
-          // Fetch the real episode/season totals for every watched show (archived
-          // included) so "completed" (green) vs "in progress" (orange) is accurate.
+          // Fetch real episode/season totals + ended status for every watched show
+          // (archived included) in ONE cheap request so classification (green
+          // "Finished" / purple "Up to date" / yellow "in progress") is accurate
+          // immediately — without waiting on the heavy per-season Up & Coming sync.
           const meta = await showMeta(summary.id)
-          item.totalEpisodes = meta?.episodes ?? s.seen
+          const total = meta?.episodes ?? s.seen
+          item.totalEpisodes = total
           item.seasonCount = meta?.seasons
+          item.ended = meta?.ended
+          // An ended show has all its episodes released, so caught-up == finished.
+          if (meta?.ended && total) item.releasedEpisodes = total
+          // Guard against TV Time's "seen everything" sentinel (e.g. 999) inflating
+          // counts — a show can't have more watched episodes than it has.
+          if (total && item.seen != null && item.seen > total) item.seen = total
         }
         batch.push({
           id: summary.id,
@@ -148,13 +157,14 @@ export async function runMovieImport(onProgress?: (done: number, total: number) 
   }
 }
 
-export const MIGRATION_VERSION = 2
+export const MIGRATION_VERSION = 3
 let runningReconcile = false
 
 /**
- * Idempotent reconciliation for already-imported accounts. Fixes archived-show
- * episode totals (so completed vs in-progress colours are correct) and restores
- * favorite movies. Safe to run repeatedly; dedupes by TMDB id.
+ * Idempotent reconciliation for already-imported accounts. Enriches every
+ * watched show with real episode totals + ended status (so Finished / Up-to-date
+ * / in-progress colours are correct without the heavy Up & Coming sync), restores
+ * the full favourites set, and restores favorite movies. Safe to run repeatedly.
  */
 export async function runReconcile(): Promise<void> {
   if (runningReconcile) return
@@ -162,15 +172,38 @@ export async function runReconcile(): Promise<void> {
   if (!USE_TMDB || store.migrationVersion >= MIGRATION_VERSION) return
   runningReconcile = true
   try {
-    // 1. Correct archived shows: fetch real totals, drop the archived shortcut.
-    const archivedIds = Object.values(store.libraryShows)
-      .filter((it) => it.archived)
+    // 1. Enrich EVERY watched show (not just archived) with real totals + ended
+    //    status in one cheap request each, so classification is correct up-front.
+    const watchedIds = Object.values(store.libraryShows)
+      .filter((it) => (it.seen ?? 0) > 0)
       .map((it) => it.id)
-    await pool(archivedIds, 8, async (id) => {
+    await pool(watchedIds, 8, async (id) => {
+      const it = useLibrary.getState().libraryShows[id]
       const meta = await showMeta(id)
-      if (meta?.episodes) useLibrary.getState().patchLibraryShow(id, { totalEpisodes: meta.episodes, seasonCount: meta.seasons, archived: false })
-      else useLibrary.getState().patchLibraryShow(id, { archived: false })
+      const patch: Partial<LibraryItem> = { archived: false }
+      if (meta?.episodes) {
+        patch.totalEpisodes = meta.episodes
+        patch.seasonCount = meta.seasons
+      }
+      if (meta?.ended != null) patch.ended = meta.ended
+      const total = patch.totalEpisodes ?? it?.totalEpisodes
+      if (meta?.ended && total) patch.releasedEpisodes = total
+      if (total && it?.seen != null && it.seen > total) patch.seen = total
+      useLibrary.getState().patchLibraryShow(id, patch)
     })
+
+    // 1b. Restore the full curated favourites set (union of every TV Time
+    //     favourite source — some were previously dropped). Resolve to TMDB ids.
+    const favShowIds: string[] = []
+    await pool(
+      TV_TIME_SHOWS.filter((s) => s.favorite),
+      6,
+      async (s) => {
+        const summary = await findShowByTvdbId(s.tvdbId)
+        if (summary) favShowIds.push(summary.id)
+      },
+    )
+    if (favShowIds.length) useLibrary.getState().setFavoriteShows(favShowIds)
 
     // 2. Restore favorite movies (resolve the flagged titles, mark favorite).
     const favMovies = TV_TIME_MOVIES.filter((m) => m.fav)

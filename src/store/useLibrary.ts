@@ -85,6 +85,7 @@ interface LibraryState {
   applyImportedMovies: (entries: LibraryItem[]) => void
   importMovies: (entries: ImportedMovie[]) => void
   setFavoriteMovies: (ids: string[]) => void
+  setFavoriteShows: (ids: string[]) => void
   setTvTimeImported: (v: boolean) => void
   setTvTimeMoviesImported: (v: boolean) => void
   setMigrationVersion: (v: number) => void
@@ -283,6 +284,14 @@ export const useLibrary = create<LibraryState>()(
           const favoriteMovies = { ...s.favoriteMovies }
           ids.forEach((id) => (favoriteMovies[id] = true))
           return { favoriteMovies }
+        }),
+      // Add-only favorite-show setter (never removes) — used by the TV Time
+      // reconcile to restore the full curated favorites set idempotently.
+      setFavoriteShows: (ids) =>
+        set((s) => {
+          const favoriteShows = { ...s.favoriteShows }
+          ids.forEach((id) => (favoriteShows[id] = true))
+          return { favoriteShows }
         }),
       // Upsert a show summary into the library cache (so any show you open
       // renders in grids even before following it).
