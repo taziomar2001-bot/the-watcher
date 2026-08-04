@@ -92,10 +92,13 @@ export function ProfileScreen() {
         onClick={() => nav('/favorites')}
       />
 
-      {/* 4. TV Shows statistics */}
-      <div className="stats-card">
+      {/* 4. TV Shows statistics — opens the complete TV library */}
+      <button className="stats-card pressable" style={{ textAlign: 'left', width: 'calc(100% - 32px)', display: 'block' }} onClick={() => nav('/library/shows')}>
         <div className="stats-card-head">
           <TvIcon size={18} /> TV Shows
+          <span style={{ marginLeft: 'auto', color: 'var(--text-dim)', display: 'inline-flex' }}>
+            <ChevronRight size={20} />
+          </span>
         </div>
         <div className="stats-rows">
           <Stat label="Shows followed" value={showsFollowed} />
@@ -106,12 +109,15 @@ export function ProfileScreen() {
           <Stat label="Episodes remaining" value={remainingEps.toLocaleString()} />
           <Stat label="Time remaining" value={fmt(remainingTvMin)} />
         </div>
-      </div>
+      </button>
 
-      {/* 5. Movies statistics */}
-      <div className="stats-card">
+      {/* 5. Movies statistics — opens the complete movie library */}
+      <button className="stats-card pressable" style={{ textAlign: 'left', width: 'calc(100% - 32px)', display: 'block' }} onClick={() => nav('/library/movies')}>
         <div className="stats-card-head">
           <ClapperboardIcon size={18} /> Movies
+          <span style={{ marginLeft: 'auto', color: 'var(--text-dim)', display: 'inline-flex' }}>
+            <ChevronRight size={20} />
+          </span>
         </div>
         <div className="stats-rows">
           <Stat label="Movies followed" value={moviesFollowed} />
@@ -120,7 +126,7 @@ export function ProfileScreen() {
           <Stat label="Time watched" value={fmt(movieMin)} />
           <Stat label="Time remaining" value={fmt(remainingMovieMin)} />
         </div>
-      </div>
+      </button>
 
       <div style={{ height: 24 }} />
       {settings && <SettingsModal onClose={() => setSettings(false)} />}

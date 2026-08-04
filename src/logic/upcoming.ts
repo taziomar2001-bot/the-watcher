@@ -135,9 +135,11 @@ async function sync(force: boolean, onlyId?: string): Promise<void> {
           .filter((e) => e.airDate && e.airDate >= todayIso)
           .map((e) => ({ season: e.season, number: e.number, title: e.title, airDate: e.airDate as string }))
         // Reuse the same normalized data to enrich the show's classification fields.
+        const airedDates = all.filter((e) => e.airDate && e.airDate <= todayIso).map((e) => e.airDate as string)
         useLibrary.getState().patchLibraryShow(id, {
           totalEpisodes: s.totalEpisodes || all.length,
           releasedEpisodes: all.filter((e) => isReleased(e.airDate)).length,
+          latestReleaseDate: airedDates.length ? airedDates.sort()[airedDates.length - 1] : undefined,
           ended: isEnded(s.status),
         })
         useUpcoming.getState()._patchShow(id, { title: s.title, poster: s.poster, eps }, Date.now())

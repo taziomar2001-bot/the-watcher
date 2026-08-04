@@ -26,6 +26,7 @@ export interface LibraryItem {
   backdrop?: string
   totalEpisodes?: number
   releasedEpisodes?: number // episodes aired as of last enrichment
+  latestReleaseDate?: string // air date of the most recent already-aired episode
   ended?: boolean // show concluded (TMDB status Ended/Canceled)
   seasonCount?: number
   year?: number

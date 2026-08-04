@@ -38,10 +38,13 @@ export function ShowScreen() {
   // Cache the enriched show summary (released/total/ended) + one-time backfill.
   useEffect(() => {
     if (!show) return
+    const allEps = show.seasons.flatMap((s) => s.episodes)
+    const aired = allEps.filter((e) => isReleased(e.airDate) && e.airDate).map((e) => e.airDate as string)
     lib.patchLibraryShow(show.id, {
       ...toLibraryItem(show),
-      totalEpisodes: show.totalEpisodes || show.seasons.flatMap((s) => s.episodes).length,
-      releasedEpisodes: show.seasons.flatMap((s) => s.episodes).filter((e) => isReleased(e.airDate)).length,
+      totalEpisodes: show.totalEpisodes || allEps.length,
+      releasedEpisodes: allEps.filter((e) => isReleased(e.airDate)).length,
+      latestReleaseDate: aired.length ? aired.sort()[aired.length - 1] : undefined,
       ended: isEnded(show),
     })
     const seen = lib.libraryShows[show.id]?.seen ?? 0

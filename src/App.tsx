@@ -23,6 +23,8 @@ import { UpComingScreen } from './screens/UpComingScreen'
 import { DiscoverScreen } from './screens/DiscoverScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
 import { LibraryScreen } from './screens/LibraryScreen'
+import { ProfileTVLibraryScreen } from './screens/ProfileTVLibraryScreen'
+import { ProfileMoviesLibraryScreen } from './screens/ProfileMoviesLibraryScreen'
 
 function readOnboarded(): boolean {
   try {
@@ -94,6 +96,8 @@ export default function App() {
         <Route path="/discover" element={<DiscoverScreen />} />
         <Route path="/profile" element={<ProfileScreen />} />
         <Route path="/library" element={<LibraryScreen />} />
+        <Route path="/library/shows" element={<ProfileTVLibraryScreen />} />
+        <Route path="/library/movies" element={<ProfileMoviesLibraryScreen />} />
         <Route path="/favorites" element={<LibraryScreen favoritesOnly />} />
         <Route path="*" element={<Navigate to="/tv" replace />} />
       </Routes>
