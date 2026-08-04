@@ -5,6 +5,7 @@ import { Segmented, SearchField, SectionHeader } from '../ui/primitives'
 import { PosterThumb } from '../ui/cards'
 import { HeartIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
+import { useScrollMemory } from '../hooks/useScrollMemory'
 import { discoverShows, discoverMovies, search as searchCatalog } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
 import { toLibraryItem } from '../utils/media'
@@ -14,6 +15,7 @@ import type { Media, Show, Movie } from '../types'
 
 export function DiscoverScreen() {
   const nav = useNavigate()
+  const scrollRef = useScrollMemory<HTMLDivElement>('discover')
   const [kind, setKind] = useState<'show' | 'movie'>('show')
   const [q, setQ] = useState('')
   const lib = useLibrary()
@@ -38,7 +40,7 @@ export function DiscoverScreen() {
   const toggleFav = (m: Media) => (m.type === 'show' ? lib.toggleFavoriteShow(m.id, toLibraryItem(m)) : lib.toggleFavoriteMovie(m.id, toLibraryItem(m)))
 
   return (
-    <div className="scroll-area route-fade">
+    <div className="scroll-area route-fade" ref={scrollRef}>
       <div className="app-header">
         <h1>Discover</h1>
       </div>

@@ -4,6 +4,7 @@ import { ShowCard } from '../ui/cards'
 import { SortMenu } from '../ui/primitives'
 import { ChevronLeft } from '../components/Icons'
 import { useShowEntries } from '../logic/useLibraryData'
+import { useScrollMemory } from '../hooks/useScrollMemory'
 import { categorize, sortEntries, showColor, SHOW_SORTS, type ShowSort } from '../logic/status'
 import { useAsync } from '../hooks/useAsync'
 import { upcomingEpisodes } from '../data/catalog'
@@ -20,6 +21,7 @@ const TITLES: Record<string, string> = {
 export function TVCategoryScreen() {
   const { key = 'watching' } = useParams()
   const nav = useNavigate()
+  const scrollRef = useScrollMemory<HTMLDivElement>(`tv-cat-${key}`)
   const [sort, setSort] = useState<ShowSort>('lastWatched')
   const entries = useShowEntries()
   const cats = categorize(entries, Date.now())
@@ -51,7 +53,7 @@ export function TVCategoryScreen() {
   const sorted = useMemo(() => sortEntries(list, sort, nextEpMap), [list, sort, nextEpMap])
 
   return (
-    <div className="scroll-area route-fade">
+    <div className="scroll-area route-fade" ref={scrollRef}>
       <div className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="pressable" onClick={() => nav(-1)} aria-label="Back" style={{ color: 'var(--text-dim)' }}>

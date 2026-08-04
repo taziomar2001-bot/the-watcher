@@ -665,6 +665,39 @@
   width: auto;
 }
 
+/* ---- Sticky category jump bar (fixed 4-cell toggle) ---- */
+.cat-nav {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  gap: 5px;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+}
+.cat-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  padding: 8px 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.cat-chip.active {
+  background: #fff;
+  color: #0c0f12;
+}
+
 /* ---- Detail (hero) ---- */
 .detail-hero {
   position: relative;

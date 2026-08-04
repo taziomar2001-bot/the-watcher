@@ -5,6 +5,7 @@ import { Segmented } from '../ui/primitives'
 import { PosterGrid, type GridItem } from '../ui/PosterGrid'
 import { ChevronLeft } from '../components/Icons'
 import { useShowEntries } from '../logic/useLibraryData'
+import { useScrollMemory } from '../hooks/useScrollMemory'
 import { categorize, showColor } from '../logic/status'
 
 /**
@@ -14,6 +15,7 @@ import { categorize, showColor } from '../logic/status'
  */
 export function ProfileTVLibraryScreen() {
   const nav = useNavigate()
+  const scrollRef = useScrollMemory<HTMLDivElement>('lib-shows')
   const [view, setView] = useState<'category' | 'grid'>('category')
   const entries = useShowEntries()
 
@@ -46,7 +48,7 @@ export function ProfileTVLibraryScreen() {
   }, [cats])
 
   return (
-    <div className="scroll-area route-fade">
+    <div className="scroll-area route-fade" ref={scrollRef}>
       <div className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="pressable" onClick={() => nav(-1)} aria-label="Back" style={{ color: 'var(--text-dim)' }}>

@@ -5,6 +5,7 @@ import { PosterGrid, type GridItem } from '../ui/PosterGrid'
 import { ChevronLeft } from '../components/Icons'
 import { useLibrary } from '../store/useLibrary'
 import { useMovieEntries } from '../logic/useLibraryData'
+import { useScrollMemory } from '../hooks/useScrollMemory'
 import { movieColor } from '../logic/status'
 
 type Filter = 'all' | 'watched' | 'unwatched'
@@ -16,6 +17,7 @@ type Filter = 'all' | 'watched' | 'unwatched'
  */
 export function ProfileMoviesLibraryScreen() {
   const nav = useNavigate()
+  const scrollRef = useScrollMemory<HTMLDivElement>('lib-movies')
   const [filter, setFilter] = useState<Filter>('all')
   const watchlist = useLibrary((s) => s.watchlistMovies)
   const watchedMovies = useLibrary((s) => s.watchedMovies)
@@ -33,7 +35,7 @@ export function ProfileMoviesLibraryScreen() {
   }, [entries, watchlist, watchedMovies, filter])
 
   return (
-    <div className="scroll-area route-fade">
+    <div className="scroll-area route-fade" ref={scrollRef}>
       <div className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="pressable" onClick={() => nav(-1)} aria-label="Back" style={{ color: 'var(--text-dim)' }}>

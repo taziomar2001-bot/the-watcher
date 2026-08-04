@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { PosterGrid, type GridItem } from '../ui/PosterGrid'
 import { useLibrary } from '../store/useLibrary'
 import { useMovieEntries } from '../logic/useLibraryData'
+import { useScrollMemory } from '../hooks/useScrollMemory'
 import { movieColor } from '../logic/status'
 
 const releaseKey = (r: { item: { releaseDate?: string; year?: number } }) => r.item.releaseDate ?? String(r.item.year ?? '')
@@ -13,6 +14,7 @@ const releaseKey = (r: { item: { releaseDate?: string; year?: number } }) => r.i
  */
 export function MoviesScreen() {
   const nav = useNavigate()
+  const scrollRef = useScrollMemory<HTMLDivElement>('movies')
   const watchlist = useLibrary((s) => s.watchlistMovies)
   const entries = useMovieEntries()
 
@@ -24,7 +26,7 @@ export function MoviesScreen() {
   }, [entries, watchlist])
 
   return (
-    <div className="scroll-area route-fade">
+    <div className="scroll-area route-fade" ref={scrollRef}>
       <div className="app-header">
         <div>
           <h1>Movies</h1>
