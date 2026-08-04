@@ -665,15 +665,22 @@
   width: auto;
 }
 
-/* ---- Sticky category jump bar (fixed 4-cell toggle) ---- */
-.cat-nav {
+/* ---- Sticky top bar: title + category toggle, clears the status bar ---- */
+.sticky-top {
   position: sticky;
   top: 0;
   z-index: 30;
+  background: var(--bg);
+  padding-top: var(--safe-top); /* keeps content below the phone status bar */
+}
+.sticky-top .app-header {
+  padding-top: 14px; /* wrapper already accounts for the safe-area inset */
+}
+/* Category jump bar (fixed 4-cell toggle) inside the sticky top */
+.cat-nav {
   display: flex;
   gap: 5px;
-  padding: 10px 12px;
-  margin-bottom: 4px;
+  padding: 4px 12px 10px;
   background: var(--bg);
   border-bottom: 1px solid var(--border-soft);
 }

@@ -36,6 +36,7 @@ export function TVShowsScreen() {
   const entries = useShowEntries()
   const scrollRef = useScrollMemory<HTMLDivElement>('tv')
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const topRef = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState('watching')
 
   const sections = useMemo(() => {
@@ -50,11 +51,13 @@ export function TVShowsScreen() {
 
   const hasAny = sections.some((s) => s.items.length > 0)
 
+  const stickyH = () => topRef.current?.getBoundingClientRect().height ?? 96
+
   const jumpTo = (key: string) => {
     const el = scrollRef.current
     const sec = sectionRefs.current[key]
     if (!el || !sec) return
-    const top = sec.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 54
+    const top = sec.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - stickyH()
     el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
     setActive(key)
   }
@@ -63,34 +66,36 @@ export function TVShowsScreen() {
     const el = scrollRef.current
     if (!el) return
     const elTop = el.getBoundingClientRect().top
+    const threshold = stickyH() + 12
     let cur = sections[0].key
     for (const s of sections) {
       const sec = sectionRefs.current[s.key]
-      if (sec && sec.getBoundingClientRect().top - elTop <= 66) cur = s.key
+      if (sec && sec.getBoundingClientRect().top - elTop <= threshold) cur = s.key
     }
     setActive(cur)
   }
 
   return (
     <div className="scroll-area route-fade" ref={scrollRef} onScroll={onScroll}>
-      <div className="app-header">
-        <div>
-          <h1>TV Shows</h1>
-          <div className="sub">{entries.length} in your library</div>
+      {/* Sticky top bar (title + category toggle) — clears the phone status bar */}
+      <div className="sticky-top" ref={topRef}>
+        <div className="app-header">
+          <div>
+            <h1>TV Shows</h1>
+            <div className="sub">{entries.length} in your library</div>
+          </div>
         </div>
-      </div>
-
-      {/* Sticky category jump bar */}
-      <div className="cat-nav">
-        {sections.map((s) => (
-          <button
-            key={s.key}
-            className={`cat-chip ${active === s.key ? 'active' : ''}`}
-            onClick={() => jumpTo(s.key)}
-          >
-            {NAV_LABELS[s.key]}
-          </button>
-        ))}
+        <div className="cat-nav">
+          {sections.map((s) => (
+            <button
+              key={s.key}
+              className={`cat-chip ${active === s.key ? 'active' : ''}`}
+              onClick={() => jumpTo(s.key)}
+            >
+              {NAV_LABELS[s.key]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {sections.map((sec) => (

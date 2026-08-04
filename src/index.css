@@ -82,8 +82,10 @@ body {
   position: relative;
   width: 100%;
   max-width: var(--app-max);
-  min-height: 100vh;
-  min-height: 100dvh;
+  /* Definite dynamic-viewport height so the bottom nav is pinned to the real
+     visible bottom from first paint (no reflow/jump after the first scroll). */
+  height: 100vh;
+  height: 100dvh;
   background: var(--bg);
   overflow: hidden;
   display: flex;
@@ -112,7 +114,8 @@ input {
 }
 
 .scroll-area {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0; /* allow the flex child to scroll instead of growing the shell */
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
