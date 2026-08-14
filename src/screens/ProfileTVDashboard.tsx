@@ -6,13 +6,10 @@ import { useShowEntries } from '../logic/useLibraryData'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { categorize, effectiveSeen } from '../logic/status'
 import { fmtAvg } from '../logic/ratings'
+import { formatDuration as hm } from '../utils/duration'
 import { StatGrid } from '../ui/Dashboard'
 
 const EP_MIN = 42
-const hm = (min: number) => {
-  const h = Math.floor(min / 60)
-  return h > 0 ? `${h}h ${min % 60}m` : `${min}m`
-}
 
 export function ProfileTVDashboard() {
   const nav = useNavigate()

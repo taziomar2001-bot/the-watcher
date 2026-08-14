@@ -5,18 +5,10 @@ import { ChevronRight, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, ListIc
 import { useLibrary } from '../store/useLibrary'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { effectiveSeen } from '../logic/status'
+import { formatDuration as hm } from '../utils/duration'
 
 const EP_MIN = 42
 const MOVIE_MIN = 115
-
-/** Compact "Hh Mm" (avoids huge unit chains). */
-function hm(min: number): string {
-  const m = Math.max(0, Math.round(min))
-  const h = Math.floor(m / 60)
-  const mm = m % 60
-  if (h === 0) return `${mm}m`
-  return `${h}h ${mm}m`
-}
 
 export function ProfileScreen() {
   const nav = useNavigate()

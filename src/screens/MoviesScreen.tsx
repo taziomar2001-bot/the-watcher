@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PosterGrid, type GridItem } from '../ui/PosterGrid'
-import { FilterIcon, ClockIcon, CalendarIcon } from '../components/Icons'
 import { useLibrary } from '../store/useLibrary'
 import { useMovieEntries } from '../logic/useLibraryData'
 import { useScrollMemory } from '../hooks/useScrollMemory'
@@ -49,34 +48,33 @@ export function MoviesScreen() {
             <div className="sub">{items.length} to watch</div>
           </div>
         </div>
-        <div className="filter-row">
+        {/* Reuses the exact TV Shows filter component (cat-nav / cat-chip) */}
+        <div className="cat-nav">
           <button
-            className="filter-toggle pressable"
+            className={`cat-chip ${releaseMode === 'unreleased' ? 'active' : ''}`}
             onClick={() => setReleaseMode((m) => (m === 'all' ? 'unreleased' : 'all'))}
-            aria-label="Toggle release filter"
           >
-            <FilterIcon size={15} />
-            <span>{releaseMode === 'all' ? 'All' : 'Unreleased'}</span>
+            {releaseMode === 'all' ? 'All' : 'Unreleased'}
           </button>
           <button
-            className="filter-toggle pressable"
+            className={`cat-chip ${sort === 'added' ? 'active' : ''}`}
             onClick={() => setSort((s) => (s === 'release' ? 'added' : 'release'))}
-            aria-label="Toggle sort"
           >
-            {sort === 'release' ? <CalendarIcon size={15} /> : <ClockIcon size={15} />}
-            <span>{sort === 'release' ? 'Release Date' : 'Recently Added'}</span>
+            {sort === 'release' ? 'Release Date' : 'Recently Added'}
           </button>
         </div>
       </div>
 
-      {items.length === 0 ? (
-        <div className="empty">
-          <div className="empty-title">No movies to watch</div>
-          <div className="empty-sub">Follow movies from Discover to build your list</div>
-        </div>
-      ) : (
-        <PosterGrid items={items} onOpen={(id) => nav(`/movie/${id}`)} />
-      )}
+      <div className="tab-content-top">
+        {items.length === 0 ? (
+          <div className="empty">
+            <div className="empty-title">No movies to watch</div>
+            <div className="empty-sub">Follow movies from Discover to build your list</div>
+          </div>
+        ) : (
+          <PosterGrid items={items} onOpen={(id) => nav(`/movie/${id}`)} />
+        )}
+      </div>
       <div style={{ height: 16 }} />
     </div>
   )

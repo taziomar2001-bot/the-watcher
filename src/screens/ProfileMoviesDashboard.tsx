@@ -4,13 +4,10 @@ import { useLibrary } from '../store/useLibrary'
 import { useMovieEntries } from '../logic/useLibraryData'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { fmtAvg } from '../logic/ratings'
+import { formatDuration as hm } from '../utils/duration'
 import { StatGrid } from '../ui/Dashboard'
 
 const MOVIE_MIN = 115
-const hm = (min: number) => {
-  const h = Math.floor(min / 60)
-  return h > 0 ? `${h}h ${min % 60}m` : `${min}m`
-}
 
 export function ProfileMoviesDashboard() {
   const nav = useNavigate()
