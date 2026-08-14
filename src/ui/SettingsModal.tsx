@@ -158,6 +158,12 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 <span>Last backed up</span>
                 <b>{timeAgo(sync.lastSyncedAt)}</b>
               </div>
+              {sync.pendingWrite && !sync.error && <div className="sync-warn">Backup pending — will retry automatically.</div>}
+              {sync.error && (
+                <div className="sync-error" style={{ userSelect: 'text' }}>
+                  Backup error: {sync.error}
+                </div>
+              )}
               {sync.remoteNewer && (
                 <div className="sync-warn">
                   Your cloud backup has newer data than this device.
