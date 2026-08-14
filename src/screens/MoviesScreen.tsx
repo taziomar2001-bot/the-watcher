@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Segmented } from '../ui/primitives'
 import { PosterGrid, type GridItem } from '../ui/PosterGrid'
+import { FilterIcon, ClockIcon, CalendarIcon } from '../components/Icons'
 import { useLibrary } from '../store/useLibrary'
 import { useMovieEntries } from '../logic/useLibraryData'
 import { useScrollMemory } from '../hooks/useScrollMemory'
@@ -22,13 +22,13 @@ export function MoviesScreen() {
   const addedAt = useLibrary((s) => s.addedAt)
   const followedAt = useLibrary((s) => s.followedAt)
   const entries = useMovieEntries()
-  const [showUnreleased, setShowUnreleased] = useState(true)
+  const [releaseMode, setReleaseMode] = useState<'all' | 'unreleased'>('all')
   const [sort, setSort] = useState<'release' | 'added'>('release')
 
   const items = useMemo<GridItem[]>(() => {
     return entries
       .filter((e) => watchlist[e.item.id] && e.status !== 'completed')
-      .filter((e) => (showUnreleased ? true : !isUnreleased(e.item.releaseDate)))
+      .filter((e) => (releaseMode === 'all' ? true : isUnreleased(e.item.releaseDate)))
       .sort((a, b) => {
         if (sort === 'added') {
           const aa = addedAt[a.item.id] ?? followedAt[a.item.id] ?? 0
@@ -38,7 +38,7 @@ export function MoviesScreen() {
         return releaseKey(b).localeCompare(releaseKey(a)) || a.item.title.localeCompare(b.item.title)
       })
       .map((e) => ({ id: e.item.id, poster: e.item.poster, title: e.item.title, color: movieColor(false) }))
-  }, [entries, watchlist, addedAt, followedAt, showUnreleased, sort])
+  }, [entries, watchlist, addedAt, followedAt, releaseMode, sort])
 
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
@@ -49,21 +49,23 @@ export function MoviesScreen() {
             <div className="sub">{items.length} to watch</div>
           </div>
         </div>
-        <div className="movies-controls">
+        <div className="filter-row">
           <button
-            className={`toggle-pill pressable ${showUnreleased ? 'active' : ''}`}
-            onClick={() => setShowUnreleased((v) => !v)}
+            className="filter-toggle pressable"
+            onClick={() => setReleaseMode((m) => (m === 'all' ? 'unreleased' : 'all'))}
+            aria-label="Toggle release filter"
           >
-            {showUnreleased ? 'Unreleased: shown' : 'Unreleased: hidden'}
+            <FilterIcon size={15} />
+            <span>{releaseMode === 'all' ? 'All' : 'Unreleased'}</span>
           </button>
-          <Segmented
-            options={[
-              { key: 'release', label: 'Release Date' },
-              { key: 'added', label: 'Recently Added' },
-            ]}
-            value={sort}
-            onChange={setSort}
-          />
+          <button
+            className="filter-toggle pressable"
+            onClick={() => setSort((s) => (s === 'release' ? 'added' : 'release'))}
+            aria-label="Toggle sort"
+          >
+            {sort === 'release' ? <CalendarIcon size={15} /> : <ClockIcon size={15} />}
+            <span>{sort === 'release' ? 'Release Date' : 'Recently Added'}</span>
+          </button>
         </div>
       </div>
 

@@ -9,13 +9,13 @@ import { effectiveSeen } from '../logic/status'
 const EP_MIN = 42
 const MOVIE_MIN = 115
 
-function fmt(min: number): string {
-  if (min <= 0) return '0h'
-  const days = Math.floor(min / 1440)
-  const hours = Math.floor((min % 1440) / 60)
-  if (days >= 30) return `${Math.floor(days / 30)}mo ${days % 30}d`
-  if (days > 0) return `${days}d ${hours}h`
-  return `${hours}h`
+/** Compact "Hh Mm" (avoids huge unit chains). */
+function hm(min: number): string {
+  const m = Math.max(0, Math.round(min))
+  const h = Math.floor(m / 60)
+  const mm = m % 60
+  if (h === 0) return `${mm}m`
+  return `${h}h ${mm}m`
 }
 
 export function ProfileScreen() {
@@ -28,12 +28,18 @@ export function ProfileScreen() {
   const movies = useMovieEntries()
 
   const name = lib.profile.displayName || lib.profile.username || 'you'
-  const titlesTracked = shows.length + movies.length
 
   const showsFollowed = Object.keys(lib.watchlistShows).length
+  const showsCompleted = shows.filter((e) => e.cls === 'finished').length
   const episodesWatched = shows.reduce((n, e) => n + effectiveSeen(e.item, lib.watchedEpisodes), 0)
+  const tvMin = episodesWatched * EP_MIN
+
   const moviesFollowed = Object.keys(lib.watchlistMovies).length
-  const moviesWatched = Object.keys(lib.watchedMovies).length
+  const watchedMovieEntries = movies.filter((e) => lib.watchedMovies[e.item.id])
+  const moviesWatched = watchedMovieEntries.length
+  const movieMin = watchedMovieEntries.reduce((n, e) => n + (e.item.runtime || MOVIE_MIN), 0)
+
+  const totalWatched = tvMin + movieMin
 
   const remainingEps = shows
     .filter((e) => e.following && !e.stopped && e.cls !== 'finished' && e.item.totalEpisodes)
@@ -58,17 +64,17 @@ export function ProfileScreen() {
         </div>
         <div className="profile-head-text">
           <div className="profile-name">{name}</div>
-          <div className="profile-handle">{titlesTracked.toLocaleString()} titles tracked</div>
+          <div className="profile-handle">{hm(totalWatched)} watched</div>
         </div>
         <button className="icon-round pressable" onClick={() => setSettings(true)} aria-label="Settings">
           <SettingsIcon size={20} />
         </button>
       </div>
 
-      {/* ---- Media dashboard cards (equal weight) ---- */}
+      {/* ---- Media dashboard cards ---- */}
       <div className="dash-card remaining">
         <div className="dash-label">Remaining in your watchlist</div>
-        <div className="dash-value">{fmt(remainingTotal)}</div>
+        <div className="dash-value">{hm(remainingTotal)}</div>
         <div className="dash-sub">
           {unwatchedMovies.length} movies · {remainingEps.toLocaleString()} episodes
         </div>
@@ -88,8 +94,12 @@ export function ProfileScreen() {
             <span>followed</span>
           </div>
           <div className="dash-metric">
-            <b>{episodesWatched.toLocaleString()}</b>
-            <span>episodes watched</span>
+            <b>{showsCompleted.toLocaleString()}</b>
+            <span>watched</span>
+          </div>
+          <div className="dash-metric">
+            <b>{hm(tvMin)}</b>
+            <span>time watched</span>
           </div>
         </div>
       </button>
@@ -110,6 +120,10 @@ export function ProfileScreen() {
           <div className="dash-metric">
             <b>{moviesWatched.toLocaleString()}</b>
             <span>watched</span>
+          </div>
+          <div className="dash-metric">
+            <b>{hm(movieMin)}</b>
+            <span>time watched</span>
           </div>
         </div>
       </button>
@@ -150,27 +164,7 @@ export function ProfileScreen() {
         </button>
       ))}
 
-      <button className="list-row ghost pressable" onClick={() => setNewList(true)}>
-        <span className="list-badge">
-          <PlusIcon size={16} />
-        </span>
-        <span className="list-row-text">
-          <span className="list-row-name">New List</span>
-        </span>
-      </button>
-
-      {/* Settings access */}
-      <button className="list-row pressable" style={{ marginTop: 12 }} onClick={() => setSettings(true)}>
-        <span className="list-badge">
-          <SettingsIcon size={16} />
-        </span>
-        <span className="list-row-text">
-          <span className="list-row-name">Settings</span>
-        </span>
-        <ChevronRight size={20} />
-      </button>
-
-      <div style={{ height: 24 }} />
+      <div style={{ height: 28 }} />
       {settings && <SettingsModal onClose={() => setSettings(false)} />}
 
       {newList && (

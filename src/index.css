@@ -46,6 +46,12 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
+  /* Layering scale — assign layers from these, never arbitrary large values. */
+  --z-sticky: 30;
+  --z-nav: 40;
+  --z-overlay: 100;
+  --z-toast: 1000;
+
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI',
     'Helvetica Neue', system-ui, sans-serif;
   color-scheme: dark;

@@ -149,7 +149,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  z-index: 300;
+  z-index: var(--z-overlay);
   animation: fadeUp 160ms ease;
 }
 .sheet {
@@ -603,7 +603,7 @@
   backdrop-filter: blur(16px);
   border-top: 1px solid var(--border-soft);
   display: flex;
-  z-index: 50;
+  z-index: var(--z-nav);
 }
 .nav-item {
   flex: 1;
@@ -1015,7 +1015,7 @@
 .welcome {
   position: absolute;
   inset: 0;
-  z-index: 400;
+  z-index: var(--z-overlay);
   background: radial-gradient(120% 90% at 50% 0%, #1a2330 0%, var(--bg) 55%);
   display: flex;
   flex-direction: column;
@@ -1344,7 +1344,7 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  z-index: 200;
+  z-index: var(--z-toast);
   pointer-events: none;
   padding: 0 16px;
 }
@@ -1495,3 +1495,55 @@
 .up-row { display: grid; grid-template-columns: auto 1fr 52px; align-items: center; gap: 12px; }
 .up-body { text-align: center; min-width: 0; }
 .up-kind { justify-self: start; }
+
+/* ================= Phase 3 polish ================= */
+.filter-row { display: flex; gap: 8px; padding: 4px 12px 10px; border-bottom: 1px solid var(--border-soft); }
+.filter-toggle {
+  flex: 1 1 0; min-width: 0;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 10px 10px; border-radius: 12px;
+  background: var(--surface-2); color: var(--text-dim);
+  font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden;
+  border: 1px solid var(--border-soft);
+  transition: background 140ms ease, color 140ms ease, transform 120ms ease;
+}
+.filter-toggle span { overflow: hidden; text-overflow: ellipsis; }
+.filter-toggle:active { transform: scale(0.98); }
+.filter-toggle svg { flex: 0 0 auto; color: var(--accent); }
+
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: var(--z-overlay);
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--safe-top) + 20px) 16px calc(var(--safe-bottom) + 20px);
+  animation: fadeUp 160ms ease;
+}
+.modal-backdrop .settings-panel {
+  height: auto; max-height: 100%;
+  border-radius: 20px; border: 1px solid var(--border);
+  animation: modalPop 220ms cubic-bezier(0.3, 0.1, 0.2, 1);
+}
+@keyframes modalPop { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+.settings-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+.add-titles-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 12px; border-radius: 12px;
+  background: var(--surface-2); color: #fff; font-weight: 700; font-size: 14px;
+  border: 1px solid var(--border-soft);
+}
+.pick-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 0; text-align: left; border-bottom: 1px solid var(--border-soft); }
+.pick-poster { width: 40px; height: 60px; border-radius: 6px; flex: 0 0 auto; }
+.pick-info { flex: 1; min-width: 0; }
+.pick-title { display: block; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-sub { display: block; font-size: 12px; color: var(--text-mute); margin-top: 2px; }
+.pick-check { width: 32px; height: 32px; border-radius: 50%; border: 1.6px solid var(--border); color: var(--text-dim); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.pick-check.on { background: var(--green); color: #05230f; border-color: var(--green); }
+
+.empty.compact { padding: 28px 16px; }
+
+.up-row { display: grid; width: 100%; grid-template-columns: auto minmax(0, 1fr) 44px; align-items: center; gap: 14px; }
+.up-body { text-align: center; min-width: 0; padding: 0 4px; }
+.up-title { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.up-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-kind { justify-self: end; flex: 0 0 auto; }

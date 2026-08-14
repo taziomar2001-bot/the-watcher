@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
-import { ProgressDot } from '../ui/primitives'
-import { ChevronLeft, DotsIcon, TrashIcon, EditIcon } from '../components/Icons'
-import { useLibrary, parseRef } from '../store/useLibrary'
+import { ProgressDot, SearchField } from '../ui/primitives'
+import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, CheckIcon } from '../components/Icons'
+import { useLibrary, parseRef, listRef } from '../store/useLibrary'
 import { useScrollMemory } from '../hooks/useScrollMemory'
+import { useAsync } from '../hooks/useAsync'
+import { search as searchCatalog } from '../data/catalog'
+import { toLibraryItem } from '../utils/media'
 import { classifyShow, showColor, movieColor } from '../logic/status'
 
 export function ListScreen() {
@@ -16,6 +19,9 @@ export function ListScreen() {
   const [menu, setMenu] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [q, setQ] = useState('')
+  const { data: results } = useAsync(() => (q.trim() ? searchCatalog(q) : Promise.resolve([])), [q])
   const [edit, setEdit] = useState(false)
   const [name, setName] = useState(list?.name ?? '')
 
@@ -66,10 +72,16 @@ export function ListScreen() {
         </button>
       </div>
 
+      <div className="page-pad" style={{ paddingBottom: 10 }}>
+        <button className="add-titles-btn pressable" onClick={() => setAdding(true)}>
+          <PlusIcon size={17} /> Add titles
+        </button>
+      </div>
+
       {items.length === 0 ? (
         <div className="empty">
           <div className="empty-title">This list is empty</div>
-          <div className="empty-sub">Add shows or movies from their detail page</div>
+          <div className="empty-sub">Tap “Add titles” to fill it with shows and movies</div>
         </div>
       ) : (
         <div className="poster-grid">
@@ -175,6 +187,57 @@ export function ListScreen() {
               >
                 Delete List
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {adding && (
+        <div className="modal-backdrop" onClick={() => setAdding(false)}>
+          <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-head">
+              <span className="settings-title">Add titles</span>
+              <button className="settings-close pressable" onClick={() => setAdding(false)} aria-label="Close">
+                ✕
+              </button>
+            </div>
+            <div className="page-pad" style={{ paddingTop: 4, paddingBottom: 8 }}>
+              <SearchField value={q} onChange={setQ} placeholder="Search movies & TV shows" autoFocus />
+            </div>
+            <div className="settings-body" style={{ paddingTop: 0 }}>
+              {!q.trim() ? (
+                <div className="empty compact">
+                  <div className="empty-sub">Search to add shows or movies to this list</div>
+                </div>
+              ) : (
+                (results ?? []).map((m) => {
+                  const ref = listRef(m.type, m.id)
+                  const inList = list.items.includes(ref)
+                  return (
+                    <button
+                      key={ref}
+                      className="pick-row pressable"
+                      onClick={() => {
+                        if (inList) lib.removeFromList(list.id, ref)
+                        else {
+                          lib.addToList(list.id, ref)
+                          if (m.type === 'show') lib.patchLibraryShow(m.id, toLibraryItem(m))
+                          else lib.patchLibraryMovie(m.id, toLibraryItem(m))
+                        }
+                      }}
+                    >
+                      <SmartImage src={m.poster} alt={m.title} className="pick-poster" />
+                      <span className="pick-info">
+                        <span className="pick-title">{m.title}</span>
+                        <span className="pick-sub">{m.type === 'show' ? 'TV' : 'Film'}</span>
+                      </span>
+                      <span className={`pick-check ${inList ? 'on' : ''}`}>
+                        {inList ? <CheckIcon size={16} /> : <PlusIcon size={16} />}
+                      </span>
+                    </button>
+                  )
+                })
+              )}
             </div>
           </div>
         </div>
