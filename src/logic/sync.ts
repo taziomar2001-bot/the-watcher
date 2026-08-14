@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase, SUPABASE_ENABLED, LIBRARY_TABLE } from '../data/supabase'
 import { useLibrary } from '../store/useLibrary'
+import { useToast } from '../store/useToast'
 
 // ---------------------------------------------------------------------------
 // Cloud sync engine (optional). Stores each user's whole library as one JSON
@@ -86,6 +87,7 @@ interface SyncState {
   email?: string
   lastSyncedAt?: number
   remoteNewer?: boolean
+  pendingWrite?: boolean
   error?: string
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string) => Promise<void>
@@ -153,20 +155,40 @@ export const useSync = create<SyncState>((set) => ({
   },
 }))
 
-async function pushNow() {
-  if (!supabase || !currentUserId) return
-  const now = Date.now()
-  const meta = getMeta()
-  meta.localUpdatedAt = now
-  meta.hasSynced = true
-  setMeta(meta)
+let pushRetry: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * Persist the whole library to the user's cloud row. The server owns the
+ * updated_at timestamp (read back after write) so last-write-wins never depends
+ * on client clock skew. On failure the local copy is kept, the error is surfaced,
+ * and the write is retried — a failed write is never treated as a success.
+ */
+async function pushNow(): Promise<boolean> {
+  if (!supabase || !currentUserId) return false
   const data = snapshot()
   lastJson = JSON.stringify(data)
-  const { error } = await supabase
+  // Send updated_at too so writes bump it even before the DB trigger exists;
+  // when the trigger is present it overrides this with the true server time.
+  // We read the stored value back so last-write-wins uses the server clock.
+  const { data: row, error } = await supabase
     .from(LIBRARY_TABLE)
-    .upsert({ user_id: currentUserId, data, updated_at: new Date(now).toISOString() }, { onConflict: 'user_id' })
-  if (error) useSync.setState({ error: error.message })
-  else useSync.setState({ lastSyncedAt: now, error: undefined })
+    .upsert({ user_id: currentUserId, data, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+    .select('updated_at')
+    .single()
+  if (error) {
+    useSync.setState({ error: error.message, pendingWrite: true })
+    useToast.getState().show("Couldn't back up to the cloud — will retry", { duration: 4000 })
+    clearTimeout(pushRetry)
+    pushRetry = setTimeout(() => void pushNow(), 15000)
+    return false
+  }
+  const ms = row?.updated_at ? Date.parse(row.updated_at) : Date.now()
+  const meta = getMeta()
+  meta.localUpdatedAt = ms
+  meta.hasSynced = true
+  setMeta(meta)
+  useSync.setState({ lastSyncedAt: ms, error: undefined, pendingWrite: false })
+  return true
 }
 
 async function fetchRemote(): Promise<{ data: Snap; ms: number } | null> {
@@ -227,6 +249,15 @@ export async function initSync() {
   if (!supabase) return
   lastJson = JSON.stringify(snapshot())
   subscribeChanges()
+
+  // Flush a failed write as soon as connectivity or focus returns.
+  const flushPending = () => {
+    if (currentUserId && useSync.getState().pendingWrite) void pushNow()
+  }
+  window.addEventListener('online', flushPending)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') flushPending()
+  })
 
   supabase.auth.onAuthStateChange((_event, session) => {
     currentUserId = session?.user?.id ?? null
