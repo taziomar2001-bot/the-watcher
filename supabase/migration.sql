@@ -121,17 +121,19 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- ---------------------------------------------------------------------------
--- 4. BACKFILL existing accounts (your current one). Creates profile + empty
---    library rows for any user that predates this migration, WITHOUT touching
---    an existing library row (on conflict do nothing preserves your data).
---    Uses auth.users directly, so you do NOT need to paste your UUID anywhere.
+-- 4. BACKFILL existing accounts (your current one). Only creates the PROFILE
+--    row for users that predate this migration. Uses auth.users directly, so you
+--    do NOT need to paste your UUID anywhere.
+--
+--    NOTE: we deliberately do NOT insert a library row here. If your data were
+--    ever local-only, a blank cloud row could be pulled down on next sign-in and
+--    overwrite it. The app safely creates/updates your library row itself on the
+--    next "Back up now" (or automatically on your next change), preserving data.
 -- ---------------------------------------------------------------------------
 insert into public.profiles (id)
   select id from auth.users
   on conflict (id) do nothing;
 
-insert into public.library (user_id)
-  select id from auth.users
-  on conflict (user_id) do nothing;
-
--- Done. Verify with:  select user_id, created_at, updated_at from public.library;
+-- Done. Verify with:
+--   select * from public.profiles;
+--   select user_id, created_at, updated_at from public.library;  -- appears after your first backup
