@@ -9,8 +9,16 @@ export interface CustomList {
   description?: string
   visibility: 'public' | 'private'
   kind: 'shows' | 'movies' | 'mixed'
-  items: string[]
+  items: string[] // typed refs: "show:ID" | "movie:ID"
   cover?: string
+  createdAt?: number
+}
+
+/** Build/parse a typed list-membership ref so shows & movies never collide. */
+export const listRef = (type: 'show' | 'movie', id: string) => `${type}:${id}`
+export const parseRef = (ref: string): { type: 'show' | 'movie'; id: string } => {
+  const i = ref.indexOf(':')
+  return { type: ref.slice(0, i) as 'show' | 'movie', id: ref.slice(i + 1) }
 }
 
 type IdMap = Record<string, true>
@@ -29,11 +37,13 @@ export interface LibraryItem {
   latestReleaseDate?: string // air date of the most recent already-aired episode
   ended?: boolean // show concluded (TMDB status Ended/Canceled)
   seasonCount?: number
+  seasonSizes?: Record<string, number> // season number -> episode count (for offline rating averages)
   year?: number
   runtime?: number
   releaseDate?: string
   seen?: number // imported episodes-watched count (drives progress)
   archived?: boolean
+  genres?: string[] // populated when full detail is fetched (for genre analysis)
 }
 
 export interface ImportedShow {
@@ -55,6 +65,10 @@ interface LibraryState {
   favoriteMovies: IdMap
   notifyShows: IdMap
   ratings: Record<string, number>
+  // Personal 1–5 whole-star ratings (never 0; absent = unrated).
+  movieRatings: Record<string, number>
+  episodeRatings: Record<string, number>
+  ratingAt: Record<string, number> // rating timestamp, keyed by movie id / episode id
   libraryShows: Record<string, LibraryItem>
   libraryMovies: Record<string, LibraryItem>
   // Recency metadata (additive; drives categories & sorting). Keyed by media id.
@@ -63,7 +77,7 @@ interface LibraryState {
   addedAt: Record<string, number>
   stoppedShows: IdMap // manually "Stopped Watching" shows
   lists: CustomList[]
-  profile: { username: string; following: number; followers: number; comments: number }
+  profile: { username: string; displayName?: string; avatar?: string; following: number; followers: number; comments: number }
   tvTimeImported: boolean
   tvTimeMoviesImported: boolean
   migrationVersion: number
@@ -78,6 +92,14 @@ interface LibraryState {
   toggleFavoriteMovie: (id: string, item?: LibraryItem) => void
   toggleNotify: (id: string) => void
   setRating: (id: string, rating: number) => void
+  // 1–5 whole stars. Passing the current value again clears the rating.
+  // Never changes watched status.
+  setMovieRating: (id: string, rating: number) => void
+  setEpisodeRating: (epId: string, rating: number) => void
+  updateProfile: (patch: Partial<{ username: string; displayName: string; avatar: string }>) => void
+  renameList: (id: string, name: string) => void
+  deleteList: (id: string) => void
+  removeFromList: (listId: string, ref: string) => void
   markEpisodeWatched: (epId: string, watched: boolean) => void
   markAllPrevious: (epIds: string[]) => void
   markAllUnwatched: (epIds: string[]) => void
@@ -97,6 +119,7 @@ interface LibraryState {
   markShowsResolved: (tvdbIds: string[]) => void
   markMoviesResolved: (keys: string[]) => void
   patchLibraryShow: (id: string, patch: Partial<LibraryItem>) => void
+  patchLibraryMovie: (id: string, patch: Partial<LibraryItem>) => void
   backfillSeen: (showId: string, orderedReleasedEpIds: string[], count: number) => void
 }
 
@@ -160,6 +183,9 @@ export const useLibrary = create<LibraryState>()(
   persist(
     (set) => ({
       ...seed,
+      movieRatings: {},
+      episodeRatings: {},
+      ratingAt: {},
       libraryShows: {},
       libraryMovies: {},
       lastWatched: {},
@@ -215,6 +241,41 @@ export const useLibrary = create<LibraryState>()(
         }),
       toggleNotify: (id) => set((s) => ({ notifyShows: s.notifyShows[id] ? off(s.notifyShows, id) : on(s.notifyShows, id) })),
       setRating: (id, rating) => set((s) => ({ ratings: { ...s.ratings, [id]: rating } })),
+      // Toggle-off when clicking the current value; never touches watched state.
+      setMovieRating: (id, rating) =>
+        set((s) => {
+          const movieRatings = { ...s.movieRatings }
+          const ratingAt = { ...s.ratingAt }
+          if (movieRatings[id] === rating) {
+            delete movieRatings[id]
+            delete ratingAt[id]
+          } else {
+            movieRatings[id] = rating
+            ratingAt[id] = Date.now()
+          }
+          return { movieRatings, ratingAt }
+        }),
+      setEpisodeRating: (epId, rating) =>
+        set((s) => {
+          const episodeRatings = { ...s.episodeRatings }
+          const ratingAt = { ...s.ratingAt }
+          if (episodeRatings[epId] === rating) {
+            delete episodeRatings[epId]
+            delete ratingAt[epId]
+          } else {
+            episodeRatings[epId] = rating
+            ratingAt[epId] = Date.now()
+          }
+          return { episodeRatings, ratingAt }
+        }),
+      updateProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),
+      renameList: (id, name) =>
+        set((s) => ({ lists: s.lists.map((l) => (l.id === id ? { ...l, name } : l)) })),
+      deleteList: (id) => set((s) => ({ lists: s.lists.filter((l) => l.id !== id) })),
+      removeFromList: (listId, ref) =>
+        set((s) => ({
+          lists: s.lists.map((l) => (l.id === listId ? { ...l, items: l.items.filter((r) => r !== ref) } : l)),
+        })),
       // Watching an episode implies following the parent show (spec §11).
       markEpisodeWatched: (epId, watched) =>
         set((s) => {
@@ -306,8 +367,10 @@ export const useLibrary = create<LibraryState>()(
       // renders in grids even before following it).
       patchLibraryShow: (id, patch) =>
         set((s) => ({ libraryShows: { ...s.libraryShows, [id]: { ...s.libraryShows[id], ...patch } } })),
+      patchLibraryMovie: (id, patch) =>
+        set((s) => ({ libraryMovies: { ...s.libraryMovies, [id]: { ...s.libraryMovies[id], ...patch } } })),
       addList: (list) =>
-        set((s) => ({ lists: [...s.lists, { ...list, id: `list_${Date.now()}_${s.lists.length}` }] })),
+        set((s) => ({ lists: [...s.lists, { ...list, id: `list_${Date.now()}_${s.lists.length}`, createdAt: Date.now() }] })),
       addToList: (listId, mediaId) =>
         set((s) => ({
           lists: s.lists.map((l) =>

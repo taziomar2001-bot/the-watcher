@@ -1,7 +1,10 @@
+import { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { ActionPill } from '../ui/cards'
 import { ProgressDot } from '../ui/primitives'
+import { StarRating } from '../ui/StarRating'
+import { AddToListButton } from '../ui/AddToList'
 import { ChevronLeft, HeartIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
 import { getMovie, daysUntil } from '../data/catalog'
@@ -17,6 +20,12 @@ export function MovieScreen() {
   const { data: movie } = useAsync(() => getMovie(id), [id])
   const lib = useLibrary()
   const toast = useToast((s) => s.show)
+
+  // Cache genres so the Profile movie dashboard can build a genre breakdown.
+  useEffect(() => {
+    if (movie) lib.patchLibraryMovie(movie.id, toLibraryItem(movie))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movie?.id])
 
   if (!movie)
     return (
@@ -79,6 +88,19 @@ export function MovieScreen() {
         <button className={`action-pill pressable ${fav ? 'active' : ''}`} onClick={() => lib.toggleFavoriteMovie(movie.id, toLibraryItem(movie))}>
           <HeartIcon size={15} fill={fav ? '#ff5964' : 'none'} /> Favorite
         </button>
+        <AddToListButton type="movie" id={movie.id} />
+      </div>
+
+      {/* Personal rating (independent of watched status) */}
+      <div className="rating-card">
+        <div className="rating-card-label">
+          Your rating
+          {lib.movieRatings[movie.id] != null && <span className="rating-card-value">{lib.movieRatings[movie.id]} ★</span>}
+        </div>
+        <StarRating value={lib.movieRatings[movie.id]} onChange={(v) => lib.setMovieRating(movie.id, v)} />
+        <div className="rating-card-hint">
+          {lib.movieRatings[movie.id] != null ? 'Tap the same star again to remove your rating' : 'Tap a star to rate — rating is separate from watched'}
+        </div>
       </div>
 
       {movie.overview && <p className="detail-overview">{movie.overview}</p>}

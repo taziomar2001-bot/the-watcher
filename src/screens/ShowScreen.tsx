@@ -10,6 +10,8 @@ import { useLibrary } from '../store/useLibrary'
 import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
 import { classifyShow, seasonColor, showColor, DOT_COLOR, effectiveSeen } from '../logic/status'
+import { showAverageLive, seasonSizesOf, fmtStars } from '../logic/ratings'
+import { AddToListButton } from '../ui/AddToList'
 import type { Season, Show } from '../types'
 
 const isReleased = (airDate?: string) => !airDate || new Date(airDate + 'T00:00:00') <= new Date()
@@ -46,6 +48,7 @@ export function ShowScreen() {
       releasedEpisodes: allEps.filter((e) => isReleased(e.airDate)).length,
       latestReleaseDate: aired.length ? aired.sort()[aired.length - 1] : undefined,
       ended: isEnded(show),
+      seasonSizes: seasonSizesOf(show),
     })
     const seen = lib.libraryShows[show.id]?.seen ?? 0
     if (seen > 0) {
@@ -77,6 +80,7 @@ export function ShowScreen() {
   const seen = effectiveSeen(item, lib.watchedEpisodes)
   const pct = total ? Math.min(100, Math.round((seen / total) * 100)) : 0
   const started = seen > 0
+  const showAvg = showAverageLive(show, lib.episodeRatings)
   const allReleasedIds = show.seasons.flatMap((s) => s.episodes).filter((e) => isReleased(e.airDate)).map((e) => e.id)
 
   return (
@@ -98,6 +102,7 @@ export function ShowScreen() {
               .filter(Boolean)
               .join('  ·  ')}
           </div>
+          {showAvg != null && <div className="detail-avg">{fmtStars(showAvg)} your average</div>}
         </div>
       </div>
 
@@ -117,6 +122,7 @@ export function ShowScreen() {
         <button className={`action-pill pressable ${notify ? 'active' : ''}`} onClick={() => lib.toggleNotify(show.id)}>
           <BellIcon size={15} /> Notify
         </button>
+        <AddToListButton type="show" id={show.id} />
       </div>
 
       {/* Status controls */}

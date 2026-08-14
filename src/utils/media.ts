@@ -14,6 +14,7 @@ export function toLibraryItem(m: Media): LibraryItem {
       totalEpisodes: s.totalEpisodes,
       seasonCount: s.seasons?.length,
       year: s.firstAirYear,
+      genres: s.genres?.length ? s.genres : undefined,
     }
   }
   const mv = m as Movie
@@ -26,5 +27,6 @@ export function toLibraryItem(m: Media): LibraryItem {
     year: mv.year,
     runtime: mv.runtime,
     releaseDate: mv.releaseDate,
+    genres: mv.genres?.length ? mv.genres : undefined,
   }
 }

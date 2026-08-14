@@ -19,6 +19,9 @@ const SYNC_KEYS = [
   'favoriteMovies',
   'notifyShows',
   'ratings',
+  'movieRatings',
+  'episodeRatings',
+  'ratingAt',
   'libraryShows',
   'libraryMovies',
   'lastWatched',
@@ -89,6 +92,7 @@ interface SyncState {
   signOut: () => Promise<void>
   backupNow: () => Promise<void>
   restoreNow: () => Promise<void>
+  deleteCloudData: () => Promise<void>
 }
 
 let currentUserId: string | null = null
@@ -119,6 +123,18 @@ export const useSync = create<SyncState>((set) => ({
 
   signOut: async () => {
     if (!supabase) return
+    await supabase.auth.signOut()
+    currentUserId = null
+    set({ status: 'signedOut', email: undefined, lastSyncedAt: undefined, remoteNewer: false })
+  },
+
+  // Permanently deletes this account's cloud library row, then signs out. (The
+  // auth user itself can only be removed by an admin, so we clear the data we
+  // control and are honest about it in the UI.)
+  deleteCloudData: async () => {
+    if (!supabase || !currentUserId) return
+    set({ status: 'busy' })
+    await supabase.from(LIBRARY_TABLE).delete().eq('user_id', currentUserId)
     await supabase.auth.signOut()
     currentUserId = null
     set({ status: 'signedOut', email: undefined, lastSyncedAt: undefined, remoteNewer: false })

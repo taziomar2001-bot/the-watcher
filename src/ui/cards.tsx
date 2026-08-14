@@ -102,6 +102,7 @@ export function EpisodeRow({
   number,
   airDate,
   watched,
+  rating,
   onToggle,
   onClick,
 }: {
@@ -110,6 +111,7 @@ export function EpisodeRow({
   number: number
   airDate?: string
   watched: boolean
+  rating?: number
   onToggle?: () => void
   onClick?: () => void
 }) {
@@ -122,12 +124,18 @@ export function EpisodeRow({
             <span className="episode-num">{number}</span>
             {title}
           </div>
-          <div className="episode-meta">{airDate ?? 'TBA'}</div>
+          <div className="episode-meta">
+            {airDate ?? 'TBA'}
+            {rating != null && <span className="episode-rating"> · {rating}★</span>}
+          </div>
         </div>
       </button>
       <button
         className={`episode-check ${watched ? 'done' : ''}`}
-        onClick={onToggle}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggle?.()
+        }}
         aria-label={watched ? 'Watched' : 'Mark watched'}
       >
         <CheckIcon size={16} />

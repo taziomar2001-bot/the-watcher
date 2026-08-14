@@ -17,6 +17,7 @@ import { TVShowsScreen } from './screens/TVShowsScreen'
 import { TVCategoryScreen } from './screens/TVCategoryScreen'
 import { ShowScreen } from './screens/ShowScreen'
 import { SeasonScreen } from './screens/SeasonScreen'
+import { EpisodeScreen } from './screens/EpisodeScreen'
 import { MoviesScreen } from './screens/MoviesScreen'
 import { MovieScreen } from './screens/MovieScreen'
 import { UpComingScreen } from './screens/UpComingScreen'
@@ -25,6 +26,9 @@ import { ProfileScreen } from './screens/ProfileScreen'
 import { LibraryScreen } from './screens/LibraryScreen'
 import { ProfileTVLibraryScreen } from './screens/ProfileTVLibraryScreen'
 import { ProfileMoviesLibraryScreen } from './screens/ProfileMoviesLibraryScreen'
+import { ProfileTVDashboard } from './screens/ProfileTVDashboard'
+import { ProfileMoviesDashboard } from './screens/ProfileMoviesDashboard'
+import { ListScreen } from './screens/ListScreen'
 
 function readOnboarded(): boolean {
   try {
@@ -90,11 +94,15 @@ export default function App() {
         <Route path="/tv/category/:key" element={<TVCategoryScreen />} />
         <Route path="/show/:id" element={<ShowScreen />} />
         <Route path="/show/:id/season/:season" element={<SeasonScreen />} />
+        <Route path="/show/:id/season/:season/episode/:number" element={<EpisodeScreen />} />
         <Route path="/movies" element={<MoviesScreen />} />
         <Route path="/movie/:id" element={<MovieScreen />} />
         <Route path="/upcoming" element={<UpComingScreen />} />
         <Route path="/discover" element={<DiscoverScreen />} />
         <Route path="/profile" element={<ProfileScreen />} />
+        <Route path="/profile/tv" element={<ProfileTVDashboard />} />
+        <Route path="/profile/movies" element={<ProfileMoviesDashboard />} />
+        <Route path="/list/:id" element={<ListScreen />} />
         <Route path="/library" element={<LibraryScreen />} />
         <Route path="/library/shows" element={<ProfileTVLibraryScreen />} />
         <Route path="/library/movies" element={<ProfileMoviesLibraryScreen />} />

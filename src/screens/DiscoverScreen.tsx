@@ -13,11 +13,23 @@ import { useToast } from '../store/useToast'
 import { classifyShow, showColor, movieColor } from '../logic/status'
 import type { Media, Show, Movie } from '../types'
 
+// Module-scoped so Discover's mode + query survive navigating to a detail page
+// and back (scroll position is preserved separately by useScrollMemory).
+const discoverMem = { kind: 'show' as 'show' | 'movie', q: '' }
+
 export function DiscoverScreen() {
   const nav = useNavigate()
   const scrollRef = useScrollMemory<HTMLDivElement>('discover')
-  const [kind, setKind] = useState<'show' | 'movie'>('show')
-  const [q, setQ] = useState('')
+  const [kind, setKindState] = useState<'show' | 'movie'>(discoverMem.kind)
+  const [q, setQState] = useState(discoverMem.q)
+  const setKind = (k: 'show' | 'movie') => {
+    discoverMem.kind = k
+    setKindState(k)
+  }
+  const setQ = (v: string) => {
+    discoverMem.q = v
+    setQState(v)
+  }
   const lib = useLibrary()
   const toast = useToast((s) => s.show)
 

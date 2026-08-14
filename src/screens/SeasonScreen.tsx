@@ -8,6 +8,7 @@ import { useLibrary } from '../store/useLibrary'
 import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
 import { shortDate } from '../utils/dates'
+import { seasonAverageLive, seasonRatedCount, seasonSizesOf, fmtStars } from '../logic/ratings'
 
 const isReleased = (airDate?: string) => !airDate || new Date(airDate + 'T00:00:00') <= new Date()
 
@@ -16,6 +17,7 @@ export function SeasonScreen() {
   const nav = useNavigate()
   const { data: show } = useAsync(() => getShow(id), [id])
   const watched = useLibrary((s) => s.watchedEpisodes)
+  const epRatings = useLibrary((s) => s.episodeRatings)
   const mark = useLibrary((s) => s.markEpisodeWatched)
   const markAll = useLibrary((s) => s.markAllPrevious)
   const markAllUnwatched = useLibrary((s) => s.markAllUnwatched)
@@ -24,7 +26,7 @@ export function SeasonScreen() {
   const [confirmReset, setConfirmReset] = useState(false)
 
   useEffect(() => {
-    if (show) patchLibraryShow(show.id, toLibraryItem(show))
+    if (show) patchLibraryShow(show.id, { ...toLibraryItem(show), seasonSizes: seasonSizesOf(show) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show?.id])
 
@@ -40,6 +42,8 @@ export function SeasonScreen() {
   const releasedIds = seasonObj.episodes.filter((e) => isReleased(e.airDate)).map((e) => e.id)
   const anyWatched = allIds.some((i) => watched[i])
   const allWatched = releasedIds.length > 0 && releasedIds.every((i) => watched[i])
+  const seasonAvg = seasonAverageLive(seasonObj, epRatings)
+  const ratedCount = seasonRatedCount(seasonObj, epRatings)
 
   return (
     <div className="scroll-area route-fade">
@@ -70,6 +74,20 @@ export function SeasonScreen() {
         )}
       </div>
 
+      {/* Season average — only once more than half the episodes are rated */}
+      <div className="season-avg-row">
+        {seasonAvg != null ? (
+          <>
+            <span className="season-avg-badge">{fmtStars(seasonAvg)}</span>
+            <span className="season-avg-sub">your season average · {ratedCount}/{seasonObj.episodes.length} rated</span>
+          </>
+        ) : (
+          <span className="season-avg-sub">
+            Rate more than half the episodes ({ratedCount}/{seasonObj.episodes.length}) to see your season average
+          </span>
+        )}
+      </div>
+
       <div className="episode-list">
         {seasonObj.episodes.map((e) => (
           <EpisodeRow
@@ -79,8 +97,9 @@ export function SeasonScreen() {
             number={e.number}
             airDate={e.airDate ? shortDate(e.airDate) : 'TBA'}
             watched={!!watched[e.id]}
+            rating={epRatings[e.id]}
             onToggle={() => toggle(e.id)}
-            onClick={() => toggle(e.id)}
+            onClick={() => nav(`/show/${id}/season/${seasonObj.season}/episode/${e.number}`)}
           />
         ))}
       </div>
