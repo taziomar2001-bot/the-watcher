@@ -165,16 +165,12 @@ let pushRetry: ReturnType<typeof setTimeout> | undefined
  */
 async function pushNow(): Promise<boolean> {
   if (!supabase || !currentUserId) return false
+  const now = Date.now()
   const data = snapshot()
   lastJson = JSON.stringify(data)
-  // Send updated_at too so writes bump it even before the DB trigger exists;
-  // when the trigger is present it overrides this with the true server time.
-  // We read the stored value back so last-write-wins uses the server clock.
-  const { data: row, error } = await supabase
+  const { error } = await supabase
     .from(LIBRARY_TABLE)
-    .upsert({ user_id: currentUserId, data, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
-    .select('updated_at')
-    .single()
+    .upsert({ user_id: currentUserId, data, updated_at: new Date(now).toISOString() }, { onConflict: 'user_id' })
   if (error) {
     useSync.setState({ error: error.message, pendingWrite: true })
     useToast.getState().show("Couldn't back up to the cloud — will retry", { duration: 4000 })
@@ -182,12 +178,11 @@ async function pushNow(): Promise<boolean> {
     pushRetry = setTimeout(() => void pushNow(), 15000)
     return false
   }
-  const ms = row?.updated_at ? Date.parse(row.updated_at) : Date.now()
   const meta = getMeta()
-  meta.localUpdatedAt = ms
+  meta.localUpdatedAt = now
   meta.hasSynced = true
   setMeta(meta)
-  useSync.setState({ lastSyncedAt: ms, error: undefined, pendingWrite: false })
+  useSync.setState({ lastSyncedAt: now, error: undefined, pendingWrite: false })
   return true
 }
 
