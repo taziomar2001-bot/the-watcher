@@ -1186,23 +1186,27 @@
 }
 
 /* ---- Settings modal ---- */
+/* Conventional centered settings window: fixed header + one scrolling body. */
 .settings-panel {
   width: 100%;
-  max-width: var(--app-max);
-  height: 88%;
+  max-width: 460px;
+  max-height: 100%;
+  min-height: 0;
   background: var(--bg-2);
-  border-top-left-radius: 20px;
-  border-top-right-radius: 20px;
+  border-radius: 18px;
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  animation: toastIn 260ms ease;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  animation: modalPop 220ms cubic-bezier(0.3, 0.1, 0.2, 1);
 }
 .settings-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px var(--s-4) 12px;
+  padding: 16px var(--s-4);
   border-bottom: 1px solid var(--border-soft);
 }
 .settings-title {
@@ -1210,27 +1214,33 @@
   font-weight: 800;
 }
 .settings-close {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--surface);
   color: var(--text-dim);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 15px;
+  flex: 0 0 auto;
 }
 .settings-body {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding-top: 8px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 8px var(--s-4) var(--s-8);
 }
 .settings-note {
-  padding: 18px var(--s-4);
+  padding: 18px 0 0;
   font-size: 12px;
   color: var(--text-mute);
   line-height: 1.5;
 }
+/* Lock the page behind the modal so only the modal scrolls. */
+body.modal-open .scroll-area { overflow: hidden !important; }
 
 /* ---- Cloud sync panel ---- */
 .sync-card {
@@ -1518,13 +1528,7 @@
   padding: calc(var(--safe-top) + 20px) 16px calc(var(--safe-bottom) + 20px);
   animation: fadeUp 160ms ease;
 }
-.modal-backdrop .settings-panel {
-  height: auto; max-height: 100%;
-  border-radius: 20px; border: 1px solid var(--border);
-  animation: modalPop 220ms cubic-bezier(0.3, 0.1, 0.2, 1);
-}
 @keyframes modalPop { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
-.settings-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
 .add-titles-btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;

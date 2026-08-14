@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ImportPanel } from './ImportPanel'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
@@ -44,6 +45,12 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
+  // Lock the Profile page behind the modal so only the modal scrolls.
+  useEffect(() => {
+    document.body.classList.add('modal-open')
+    return () => document.body.classList.remove('modal-open')
+  }, [])
+
   const name = lib.profile.displayName || lib.profile.username || 'you'
 
   const pickAvatar = async (f?: File) => {
@@ -65,7 +72,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     location.reload()
   }
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="settings-head">
@@ -267,6 +274,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }
