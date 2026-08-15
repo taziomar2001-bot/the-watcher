@@ -13,7 +13,10 @@ export const FAV_LIMIT = 12
 
 export interface UserTotals {
   showsFollowed: number
-  showsCompleted: number
+  // "Watched" = shows with at least one episode watched (started).
+  showsStarted: number
+  // "Finished" = shows fully completed (a stricter, separate metric).
+  showsFinished: number
   episodesWatched: number
   tvMin: number
   moviesFollowed: number
@@ -29,7 +32,8 @@ export function useMyStats(): UserTotals {
   const movies = useMovieEntries()
   return useMemo(() => {
     const showsFollowed = Object.keys(lib.watchlistShows).length
-    const showsCompleted = shows.filter((e) => e.cls === 'finished').length
+    const showsStarted = shows.filter((e) => effectiveSeen(e.item, lib.watchedEpisodes) >= 1).length
+    const showsFinished = shows.filter((e) => e.cls === 'finished').length
     const episodesWatched = shows.reduce((n, e) => n + effectiveSeen(e.item, lib.watchedEpisodes), 0)
     const tvMin = episodesWatched * EP_MIN
     const moviesFollowed = Object.keys(lib.watchlistMovies).length
@@ -38,7 +42,8 @@ export function useMyStats(): UserTotals {
     const movieMin = watched.reduce((n, e) => n + (e.item.runtime || MOVIE_MIN), 0)
     return {
       showsFollowed,
-      showsCompleted,
+      showsStarted,
+      showsFinished,
       episodesWatched,
       tvMin,
       moviesFollowed,

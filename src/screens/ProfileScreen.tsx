@@ -25,7 +25,9 @@ export function ProfileScreen() {
   const name = lib.profile.displayName || lib.profile.username || 'you'
 
   const showsFollowed = Object.keys(lib.watchlistShows).length
-  const showsCompleted = shows.filter((e) => e.cls === 'finished').length
+  // Watched = at least one episode watched; Finished = fully completed.
+  const showsWatched = shows.filter((e) => effectiveSeen(e.item, lib.watchedEpisodes) >= 1).length
+  const showsFinished = shows.filter((e) => e.cls === 'finished').length
   const episodesWatched = shows.reduce((n, e) => n + effectiveSeen(e.item, lib.watchedEpisodes), 0)
   const tvMin = episodesWatched * EP_MIN
 
@@ -90,8 +92,12 @@ export function ProfileScreen() {
             <span>followed</span>
           </div>
           <div className="dash-metric">
-            <b>{showsCompleted.toLocaleString()}</b>
+            <b>{showsWatched.toLocaleString()}</b>
             <span>watched</span>
+          </div>
+          <div className="dash-metric">
+            <b>{showsFinished.toLocaleString()}</b>
+            <span>finished</span>
           </div>
           <div className="dash-metric">
             <b>{hm(tvMin)}</b>

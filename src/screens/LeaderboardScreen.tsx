@@ -16,7 +16,7 @@ interface Row {
   tvMin: number
   movieMin: number
   moviesWatched: number
-  showsCompleted: number
+  showsWatched: number
   episodesWatched: number
 }
 
@@ -24,7 +24,7 @@ type MetricKey = 'time' | 'movies' | 'shows' | 'episodes'
 const METRICS: { key: MetricKey; label: string; value: (r: Row) => number; format: (n: number) => string }[] = [
   { key: 'time', label: 'Total time watched', value: (r) => r.tvMin + r.movieMin, format: hm },
   { key: 'movies', label: 'Movies watched', value: (r) => r.moviesWatched, format: (n) => n.toLocaleString() },
-  { key: 'shows', label: 'TV shows watched', value: (r) => r.showsCompleted, format: (n) => n.toLocaleString() },
+  { key: 'shows', label: 'TV shows watched', value: (r) => r.showsWatched, format: (n) => n.toLocaleString() },
   { key: 'episodes', label: 'Episodes watched', value: (r) => r.episodesWatched, format: (n) => n.toLocaleString() },
 ]
 
@@ -45,7 +45,7 @@ export function LeaderboardScreen() {
       tvMin: u.stats.tvMin,
       movieMin: u.stats.movieMin,
       moviesWatched: u.stats.moviesWatched,
-      showsCompleted: u.stats.showsCompleted,
+      showsWatched: u.stats.showsWatched,
       episodesWatched: u.stats.episodesWatched,
     }))
     const mine: Row = {
@@ -57,7 +57,7 @@ export function LeaderboardScreen() {
       tvMin: me.tvMin,
       movieMin: me.movieMin,
       moviesWatched: me.moviesWatched,
-      showsCompleted: me.showsCompleted,
+      showsWatched: me.showsStarted,
       episodesWatched: me.episodesWatched,
     }
     return [...others, mine]

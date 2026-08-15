@@ -69,17 +69,20 @@ export function DiscoverScreen() {
         <SearchField value={q} onChange={setQ} placeholder="Search movies, TV shows & people" />
       </div>
 
-      {/* 2. TV/Movies toggle (controls the discovery sections only) */}
-      <div className="page-pad" style={{ paddingBottom: 8 }}>
-        <Segmented
-          options={[
-            { key: 'show', label: 'TV Shows' },
-            { key: 'movie', label: 'Movies' },
-          ]}
-          value={kind}
-          onChange={setKind}
-        />
-      </div>
+      {/* 2. TV/Movies toggle — only relevant to the discovery sections, so it
+          hides as soon as the user starts searching (results are universal). */}
+      {!searching && (
+        <div className="page-pad" style={{ paddingBottom: 8 }}>
+          <Segmented
+            options={[
+              { key: 'show', label: 'TV Shows' },
+              { key: 'movie', label: 'Movies' },
+            ]}
+            value={kind}
+            onChange={setKind}
+          />
+        </div>
+      )}
 
       {/* 3. Search results (universal) or discovery sections */}
       {searching ? (

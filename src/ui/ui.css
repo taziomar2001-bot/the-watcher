@@ -1436,10 +1436,10 @@ body.modal-open .scroll-area { overflow: hidden !important; }
 .dash-icon { width: 30px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; color: #fff; flex: 0 0 auto; }
 .dash-icon.tv { background: rgba(185,140,255,0.22); color: var(--purple); }
 .dash-icon.movie { background: rgba(70,211,105,0.2); color: var(--green); }
-.dash-metrics { display: flex; gap: 28px; margin-top: 14px; }
-.dash-metric { display: flex; flex-direction: column; }
-.dash-metric b { font-size: 24px; font-weight: 800; color: #fff; }
-.dash-metric span { font-size: 12px; color: var(--text-mute); margin-top: 2px; }
+.dash-metrics { display: flex; gap: 10px; margin-top: 14px; }
+.dash-metric { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
+.dash-metric b { font-size: 19px; font-weight: 800; color: #fff; white-space: nowrap; }
+.dash-metric span { font-size: 11px; color: var(--text-mute); margin-top: 3px; line-height: 1.25; }
 
 /* ---- List rows ---- */
 .list-row {

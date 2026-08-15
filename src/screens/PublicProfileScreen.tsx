@@ -75,8 +75,12 @@ export function PublicProfileScreen() {
             <span>followed</span>
           </div>
           <div className="dash-metric">
-            <b>{s.showsCompleted.toLocaleString()}</b>
+            <b>{s.showsWatched.toLocaleString()}</b>
             <span>watched</span>
+          </div>
+          <div className="dash-metric">
+            <b>{s.showsCompleted.toLocaleString()}</b>
+            <span>finished</span>
           </div>
           <div className="dash-metric">
             <b>{hm(s.tvMin)}</b>
