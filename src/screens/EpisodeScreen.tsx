@@ -1,7 +1,8 @@
+import { useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { StarRating } from '../ui/StarRating'
-import { ChevronLeft, CheckIcon } from '../components/Icons'
+import { ChevronLeft, ChevronRight, CheckIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
 import { getShow } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
@@ -19,6 +20,7 @@ export function EpisodeScreen() {
   const epRatings = useLibrary((s) => s.episodeRatings)
   const setEpisodeRating = useLibrary((s) => s.setEpisodeRating)
   const toast = useToast((s) => s.show)
+  const touch = useRef<{ x: number; y: number } | null>(null)
 
   if (!show)
     return (
@@ -50,8 +52,34 @@ export function EpisodeScreen() {
   const isWatched = !!watched[ep.id]
   const rating = epRatings[ep.id]
 
+  // Flatten every episode across every season into one ordered sequence so that
+  // paging past the first/last episode of a season crosses into the adjacent
+  // season automatically.
+  const flat = show.seasons.flatMap((s) => s.episodes.map((e) => ({ season: s.season, number: e.number, title: e.title })))
+  const curIdx = flat.findIndex((f) => String(f.season) === String(season) && String(f.number) === String(ep.number))
+  const prev = curIdx > 0 ? flat[curIdx - 1] : undefined
+  const next = curIdx >= 0 && curIdx < flat.length - 1 ? flat[curIdx + 1] : undefined
+  const goTo = (t?: { season: number; number: number }) => t && nav(`/show/${id}/season/${t.season}/episode/${t.number}`)
+
+  // Horizontal swipe → previous / next episode (vertical scrolls are ignored).
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0]
+    touch.current = { x: t.clientX, y: t.clientY }
+  }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touch.current
+    touch.current = null
+    if (!start) return
+    const t = e.changedTouches[0]
+    const dx = t.clientX - start.x
+    const dy = t.clientY - start.y
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.4) return
+    if (dx < 0) goTo(next)
+    else goTo(prev)
+  }
+
   return (
-    <div className="scroll-area route-fade">
+    <div className="scroll-area route-fade" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <div className="detail-hero" style={{ height: 220 }}>
         <SmartImage src={ep.still ?? show.backdrop} alt={ep.title} />
         <div className="detail-hero-scrim" />
@@ -97,6 +125,23 @@ export function EpisodeScreen() {
       </div>
 
       {ep.overview && <p className="detail-overview">{ep.overview}</p>}
+
+      <div className="ep-nav">
+        <button className="ep-nav-btn pressable" disabled={!prev} onClick={() => goTo(prev)}>
+          <ChevronLeft size={18} />
+          <span className="ep-nav-text">
+            <span className="ep-nav-label">Previous</span>
+            {prev && <span className="ep-nav-title">{prev.title}</span>}
+          </span>
+        </button>
+        <button className="ep-nav-btn right pressable" disabled={!next} onClick={() => goTo(next)}>
+          <span className="ep-nav-text">
+            <span className="ep-nav-label">Next</span>
+            {next && <span className="ep-nav-title">{next.title}</span>}
+          </span>
+          <ChevronRight size={18} />
+        </button>
+      </div>
       <div style={{ height: 24 }} />
     </div>
   )

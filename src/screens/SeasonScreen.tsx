@@ -120,7 +120,7 @@ export function SeasonScreen() {
               </button>
               <button
                 className="sync-btn pressable"
-                style={{ background: 'var(--orange)', color: '#231400', borderColor: 'var(--orange)' }}
+                style={{ background: 'var(--yellow)', color: '#231400', borderColor: 'var(--yellow)' }}
                 onClick={() => {
                   markAllUnwatched(allIds)
                   setConfirmReset(false)

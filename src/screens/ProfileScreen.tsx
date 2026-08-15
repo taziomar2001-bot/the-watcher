@@ -164,10 +164,9 @@ export function ProfileScreen() {
       {settings && <SettingsModal onClose={() => setSettings(false)} />}
 
       {newList && createPortal(
-        <div className="sheet-backdrop" onClick={() => { setNewList(false); setListRanked(false) }}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="sheet-title">New list</div>
+        <div className="dialog-backdrop" onClick={() => { setNewList(false); setListRanked(false) }}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-title">New list</div>
             <div className="list-create-row">
               <input
                 className="sync-input"

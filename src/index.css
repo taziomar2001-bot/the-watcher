@@ -12,10 +12,13 @@
   --text-dim: #9bacba;
   --text-mute: #6b7c8a;
 
-  /* progress semantics */
+  /* progress semantics
+     Status indicators: "not started / unwatched" now renders WHITE and
+     "in progress" now renders ORANGE (previously orange / yellow). Rating
+     accents (stars, averages) follow --yellow, so they read orange too. */
   --red: #ff5964;
-  --orange: #ff9838;
-  --yellow: #f2c744;
+  --orange: #ffffff; /* was #ff9838 — now the "not started / unwatched" colour */
+  --yellow: #ff9838; /* was #f2c744 — now the "in progress" / rating accent colour */
   --green: #46d369;
   --purple: #b98cff;
 
@@ -125,7 +128,9 @@ input {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + var(--s-5));
+  /* The nav is now an in-flow sibling below this element, so the scroll area no
+     longer needs to reserve nav height — just a little breathing room. */
+  padding-bottom: var(--s-5);
 }
 .scroll-area::-webkit-scrollbar,
 .hscroll::-webkit-scrollbar {
@@ -143,6 +148,10 @@ input {
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   padding: 0 var(--s-4);
+  /* Without this, snap-align:start scrolls the first poster flush to the edge,
+     cancelling the padding. scroll-padding makes snapping respect the inset so
+     the first item lines up with the section headers. */
+  scroll-padding: 0 var(--s-4);
   scroll-snap-type: x proximity;
 }
 

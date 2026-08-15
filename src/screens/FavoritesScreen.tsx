@@ -92,16 +92,10 @@ export function FavoritesScreen() {
         />
       </div>
 
-      <div className="page-pad" style={{ paddingBottom: 10 }}>
-        <button className="add-titles-btn pressable" onClick={() => setAdding(true)}>
-          <PlusIcon size={17} /> Add titles
-        </button>
-      </div>
-
       {items.length === 0 ? (
         <div className="empty">
           <div className="empty-title">No favorites yet</div>
-          <div className="empty-sub">Tap “Add titles” to star shows and movies</div>
+          <div className="empty-sub">Use the ••• menu to add shows and movies</div>
         </div>
       ) : (
         <div className="poster-grid">
@@ -162,18 +156,18 @@ export function FavoritesScreen() {
       )}
 
       {adding && createPortal(
-        <div className="modal-backdrop" onClick={() => setAdding(false)}>
-          <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="settings-head">
-              <span className="settings-title">Add to favorites</span>
+        <div className="picker-backdrop">
+          <div className="picker">
+            <div className="picker-head">
+              <span className="picker-title">Add to favorites</span>
               <button className="settings-close pressable" onClick={() => setAdding(false)} aria-label="Close">
                 ✕
               </button>
             </div>
-            <div className="page-pad" style={{ paddingTop: 4, paddingBottom: 8 }}>
+            <div className="picker-search">
               <SearchField value={q} onChange={setQ} placeholder="Search movies & TV shows" autoFocus />
             </div>
-            <div className="settings-body" style={{ paddingTop: 0 }}>
+            <div className="picker-body">
               {!q.trim() ? (
                 <div className="empty compact">
                   <div className="empty-sub">Search to favorite shows or movies</div>

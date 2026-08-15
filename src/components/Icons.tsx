@@ -127,6 +127,19 @@ export function ChevronUp({ size = 24, strokeWidth = 2, ...p }: IconProps) {
   )
 }
 
+export function GripIcon({ size = 24, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} {...p}>
+      {[8, 12, 16].map((cy) => (
+        <g key={cy}>
+          <circle cx="9" cy={cy} r="1.3" fill="currentColor" stroke="none" />
+          <circle cx="15" cy={cy} r="1.3" fill="currentColor" stroke="none" />
+        </g>
+      ))}
+    </svg>
+  )
+}
+
 export function PlusIcon({ size = 24, strokeWidth = 2, ...p }: IconProps) {
   return (
     <svg {...base(size)} strokeWidth={strokeWidth} {...p}>

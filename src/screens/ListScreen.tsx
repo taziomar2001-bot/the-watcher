@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { ProgressDot, SearchField } from '../ui/primitives'
-import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, CheckIcon, ChevronUp, ChevronDown } from '../components/Icons'
+import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, CheckIcon, GripIcon } from '../components/Icons'
+import { RankReorder } from '../ui/RankReorder'
 import { useLibrary, parseRef, listRef } from '../store/useLibrary'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { useAsync } from '../hooks/useAsync'
@@ -59,15 +60,12 @@ export function ListScreen() {
 
   const ranked = !!list.ranked
 
-  // Swap a title with its neighbour in rank order (operates on the stored refs
-  // so unresolved entries keep their place).
-  const move = (ref: string, dir: -1 | 1) => {
-    const arr = [...list.items]
-    const i = arr.indexOf(ref)
-    const j = i + dir
-    if (i < 0 || j < 0 || j >= arr.length) return
-    ;[arr[i], arr[j]] = [arr[j], arr[i]]
-    lib.reorderList(list.id, arr)
+  // Commit a new order of the resolvable items, appending any refs that don't
+  // resolve to a library item (rare) so nothing is silently dropped.
+  const reorderResolved = (refs: string[]) => {
+    const resolvable = new Set(items.map((it) => it.ref))
+    const leftovers = list.items.filter((r) => !resolvable.has(r))
+    lib.reorderList(list.id, [...refs, ...leftovers])
   }
 
   return (
@@ -87,17 +85,11 @@ export function ListScreen() {
         </button>
       </div>
 
-      {reordering ? (
+      {reordering && (
         <div className="reorder-banner">
-          <span>Reordering — use the arrows to change ranks</span>
+          <span>Drag the handles to change ranks</span>
           <button className="sync-btn primary pressable" onClick={() => setReordering(false)}>
             Done
-          </button>
-        </div>
-      ) : (
-        <div className="page-pad" style={{ paddingBottom: 10 }}>
-          <button className="add-titles-btn pressable" onClick={() => setAdding(true)}>
-            <PlusIcon size={17} /> Add titles
           </button>
         </div>
       )}
@@ -105,36 +97,13 @@ export function ListScreen() {
       {items.length === 0 ? (
         <div className="empty">
           <div className="empty-title">This list is empty</div>
-          <div className="empty-sub">Tap “Add titles” to fill it with shows and movies</div>
+          <div className="empty-sub">Use the ••• menu to add shows and movies</div>
         </div>
       ) : reordering ? (
-        <div className="reorder-list">
-          {items.map((it, i) => (
-            <div key={it.ref} className="reorder-row">
-              <span className="reorder-rank">{i + 1}</span>
-              <SmartImage src={it.poster} alt={it.title} className="reorder-poster" />
-              <span className="reorder-title">{it.title}</span>
-              <div className="reorder-arrows">
-                <button
-                  className="reorder-arrow pressable"
-                  disabled={i === 0}
-                  onClick={() => move(it.ref, -1)}
-                  aria-label="Move up"
-                >
-                  <ChevronUp size={20} />
-                </button>
-                <button
-                  className="reorder-arrow pressable"
-                  disabled={i === items.length - 1}
-                  onClick={() => move(it.ref, 1)}
-                  aria-label="Move down"
-                >
-                  <ChevronDown size={20} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <RankReorder
+          rows={items.map((it) => ({ ref: it.ref, poster: it.poster, title: it.title }))}
+          onReorder={reorderResolved}
+        />
       ) : (
         <div className="poster-grid">
           {items.map((it, i) => (
@@ -168,6 +137,15 @@ export function ListScreen() {
             <button
               className="sheet-row"
               onClick={() => {
+                setAdding(true)
+                setMenu(false)
+              }}
+            >
+              <span><PlusIcon size={16} /> Add titles</span>
+            </button>
+            <button
+              className="sheet-row"
+              onClick={() => {
                 setEdit((v) => !v)
                 setReordering(false)
                 setMenu(false)
@@ -184,7 +162,7 @@ export function ListScreen() {
                   setMenu(false)
                 }}
               >
-                <span><DotsIcon size={16} /> {reordering ? 'Done reordering' : 'Reorder ranks'}</span>
+                <span><GripIcon size={16} /> {reordering ? 'Done reordering' : 'Reorder ranks'}</span>
               </button>
             )}
             <button
@@ -262,18 +240,18 @@ export function ListScreen() {
       )}
 
       {adding && createPortal(
-        <div className="modal-backdrop" onClick={() => setAdding(false)}>
-          <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="settings-head">
-              <span className="settings-title">Add titles</span>
+        <div className="picker-backdrop">
+          <div className="picker">
+            <div className="picker-head">
+              <span className="picker-title">Add titles</span>
               <button className="settings-close pressable" onClick={() => setAdding(false)} aria-label="Close">
                 ✕
               </button>
             </div>
-            <div className="page-pad" style={{ paddingTop: 4, paddingBottom: 8 }}>
+            <div className="picker-search">
               <SearchField value={q} onChange={setQ} placeholder="Search movies & TV shows" autoFocus />
             </div>
-            <div className="settings-body" style={{ paddingTop: 0 }}>
+            <div className="picker-body">
               {!q.trim() ? (
                 <div className="empty compact">
                   <div className="empty-sub">Search to add shows or movies to this list</div>

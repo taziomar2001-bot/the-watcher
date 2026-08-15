@@ -548,8 +548,8 @@
   color: var(--accent);
 }
 .type-badge.movie {
-  background: color-mix(in srgb, var(--orange) 22%, transparent);
-  color: var(--orange);
+  background: color-mix(in srgb, var(--yellow) 22%, transparent);
+  color: var(--yellow);
 }
 .search-row-actions {
   display: flex;
@@ -591,15 +591,17 @@
   color: var(--red);
 }
 
-/* ---- Bottom nav ---- */
+/* ---- Bottom nav ----
+   In-flow flex child of .app-shell (not absolutely positioned) so it is always
+   docked at the true bottom of the dynamic viewport and never drifts as the
+   scroll area moves or the mobile URL bar shows/hides. safe-bottom keeps it
+   clear of the home indicator on notched devices. */
 .bottom-nav {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
+  flex: 0 0 auto;
   height: calc(var(--nav-h) + var(--safe-bottom));
   padding-bottom: var(--safe-bottom);
-  background: rgba(16, 20, 24, 0.86);
+  background: rgba(16, 20, 24, 0.92);
   backdrop-filter: blur(16px);
   border-top: 1px solid var(--border-soft);
   display: flex;
@@ -880,8 +882,8 @@
   color: var(--accent);
 }
 .up-kind.movie {
-  background: color-mix(in srgb, var(--orange) 22%, transparent);
-  color: var(--orange);
+  background: color-mix(in srgb, var(--yellow) 22%, transparent);
+  color: var(--yellow);
 }
 
 .up-progress {
@@ -1302,7 +1304,7 @@ body.modal-open .scroll-area { overflow: hidden !important; }
 }
 .sync-warn {
   font-size: 13px;
-  color: var(--orange);
+  color: var(--yellow);
   margin-top: 10px;
   display: flex;
   align-items: center;
@@ -1659,16 +1661,108 @@ body.modal-open .scroll-area { overflow: hidden !important; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.reorder-arrows { display: flex; gap: 6px; flex: 0 0 auto; }
-.reorder-arrow {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: var(--surface-3, rgba(255,255,255,0.06));
-  border: 1px solid var(--border-soft);
-  color: #fff;
+/* Drag handle for pointer-based reordering */
+.reorder-handle {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 46px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: var(--text-dim);
+  touch-action: none; /* we own the gesture; stop the page from scrolling */
+  cursor: grab;
 }
-.reorder-arrow:disabled { opacity: 0.35; }
+.reorder-row.dragging {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  border-color: var(--accent);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  cursor: grabbing;
+}
+.reorder-row.dragging .reorder-handle { cursor: grabbing; }
+.reorder-row.shifting { transition: transform 160ms ease; }
+
+/* ---- Full-screen search picker (Add titles) — search pinned at top so the
+   on-screen keyboard never hides it ---- */
+.picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  animation: fadeUp 140ms ease;
+}
+.picker {
+  width: 100%;
+  max-width: var(--app-max);
+  margin: 0 auto;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: calc(var(--safe-top) + 14px) var(--s-4) 10px;
+}
+.picker-title { font-size: 18px; font-weight: 800; color: #fff; }
+.picker-search { padding: 0 var(--s-4) 10px; flex: 0 0 auto; }
+.picker-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 var(--s-4) calc(var(--safe-bottom) + 24px);
+}
+
+/* ---- Top-anchored dialog (New list / Add to list) — sits near the top so the
+   keyboard can never cover its inputs or buttons ---- */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: calc(var(--safe-top) + 48px) 16px 16px;
+  overflow-y: auto;
+  animation: fadeUp 140ms ease;
+}
+.dialog {
+  width: 100%;
+  max-width: var(--app-max);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px 16px 18px;
+  max-height: calc(100dvh - var(--safe-top) - 64px);
+  overflow-y: auto;
+}
+.dialog-title { font-size: 17px; font-weight: 800; color: #fff; margin-bottom: 12px; }
+
+/* ---- Episode prev/next navigation (also reachable by swiping L/R) ---- */
+.ep-nav { display: flex; gap: 10px; padding: 10px var(--s-4) 0; }
+.ep-nav-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  color: #fff;
+  text-align: left;
+}
+.ep-nav-btn.right { justify-content: flex-end; text-align: right; }
+.ep-nav-btn:disabled { opacity: 0.4; }
+.ep-nav-text { display: flex; flex-direction: column; min-width: 0; }
+.ep-nav-label { font-size: 11px; color: var(--text-mute); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.ep-nav-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-nav-btn svg { flex: 0 0 auto; color: var(--text-dim); }

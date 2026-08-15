@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useLibrary, listRef } from '../store/useLibrary'
 import { useToast } from '../store/useToast'
 import { ListIcon, CheckIcon, HeartIcon, PlusIcon } from '../components/Icons'
@@ -38,11 +39,10 @@ export function AddToListButton({ type, id }: { type: 'show' | 'movie'; id: stri
       <button className={`action-pill pressable ${memberCount ? 'active' : ''}`} onClick={() => setOpen(true)}>
         <ListIcon size={15} /> {memberCount ? `In ${memberCount} list${memberCount > 1 ? 's' : ''}` : 'Add to list'}
       </button>
-      {open && (
-        <div className="sheet-backdrop" onClick={() => setOpen(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="sheet-title">Add to a list</div>
+      {open && createPortal(
+        <div className="dialog-backdrop" onClick={() => setOpen(false)}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-title">Add to a list</div>
 
             <button className="list-pick-row" onClick={() => (type === 'show' ? toggleFavShow(id) : toggleFavMovie(id))}>
               <span className="list-pick-name">
@@ -79,11 +79,12 @@ export function AddToListButton({ type, id }: { type: 'show' | 'movie'; id: stri
               </button>
             </div>
 
-            <button className="sheet-row center" onClick={() => setOpen(false)}>
+            <button className="sync-btn primary pressable" style={{ width: '100%', marginTop: 12, justifyContent: 'center' }} onClick={() => setOpen(false)}>
               Done
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )
