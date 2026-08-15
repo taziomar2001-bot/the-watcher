@@ -37,6 +37,11 @@ comment on table public.library is
 
 alter table public.library enable row level security;
 
+-- Base table privileges for the logged-in role. RLS decides WHICH rows; these
+-- GRANTs decide whether the role may touch the table at all. Both are required —
+-- without this you get "permission denied for table library". (Idempotent.)
+grant select, insert, update, delete on public.library to authenticated;
+
 -- updated_at trigger (created only if missing).
 do $$
 begin
@@ -82,6 +87,7 @@ comment on table public.profiles is
   'Application-level profile metadata, one row per user.';
 
 alter table public.profiles enable row level security;
+grant select, insert, update, delete on public.profiles to authenticated;
 
 do $$
 begin
