@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { ProgressDot, SearchField } from '../ui/primitives'
-import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, CheckIcon } from '../components/Icons'
+import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, CheckIcon, ChevronUp, ChevronDown } from '../components/Icons'
 import { useLibrary, parseRef, listRef } from '../store/useLibrary'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { useAsync } from '../hooks/useAsync'
@@ -23,6 +24,7 @@ export function ListScreen() {
   const [q, setQ] = useState('')
   const { data: results } = useAsync(() => (q.trim() ? searchCatalog(q) : Promise.resolve([])), [q])
   const [edit, setEdit] = useState(false)
+  const [reordering, setReordering] = useState(false)
   const [name, setName] = useState(list?.name ?? '')
 
   if (!list)
@@ -55,6 +57,19 @@ export function ListScreen() {
     })
     .filter(Boolean) as { ref: string; type: 'show' | 'movie'; id: string; poster?: string; title: string; color: ReturnType<typeof movieColor> }[]
 
+  const ranked = !!list.ranked
+
+  // Swap a title with its neighbour in rank order (operates on the stored refs
+  // so unresolved entries keep their place).
+  const move = (ref: string, dir: -1 | 1) => {
+    const arr = [...list.items]
+    const i = arr.indexOf(ref)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= arr.length) return
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    lib.reorderList(list.id, arr)
+  }
+
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
       <div className="app-header">
@@ -72,26 +87,64 @@ export function ListScreen() {
         </button>
       </div>
 
-      <div className="page-pad" style={{ paddingBottom: 10 }}>
-        <button className="add-titles-btn pressable" onClick={() => setAdding(true)}>
-          <PlusIcon size={17} /> Add titles
-        </button>
-      </div>
+      {reordering ? (
+        <div className="reorder-banner">
+          <span>Reordering — use the arrows to change ranks</span>
+          <button className="sync-btn primary pressable" onClick={() => setReordering(false)}>
+            Done
+          </button>
+        </div>
+      ) : (
+        <div className="page-pad" style={{ paddingBottom: 10 }}>
+          <button className="add-titles-btn pressable" onClick={() => setAdding(true)}>
+            <PlusIcon size={17} /> Add titles
+          </button>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <div className="empty">
           <div className="empty-title">This list is empty</div>
           <div className="empty-sub">Tap “Add titles” to fill it with shows and movies</div>
         </div>
+      ) : reordering ? (
+        <div className="reorder-list">
+          {items.map((it, i) => (
+            <div key={it.ref} className="reorder-row">
+              <span className="reorder-rank">{i + 1}</span>
+              <SmartImage src={it.poster} alt={it.title} className="reorder-poster" />
+              <span className="reorder-title">{it.title}</span>
+              <div className="reorder-arrows">
+                <button
+                  className="reorder-arrow pressable"
+                  disabled={i === 0}
+                  onClick={() => move(it.ref, -1)}
+                  aria-label="Move up"
+                >
+                  <ChevronUp size={20} />
+                </button>
+                <button
+                  className="reorder-arrow pressable"
+                  disabled={i === items.length - 1}
+                  onClick={() => move(it.ref, 1)}
+                  aria-label="Move down"
+                >
+                  <ChevronDown size={20} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="poster-grid">
-          {items.map((it) => (
+          {items.map((it, i) => (
             <div key={it.ref} className="poster-thumb" style={{ width: 'auto' }}>
               <div className="poster-thumb-art" onClick={() => (edit ? lib.removeFromList(list.id, it.ref) : nav(`/${it.type}/${it.id}`))}>
                 <SmartImage src={it.poster} alt={it.title} />
                 <span className="poster-thumb-dot">
                   <ProgressDot color={it.color} size={11} />
                 </span>
+                {ranked && !edit && <span className="rank-badge">{i + 1}</span>}
                 {edit && (
                   <span className="poster-remove">
                     <TrashIcon size={16} />
@@ -107,7 +160,7 @@ export function ListScreen() {
       )}
       <div style={{ height: 24 }} />
 
-      {menu && (
+      {menu && createPortal(
         <div className="sheet-backdrop" onClick={() => setMenu(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
@@ -116,11 +169,24 @@ export function ListScreen() {
               className="sheet-row"
               onClick={() => {
                 setEdit((v) => !v)
+                setReordering(false)
                 setMenu(false)
               }}
             >
               <span><EditIcon size={16} /> {edit ? 'Done editing' : 'Remove titles'}</span>
             </button>
+            {ranked && (
+              <button
+                className="sheet-row"
+                onClick={() => {
+                  setReordering((v) => !v)
+                  setEdit(false)
+                  setMenu(false)
+                }}
+              >
+                <span><DotsIcon size={16} /> {reordering ? 'Done reordering' : 'Reorder ranks'}</span>
+              </button>
+            )}
             <button
               className="sheet-row"
               onClick={() => {
@@ -141,10 +207,11 @@ export function ListScreen() {
               <span><TrashIcon size={16} /> Delete list</span>
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {renaming && (
+      {renaming && createPortal(
         <div className="sheet-backdrop" onClick={() => setRenaming(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
@@ -163,10 +230,11 @@ export function ListScreen() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {confirmDel && (
+      {confirmDel && createPortal(
         <div className="sheet-backdrop" onClick={() => setConfirmDel(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
@@ -189,10 +257,11 @@ export function ListScreen() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {adding && (
+      {adding && createPortal(
         <div className="modal-backdrop" onClick={() => setAdding(false)}>
           <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
             <div className="settings-head">
@@ -240,7 +309,8 @@ export function ListScreen() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

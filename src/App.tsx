@@ -29,6 +29,7 @@ import { ProfileMoviesLibraryScreen } from './screens/ProfileMoviesLibraryScreen
 import { ProfileTVDashboard } from './screens/ProfileTVDashboard'
 import { ProfileMoviesDashboard } from './screens/ProfileMoviesDashboard'
 import { ListScreen } from './screens/ListScreen'
+import { FavoritesScreen } from './screens/FavoritesScreen'
 
 function readOnboarded(): boolean {
   try {
@@ -106,7 +107,7 @@ export default function App() {
         <Route path="/library" element={<LibraryScreen />} />
         <Route path="/library/shows" element={<ProfileTVLibraryScreen />} />
         <Route path="/library/movies" element={<ProfileMoviesLibraryScreen />} />
-        <Route path="/favorites" element={<LibraryScreen favoritesOnly />} />
+        <Route path="/favorites" element={<FavoritesScreen />} />
         <Route path="*" element={<Navigate to="/tv" replace />} />
       </Routes>
       <BottomNav />

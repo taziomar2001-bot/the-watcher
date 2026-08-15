@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { SettingsModal } from '../ui/SettingsModal'
 import { ChevronRight, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, ListIcon, PlusIcon } from '../components/Icons'
@@ -15,6 +16,7 @@ export function ProfileScreen() {
   const [settings, setSettings] = useState(false)
   const [newList, setNewList] = useState(false)
   const [listName, setListName] = useState('')
+  const [listRanked, setListRanked] = useState(false)
   const lib = useLibrary()
   const shows = useShowEntries()
   const movies = useMovieEntries()
@@ -42,8 +44,9 @@ export function ProfileScreen() {
   const createList = () => {
     const n = listName.trim()
     if (!n) return
-    lib.addList({ name: n, visibility: 'private', kind: 'mixed', items: [] })
+    lib.addList({ name: n, visibility: 'private', kind: 'mixed', items: [], ranked: listRanked })
     setListName('')
+    setListRanked(false)
     setNewList(false)
   }
 
@@ -150,6 +153,7 @@ export function ProfileScreen() {
             <span className="list-row-name">{l.name}</span>
             <span className="list-row-sub">
               {l.items.length} {l.items.length === 1 ? 'title' : 'titles'}
+              {l.ranked ? ' · Ranked' : ''}
             </span>
           </span>
           <ChevronRight size={20} />
@@ -159,8 +163,8 @@ export function ProfileScreen() {
       <div style={{ height: 28 }} />
       {settings && <SettingsModal onClose={() => setSettings(false)} />}
 
-      {newList && (
-        <div className="sheet-backdrop" onClick={() => setNewList(false)}>
+      {newList && createPortal(
+        <div className="sheet-backdrop" onClick={() => { setNewList(false); setListRanked(false) }}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
             <div className="sheet-title">New list</div>
@@ -177,8 +181,22 @@ export function ProfileScreen() {
                 Create
               </button>
             </div>
+            <button
+              className={`ranked-toggle pressable ${listRanked ? 'on' : ''}`}
+              onClick={() => setListRanked((v) => !v)}
+              type="button"
+            >
+              <span className="ranked-toggle-text">
+                <span className="ranked-toggle-title">Ranked list</span>
+                <span className="ranked-toggle-sub">Number titles 1, 2, 3… and reorder them</span>
+              </span>
+              <span className={`switch ${listRanked ? 'on' : ''}`}>
+                <span className="switch-knob" />
+              </span>
+            </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

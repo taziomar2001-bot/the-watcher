@@ -119,6 +119,14 @@ export function ChevronLeft({ size = 24, strokeWidth = 2, ...p }: IconProps) {
   )
 }
 
+export function ChevronUp({ size = 24, strokeWidth = 2, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth} {...p}>
+      <path d="m5 15 7-7 7 7" />
+    </svg>
+  )
+}
+
 export function PlusIcon({ size = 24, strokeWidth = 2, ...p }: IconProps) {
   return (
     <svg {...base(size)} strokeWidth={strokeWidth} {...p}>

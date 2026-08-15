@@ -9,9 +9,10 @@ export interface CustomList {
   description?: string
   visibility: 'public' | 'private'
   kind: 'shows' | 'movies' | 'mixed'
-  items: string[] // typed refs: "show:ID" | "movie:ID"
+  items: string[] // typed refs: "show:ID" | "movie:ID" — order = rank order when ranked
   cover?: string
   createdAt?: number
+  ranked?: boolean // when true, items are ordered and shown with a rank badge
 }
 
 /** Build/parse a typed list-membership ref so shows & movies never collide. */
@@ -100,6 +101,7 @@ interface LibraryState {
   renameList: (id: string, name: string) => void
   deleteList: (id: string) => void
   removeFromList: (listId: string, ref: string) => void
+  reorderList: (listId: string, items: string[]) => void
   markEpisodeWatched: (epId: string, watched: boolean) => void
   markAllPrevious: (epIds: string[]) => void
   markAllUnwatched: (epIds: string[]) => void
@@ -275,6 +277,11 @@ export const useLibrary = create<LibraryState>()(
       removeFromList: (listId, ref) =>
         set((s) => ({
           lists: s.lists.map((l) => (l.id === listId ? { ...l, items: l.items.filter((r) => r !== ref) } : l)),
+        })),
+      // Replace a list's item order wholesale (used by ranked-list reordering).
+      reorderList: (listId, items) =>
+        set((s) => ({
+          lists: s.lists.map((l) => (l.id === listId ? { ...l, items } : l)),
         })),
       // Watching an episode implies following the parent show (spec §11).
       markEpisodeWatched: (epId, watched) =>
