@@ -12,6 +12,7 @@ import { useToast } from '../store/useToast'
 import { classifyShow, seasonColor, showColor, DOT_COLOR, effectiveSeen } from '../logic/status'
 import { showAverageLive, seasonSizesOf, fmtStars } from '../logic/ratings'
 import { AddToListButton } from '../ui/AddToList'
+import { useToggleFavorite } from '../logic/favorites'
 import type { Season, Show } from '../types'
 
 const isReleased = (airDate?: string) => !airDate || new Date(airDate + 'T00:00:00') <= new Date()
@@ -36,6 +37,7 @@ export function ShowScreen() {
   const { data: show } = useAsync(() => getShow(id), [id])
   const lib = useLibrary()
   const toast = useToast((s) => s.show)
+  const toggleFavorite = useToggleFavorite()
 
   // Cache the enriched show summary (released/total/ended) + one-time backfill.
   useEffect(() => {
@@ -116,7 +118,7 @@ export function ShowScreen() {
             toast(following ? 'Unfollowed' : 'Following')
           }}
         />
-        <button className={`action-pill pressable ${fav ? 'active' : ''}`} onClick={() => lib.toggleFavoriteShow(show.id, toLibraryItem(show))}>
+        <button className={`action-pill pressable ${fav ? 'active' : ''}`} onClick={() => toggleFavorite('show', show.id, toLibraryItem(show))}>
           <HeartIcon size={15} fill={fav ? '#ff5964' : 'none'} /> Favorite
         </button>
         <button className={`action-pill pressable ${notify ? 'active' : ''}`} onClick={() => lib.toggleNotify(show.id)}>

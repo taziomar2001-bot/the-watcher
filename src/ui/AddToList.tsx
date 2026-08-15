@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLibrary, listRef } from '../store/useLibrary'
+import { useToggleFavorite } from '../logic/favorites'
 import { useToast } from '../store/useToast'
 import { ListIcon, CheckIcon, HeartIcon, PlusIcon } from '../components/Icons'
 
@@ -14,8 +15,7 @@ export function AddToListButton({ type, id }: { type: 'show' | 'movie'; id: stri
   const removeFromList = useLibrary((s) => s.removeFromList)
   const favShows = useLibrary((s) => s.favoriteShows)
   const favMovies = useLibrary((s) => s.favoriteMovies)
-  const toggleFavShow = useLibrary((s) => s.toggleFavoriteShow)
-  const toggleFavMovie = useLibrary((s) => s.toggleFavoriteMovie)
+  const toggleFavorite = useToggleFavorite()
   const toast = useToast((s) => s.show)
 
   const ref = listRef(type, id)
@@ -44,7 +44,7 @@ export function AddToListButton({ type, id }: { type: 'show' | 'movie'; id: stri
           <div className="dialog" onClick={(e) => e.stopPropagation()}>
             <div className="dialog-title">Add to a list</div>
 
-            <button className="list-pick-row" onClick={() => (type === 'show' ? toggleFavShow(id) : toggleFavMovie(id))}>
+            <button className="list-pick-row" onClick={() => toggleFavorite(type, id)}>
               <span className="list-pick-name">
                 <span className="fav-badge sm">
                   <HeartIcon size={12} fill="#fff" strokeWidth={0} />

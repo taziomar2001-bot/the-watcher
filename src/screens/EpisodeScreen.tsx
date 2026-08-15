@@ -83,7 +83,14 @@ export function EpisodeScreen() {
       <div className="detail-hero" style={{ height: 220 }}>
         <SmartImage src={ep.still ?? show.backdrop} alt={ep.title} />
         <div className="detail-hero-scrim" />
-        <button className="icon-btn-float" style={{ left: 14 }} onClick={() => nav(-1)} aria-label="Back">
+        {/* Deterministic hierarchical Back: always to the season that contains
+            the currently-viewed episode, regardless of prior swipes. */}
+        <button
+          className="icon-btn-float"
+          style={{ left: 14 }}
+          onClick={() => nav(`/show/${id}/season/${season}`)}
+          aria-label="Back to season"
+        >
           <ChevronLeft size={22} />
         </button>
       </div>

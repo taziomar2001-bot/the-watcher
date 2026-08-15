@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { Segmented, SearchField, SectionHeader } from '../ui/primitives'
 import { PosterThumb } from '../ui/cards'
-import { HeartIcon } from '../components/Icons'
+import { HeartIcon, TrophyIcon, ChevronRight } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { discoverShows, discoverMovies, search as searchCatalog } from '../data/catalog'
+import { searchUsers } from '../data/users'
 import { useLibrary } from '../store/useLibrary'
+import { useToggleFavorite } from '../logic/favorites'
 import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
 import { classifyShow, showColor, movieColor } from '../logic/status'
@@ -32,6 +34,7 @@ export function DiscoverScreen() {
   }
   const lib = useLibrary()
   const toast = useToast((s) => s.show)
+  const toggleFavorite = useToggleFavorite()
 
   const { data: showSections } = useAsync(() => discoverShows(), [])
   const { data: movieSections } = useAsync(() => discoverMovies(), [])
@@ -39,6 +42,7 @@ export function DiscoverScreen() {
 
   // Universal search — both movies AND shows, regardless of the toggle.
   const { data: results } = useAsync(() => searchCatalog(q), [q])
+  const userResults = q.trim() ? searchUsers(q) : []
   const searching = q.trim().length > 0
 
   const following = (m: Media) => (m.type === 'show' ? !!lib.watchlistShows[m.id] : !!lib.watchlistMovies[m.id])
@@ -49,17 +53,20 @@ export function DiscoverScreen() {
     else lib.toggleWatchlistMovie(m.id, toLibraryItem(m))
     if (!was) toast(`Following ${m.title}`)
   }
-  const toggleFav = (m: Media) => (m.type === 'show' ? lib.toggleFavoriteShow(m.id, toLibraryItem(m)) : lib.toggleFavoriteMovie(m.id, toLibraryItem(m)))
+  const toggleFav = (m: Media) => toggleFavorite(m.type, m.id, toLibraryItem(m))
 
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
-      <div className="app-header">
+      <div className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h1>Discover</h1>
+        <button className="icon-round pressable" onClick={() => nav('/leaderboard')} aria-label="Leaderboard">
+          <TrophyIcon size={20} />
+        </button>
       </div>
 
       {/* 1. Search bar (above the toggle) */}
       <div className="page-pad" style={{ paddingBottom: 10 }}>
-        <SearchField value={q} onChange={setQ} placeholder="Search movies & TV shows" />
+        <SearchField value={q} onChange={setQ} placeholder="Search movies, TV shows & people" />
       </div>
 
       {/* 2. TV/Movies toggle (controls the discovery sections only) */}
@@ -76,13 +83,34 @@ export function DiscoverScreen() {
 
       {/* 3. Search results (universal) or discovery sections */}
       {searching ? (
-        <div className="card-list" style={{ marginTop: 6 }}>
-          {(results ?? []).length === 0 ? (
-            <div className="empty">
-              <div className="empty-title">No results</div>
-            </div>
-          ) : (
-            (results ?? []).map((m) => (
+        <>
+          {userResults.length > 0 && (
+            <>
+              <SectionHeader title="People" />
+              <div className="card-list" style={{ marginTop: 2, marginBottom: 6 }}>
+                {userResults.map((u) => (
+                  <button key={u.id} className="user-row pressable" onClick={() => nav(`/u/${u.id}`)}>
+                    <span className="user-avatar" style={{ background: u.accent }}>
+                      {u.name[0].toUpperCase()}
+                    </span>
+                    <span className="user-info">
+                      <span className="user-name">{u.name}</span>
+                      <span className="user-handle">@{u.handle}</span>
+                    </span>
+                    <ChevronRight size={20} className="user-chevron" />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {(results ?? []).length > 0 && userResults.length > 0 && <SectionHeader title="Movies & TV" />}
+          <div className="card-list" style={{ marginTop: 6 }}>
+            {(results ?? []).length === 0 && userResults.length === 0 ? (
+              <div className="empty">
+                <div className="empty-title">No results</div>
+              </div>
+            ) : (
+              (results ?? []).map((m) => (
               <div key={`${m.type}_${m.id}`} className="search-row">
                 <button className="search-row-main pressable" onClick={() => nav(`/${m.type}/${m.id}`)}>
                   <SmartImage src={m.poster} alt={m.title} className="result-poster" />
@@ -112,8 +140,9 @@ export function DiscoverScreen() {
                 </div>
               </div>
             ))
-          )}
-        </div>
+            )}
+          </div>
+        </>
       ) : !sections ? (
         [0, 1, 2].map((i) => (
           <div key={i}>

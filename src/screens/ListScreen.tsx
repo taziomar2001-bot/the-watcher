@@ -6,6 +6,7 @@ import { ProgressDot, SearchField } from '../ui/primitives'
 import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, CheckIcon, GripIcon } from '../components/Icons'
 import { RankReorder } from '../ui/RankReorder'
 import { useLibrary, parseRef, listRef } from '../store/useLibrary'
+import { compositionLabel, countRefs } from '../logic/stats'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { useAsync } from '../hooks/useAsync'
 import { search as searchCatalog } from '../data/catalog'
@@ -77,7 +78,7 @@ export function ListScreen() {
           </button>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 24, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</h1>
-            <div className="sub">{items.length} {items.length === 1 ? 'title' : 'titles'}</div>
+            <div className="sub">{compositionLabel(countRefs(list.items).movies, countRefs(list.items).shows)}</div>
           </div>
         </div>
         <button className="icon-round pressable" onClick={() => setMenu(true)} aria-label="List options">
@@ -190,12 +191,17 @@ export function ListScreen() {
       )}
 
       {renaming && createPortal(
-        <div className="sheet-backdrop" onClick={() => setRenaming(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="sheet-title">Rename list</div>
+        <div className="dialog-backdrop" onClick={() => setRenaming(false)}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-title">Rename list</div>
             <div className="list-create-row">
-              <input className="sync-input" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+              <input
+                className="sync-input"
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && name.trim() && (lib.renameList(list.id, name.trim()), setRenaming(false))}
+              />
               <button
                 className="sync-btn primary pressable"
                 disabled={!name.trim()}

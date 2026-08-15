@@ -30,6 +30,9 @@ import { ProfileTVDashboard } from './screens/ProfileTVDashboard'
 import { ProfileMoviesDashboard } from './screens/ProfileMoviesDashboard'
 import { ListScreen } from './screens/ListScreen'
 import { FavoritesScreen } from './screens/FavoritesScreen'
+import { LeaderboardScreen } from './screens/LeaderboardScreen'
+import { PublicProfileScreen } from './screens/PublicProfileScreen'
+import { PublicLibraryScreen } from './screens/PublicLibraryScreen'
 
 function readOnboarded(): boolean {
   try {
@@ -108,6 +111,12 @@ export default function App() {
         <Route path="/library/shows" element={<ProfileTVLibraryScreen />} />
         <Route path="/library/movies" element={<ProfileMoviesLibraryScreen />} />
         <Route path="/favorites" element={<FavoritesScreen />} />
+        <Route path="/leaderboard" element={<LeaderboardScreen />} />
+        <Route path="/u/:id" element={<PublicProfileScreen />} />
+        <Route path="/u/:id/tv" element={<PublicLibraryScreen kind="tv" />} />
+        <Route path="/u/:id/movies" element={<PublicLibraryScreen kind="movies" />} />
+        <Route path="/u/:id/favorites" element={<PublicLibraryScreen kind="favorites" />} />
+        <Route path="/u/:id/list/:listId" element={<PublicLibraryScreen kind="list" />} />
         <Route path="*" element={<Navigate to="/tv" replace />} />
       </Routes>
       <BottomNav />

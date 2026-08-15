@@ -9,6 +9,7 @@ import { ChevronLeft, HeartIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
 import { getMovie, daysUntil } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
+import { useToggleFavorite } from '../logic/favorites'
 import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
 import { movieColor } from '../logic/status'
@@ -20,6 +21,7 @@ export function MovieScreen() {
   const { data: movie } = useAsync(() => getMovie(id), [id])
   const lib = useLibrary()
   const toast = useToast((s) => s.show)
+  const toggleFavorite = useToggleFavorite()
 
   // Cache genres so the Profile movie dashboard can build a genre breakdown.
   useEffect(() => {
@@ -85,7 +87,7 @@ export function MovieScreen() {
             if (!watched) toast('Marked watched')
           }}
         />
-        <button className={`action-pill pressable ${fav ? 'active' : ''}`} onClick={() => lib.toggleFavoriteMovie(movie.id, toLibraryItem(movie))}>
+        <button className={`action-pill pressable ${fav ? 'active' : ''}`} onClick={() => toggleFavorite('movie', movie.id, toLibraryItem(movie))}>
           <HeartIcon size={15} fill={fav ? '#ff5964' : 'none'} /> Favorite
         </button>
         <AddToListButton type="movie" id={movie.id} />

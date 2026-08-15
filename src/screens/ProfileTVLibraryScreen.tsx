@@ -8,6 +8,9 @@ import { useShowEntries } from '../logic/useLibraryData'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { categorize, showColor } from '../logic/status'
 
+// Preserve Category/Grid view when leaving to open a show and returning.
+let tvLibViewMem: 'category' | 'grid' = 'category'
+
 /**
  * Profile → TV Shows: the COMPLETE followed-TV library, every status included
  * (Finished and Stopped too). Category View reproduces the original Shows-tab
@@ -16,7 +19,11 @@ import { categorize, showColor } from '../logic/status'
 export function ProfileTVLibraryScreen() {
   const nav = useNavigate()
   const scrollRef = useScrollMemory<HTMLDivElement>('lib-shows')
-  const [view, setView] = useState<'category' | 'grid'>('category')
+  const [view, setViewState] = useState<'category' | 'grid'>(tvLibViewMem)
+  const setView = (v: 'category' | 'grid') => {
+    tvLibViewMem = v
+    setViewState(v)
+  }
   const entries = useShowEntries()
 
   const cats = useMemo(() => categorize(entries, Date.now()), [entries])

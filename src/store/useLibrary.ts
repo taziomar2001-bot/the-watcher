@@ -135,6 +135,10 @@ export interface ImportedMovie {
   watchedAt?: number
 }
 
+// Per-category favourites cap (movies and shows independently). Mirrors
+// FAV_LIMIT in logic/stats; kept as a local literal to avoid an import cycle.
+const FAV_CAP = 12
+
 const on = (map: IdMap, id: string): IdMap => ({ ...map, [id]: true })
 const off = (map: IdMap, id: string): IdMap => {
   const next = { ...map }
@@ -228,6 +232,8 @@ export const useLibrary = create<LibraryState>()(
       toggleFavoriteShow: (id, item) =>
         set((s) => {
           if (s.favoriteShows[id]) return { favoriteShows: off(s.favoriteShows, id) }
+          // Safety net for the 12-per-category cap (the UI also blocks + explains).
+          if (Object.keys(s.favoriteShows).length >= FAV_CAP) return {}
           return {
             favoriteShows: on(s.favoriteShows, id),
             libraryShows: item ? { ...s.libraryShows, [id]: { ...s.libraryShows[id], ...item } } : s.libraryShows,
@@ -236,6 +242,7 @@ export const useLibrary = create<LibraryState>()(
       toggleFavoriteMovie: (id, item) =>
         set((s) => {
           if (s.favoriteMovies[id]) return { favoriteMovies: off(s.favoriteMovies, id) }
+          if (Object.keys(s.favoriteMovies).length >= FAV_CAP) return {}
           return {
             favoriteMovies: on(s.favoriteMovies, id),
             libraryMovies: item ? { ...s.libraryMovies, [id]: { ...s.libraryMovies[id], ...item } } : s.libraryMovies,

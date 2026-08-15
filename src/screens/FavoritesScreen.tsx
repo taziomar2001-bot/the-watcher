@@ -5,12 +5,17 @@ import { SmartImage } from '../components/ui'
 import { ProgressDot, Segmented, SearchField } from '../ui/primitives'
 import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, CheckIcon } from '../components/Icons'
 import { useLibrary } from '../store/useLibrary'
+import { useToggleFavorite } from '../logic/favorites'
+import { compositionLabel } from '../logic/stats'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { useAsync } from '../hooks/useAsync'
 import { search as searchCatalog } from '../data/catalog'
 import { toLibraryItem } from '../utils/media'
 import { showColor, movieColor } from '../logic/status'
+
+// Remember the selected TV/Movies tab across navigating into a title and back.
+let favKindMem: 'show' | 'movie' = 'show'
 
 /**
  * Favorites — the user's starred shows & movies as a 3-up poster grid (matching
@@ -24,12 +29,19 @@ export function FavoritesScreen() {
   const lib = useLibrary()
   const shows = useShowEntries()
   const movies = useMovieEntries()
-  const [kind, setKind] = useState<'show' | 'movie'>('show')
+  const [kind, setKindState] = useState<'show' | 'movie'>(favKindMem)
+  const setKind = (k: 'show' | 'movie') => {
+    favKindMem = k
+    setKindState(k)
+  }
   const [menu, setMenu] = useState(false)
   const [edit, setEdit] = useState(false)
   const [adding, setAdding] = useState(false)
   const [q, setQ] = useState('')
   const { data: results } = useAsync(() => (q.trim() ? searchCatalog(q) : Promise.resolve([])), [q])
+  const toggleFavorite = useToggleFavorite()
+  const favMovies = Object.keys(lib.favoriteMovies).length
+  const favShows = Object.keys(lib.favoriteShows).length
 
   const items = useMemo(() => {
     if (kind === 'show') {
@@ -56,10 +68,7 @@ export function FavoritesScreen() {
       .sort((a, b) => a.title.localeCompare(b.title))
   }, [kind, shows, movies, lib.favoriteShows, lib.favoriteMovies, lib.stoppedShows, lib.watchedMovies])
 
-  const removeFav = (type: 'show' | 'movie', id: string) => {
-    if (type === 'show') lib.toggleFavoriteShow(id)
-    else lib.toggleFavoriteMovie(id)
-  }
+  const removeFav = (type: 'show' | 'movie', id: string) => toggleFavorite(type, id)
 
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
@@ -70,7 +79,7 @@ export function FavoritesScreen() {
           </button>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 24 }}>Favorites</h1>
-            <div className="sub">{items.length} {items.length === 1 ? 'title' : 'titles'}</div>
+            <div className="sub">{compositionLabel(favMovies, favShows)}</div>
           </div>
         </div>
         <button className="icon-round pressable" onClick={() => setMenu(true)} aria-label="Favorites options">
@@ -179,10 +188,7 @@ export function FavoritesScreen() {
                     <button
                       key={`${m.type}:${m.id}`}
                       className="pick-row pressable"
-                      onClick={() => {
-                        if (m.type === 'show') lib.toggleFavoriteShow(m.id, toLibraryItem(m))
-                        else lib.toggleFavoriteMovie(m.id, toLibraryItem(m))
-                      }}
+                      onClick={() => toggleFavorite(m.type, m.id, toLibraryItem(m))}
                     >
                       <SmartImage src={m.poster} alt={m.title} className="pick-poster" />
                       <span className="pick-info">

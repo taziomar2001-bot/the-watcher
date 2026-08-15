@@ -127,6 +127,18 @@ export function ChevronUp({ size = 24, strokeWidth = 2, ...p }: IconProps) {
   )
 }
 
+export function TrophyIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth} {...p}>
+      <path d="M8 21h8" />
+      <path d="M12 17v4" />
+      <path d="M7 4h10v5a5 5 0 0 1-10 0V4z" />
+      <path d="M7 6H4.5v1.5A3 3 0 0 0 7.5 10.5" />
+      <path d="M17 6h2.5v1.5a3 3 0 0 1-3 3" />
+    </svg>
+  )
+}
+
 export function GripIcon({ size = 24, ...p }: IconProps) {
   return (
     <svg {...base(size)} {...p}>

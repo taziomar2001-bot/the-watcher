@@ -6,6 +6,7 @@ import { ChevronRight, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, ListIc
 import { useLibrary } from '../store/useLibrary'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { effectiveSeen } from '../logic/status'
+import { compositionLabel, countRefs } from '../logic/stats'
 import { formatDuration as hm } from '../utils/duration'
 
 const EP_MIN = 42
@@ -138,7 +139,7 @@ export function ProfileScreen() {
         <span className="list-row-text">
           <span className="list-row-name">Favorites</span>
           <span className="list-row-sub">
-            {Object.keys(lib.favoriteShows).length + Object.keys(lib.favoriteMovies).length} titles
+            {compositionLabel(Object.keys(lib.favoriteMovies).length, Object.keys(lib.favoriteShows).length)}
           </span>
         </span>
         <ChevronRight size={20} />
@@ -152,7 +153,7 @@ export function ProfileScreen() {
           <span className="list-row-text">
             <span className="list-row-name">{l.name}</span>
             <span className="list-row-sub">
-              {l.items.length} {l.items.length === 1 ? 'title' : 'titles'}
+              {compositionLabel(countRefs(l.items).movies, countRefs(l.items).shows)}
               {l.ranked ? ' · Ranked' : ''}
             </span>
           </span>

@@ -10,6 +10,9 @@ import { movieColor } from '../logic/status'
 
 type Filter = 'all' | 'watched' | 'unwatched'
 
+// Preserve the chosen filter when leaving to view a movie and returning.
+let movieLibFilterMem: Filter = 'all'
+
 /**
  * Profile → Movies: the COMPLETE followed-movie library (watched + unwatched).
  * A status filter (All / Watched / Not Watched) narrows the view without ever
@@ -18,7 +21,11 @@ type Filter = 'all' | 'watched' | 'unwatched'
 export function ProfileMoviesLibraryScreen() {
   const nav = useNavigate()
   const scrollRef = useScrollMemory<HTMLDivElement>('lib-movies')
-  const [filter, setFilter] = useState<Filter>('all')
+  const [filter, setFilterState] = useState<Filter>(movieLibFilterMem)
+  const setFilter = (f: Filter) => {
+    movieLibFilterMem = f
+    setFilterState(f)
+  }
   const watchlist = useLibrary((s) => s.watchlistMovies)
   const watchedMovies = useLibrary((s) => s.watchedMovies)
   const entries = useMovieEntries()
