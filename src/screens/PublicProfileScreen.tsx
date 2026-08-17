@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, HeartIcon, ClapperboardIcon, TvIcon, ListIcon } from '../components/Icons'
+import { ChevronLeft, ChevronRight, HeartIcon, ClapperboardIcon, TvIcon, ListIcon, OrderedListIcon } from '../components/Icons'
 import { getUser, totalMinutes } from '../data/users'
 import { compositionLabel, countRefs } from '../logic/stats'
 import { formatDuration as hm } from '../utils/duration'
@@ -133,8 +133,8 @@ export function PublicProfileScreen() {
         const c = countRefs(l.items.map((r) => `${r.type}:${r.id}`))
         return (
           <button key={l.id} className="list-row pressable" onClick={() => nav(`/u/${user.id}/list/${l.id}`)}>
-            <span className="list-badge">
-              <ListIcon size={16} />
+            <span className={`list-badge ${l.ranked ? 'ranked' : ''}`}>
+              {l.ranked ? <OrderedListIcon size={16} /> : <ListIcon size={16} />}
             </span>
             <span className="list-row-text">
               <span className="list-row-name">{l.name}</span>

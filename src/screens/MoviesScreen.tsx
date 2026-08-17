@@ -36,7 +36,7 @@ export function MoviesScreen() {
         }
         return releaseKey(b).localeCompare(releaseKey(a)) || a.item.title.localeCompare(b.item.title)
       })
-      .map((e) => ({ id: e.item.id, poster: e.item.poster, title: e.item.title, color: movieColor(false) }))
+      .map((e) => ({ id: e.item.id, poster: e.item.poster, title: e.item.title, color: movieColor(false, isUnreleased(e.item.releaseDate)) }))
   }, [entries, watchlist, addedAt, followedAt, releaseMode, sort])
 
   return (

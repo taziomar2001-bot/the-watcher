@@ -6,7 +6,7 @@ import { ChevronLeft } from '../components/Icons'
 import { useLibrary } from '../store/useLibrary'
 import { useMovieEntries } from '../logic/useLibraryData'
 import { useScrollMemory } from '../hooks/useScrollMemory'
-import { movieColor } from '../logic/status'
+import { movieColor, isUnreleased } from '../logic/status'
 
 type Filter = 'all' | 'watched' | 'unwatched'
 
@@ -38,7 +38,7 @@ export function ProfileMoviesLibraryScreen() {
         return filter === 'all' ? true : filter === 'watched' ? watched : !watched
       })
       .sort((a, b) => a.item.title.localeCompare(b.item.title))
-      .map((e) => ({ id: e.item.id, poster: e.item.poster, title: e.item.title, color: movieColor(!!watchedMovies[e.item.id]) }))
+      .map((e) => ({ id: e.item.id, poster: e.item.poster, title: e.item.title, color: movieColor(!!watchedMovies[e.item.id], isUnreleased(e.item.releaseDate)) }))
   }, [entries, watchlist, watchedMovies, filter])
 
   return (

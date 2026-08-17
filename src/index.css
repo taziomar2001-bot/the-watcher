@@ -21,6 +21,7 @@
   --yellow: #ff9838; /* was #f2c744 — now the "in progress" / rating accent colour */
   --green: #46d369;
   --purple: #b98cff;
+  --blue: #4aa8ff; /* followed movie that hasn't been released yet */
 
   /* interactive accent (kept distinct from progress hues) */
   --accent: #64d2ff;

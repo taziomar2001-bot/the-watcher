@@ -12,7 +12,7 @@ import { useLibrary } from '../store/useLibrary'
 import { useToggleFavorite } from '../logic/favorites'
 import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
-import { movieColor } from '../logic/status'
+import { movieColor, isUnreleased } from '../logic/status'
 import { shortDate } from '../utils/dates'
 
 export function MovieScreen() {
@@ -59,7 +59,7 @@ export function MovieScreen() {
             {[movie.year, movie.runtime ? `${movie.runtime} min` : null, movie.director].filter(Boolean).join('  ·  ')}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-            <ProgressDot color={movieColor(watched)} />
+            <ProgressDot color={movieColor(watched, isUnreleased(movie.releaseDate))} />
             <span style={{ fontSize: 13, color: 'var(--text-mute)' }}>
               {days > 0 ? `Releases in ${days} days` : watched ? 'Watched' : 'Not watched'}
             </span>

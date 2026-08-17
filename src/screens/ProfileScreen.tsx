@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { SettingsModal } from '../ui/SettingsModal'
-import { ChevronRight, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, ListIcon, PlusIcon } from '../components/Icons'
+import { ChevronRight, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, ListIcon, OrderedListIcon, PlusIcon } from '../components/Icons'
 import { useLibrary } from '../store/useLibrary'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { effectiveSeen } from '../logic/status'
@@ -153,8 +153,8 @@ export function ProfileScreen() {
 
       {lib.lists.map((l) => (
         <button key={l.id} className="list-row pressable" onClick={() => nav(`/list/${l.id}`)}>
-          <span className="list-badge">
-            <ListIcon size={16} />
+          <span className={`list-badge ${l.ranked ? 'ranked' : ''}`}>
+            {l.ranked ? <OrderedListIcon size={16} /> : <ListIcon size={16} />}
           </span>
           <span className="list-row-text">
             <span className="list-row-name">{l.name}</span>

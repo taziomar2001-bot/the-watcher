@@ -5,13 +5,14 @@ import type { LibraryItem } from '../store/useLibrary'
 //        date) · green (finished) · red (stopped watching)
 // Seasons: orange (not started) · yellow (partial) · green (all watched)
 // Episodes & movies: orange (unwatched) · green (watched)
-export type DotColor = 'orange' | 'yellow' | 'green' | 'purple' | 'red'
+export type DotColor = 'orange' | 'yellow' | 'green' | 'purple' | 'red' | 'blue'
 export const DOT_COLOR: Record<DotColor, string> = {
   orange: 'var(--orange)',
   yellow: 'var(--yellow)',
   green: 'var(--green)',
   purple: 'var(--purple)',
   red: 'var(--red)',
+  blue: 'var(--blue)',
 }
 export const DOT_LABEL: Record<DotColor, string> = {
   orange: 'Not started / unwatched',
@@ -19,6 +20,7 @@ export const DOT_LABEL: Record<DotColor, string> = {
   green: 'Watched / completed',
   purple: 'Up to date',
   red: 'Stopped watching',
+  blue: 'Followed · not yet released',
 }
 
 /** Progress classification of a TV show (independent of recency & stopped). */
@@ -97,8 +99,16 @@ export function seasonColor(allWatched: boolean, anyWatched: boolean): DotColor 
 export function episodeColor(watched: boolean): DotColor {
   return watched ? 'green' : 'orange'
 }
-export function movieColor(watched: boolean): DotColor {
-  return watched ? 'green' : 'orange'
+/** True when a movie's release date is still in the future. */
+export function isUnreleased(releaseDate?: string): boolean {
+  return !!releaseDate && releaseDate > new Date().toISOString().slice(0, 10)
+}
+
+// Watched → green; a followed movie not yet released → blue; otherwise white.
+export function movieColor(watched: boolean, unreleased = false): DotColor {
+  if (watched) return 'green'
+  if (unreleased) return 'blue'
+  return 'orange'
 }
 
 // ---- TV Shows tab categorisation ----

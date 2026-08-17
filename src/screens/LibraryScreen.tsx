@@ -5,7 +5,7 @@ import { Segmented, SortMenu } from '../ui/primitives'
 import { ChevronLeft } from '../components/Icons'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { useLibrary } from '../store/useLibrary'
-import { LIBRARY_SORTS, showColor, movieColor, classToStatus, type LibrarySort, type Status } from '../logic/status'
+import { LIBRARY_SORTS, showColor, movieColor, isUnreleased, classToStatus, type LibrarySort, type Status } from '../logic/status'
 
 type StatusFilter = 'all' | 'watched' | 'unwatched' | 'completed' | 'inProgress' | 'notStarted'
 const FILTERS: { key: StatusFilter; label: string }[] = [
@@ -72,7 +72,7 @@ export function LibraryScreen({ favoritesOnly = false }: { favoritesOnly?: boole
               seasons: undefined as number | undefined,
               runtime: e.item.runtime,
               release: e.item.releaseDate ?? String(e.item.year ?? ''),
-              color: movieColor(!!watchedMovies[e.item.id]),
+              color: movieColor(!!watchedMovies[e.item.id], isUnreleased(e.item.releaseDate)),
               addedAt: e.addedAt ?? 0,
               lastWatched: e.lastWatched ?? 0,
             }))

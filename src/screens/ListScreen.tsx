@@ -11,7 +11,7 @@ import { useScrollMemory } from '../hooks/useScrollMemory'
 import { useAsync } from '../hooks/useAsync'
 import { search as searchCatalog } from '../data/catalog'
 import { toLibraryItem } from '../utils/media'
-import { classifyShow, showColor, movieColor } from '../logic/status'
+import { classifyShow, showColor, movieColor, isUnreleased } from '../logic/status'
 
 export function ListScreen() {
   const { id = '' } = useParams()
@@ -54,7 +54,7 @@ export function ListScreen() {
       const color =
         type === 'show'
           ? showColor(classifyShow(item, lib.watchedEpisodes), !!lib.stoppedShows[mid])
-          : movieColor(!!lib.watchedMovies[mid])
+          : movieColor(!!lib.watchedMovies[mid], isUnreleased(item.releaseDate))
       return { ref, type, id: mid, poster: item.poster, title: item.title, color }
     })
     .filter(Boolean) as { ref: string; type: 'show' | 'movie'; id: string; poster?: string; title: string; color: ReturnType<typeof movieColor> }[]

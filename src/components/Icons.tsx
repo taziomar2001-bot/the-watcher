@@ -76,6 +76,17 @@ export function ListIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
   )
 }
 
+export function OrderedListIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth} {...p}>
+      <path d="M10 6h10M10 12h10M10 18h10" />
+      <text x="2" y="8" fontSize="7" fontWeight="700" fill="currentColor" stroke="none" fontFamily="Helvetica, Arial, sans-serif">1</text>
+      <text x="2" y="14" fontSize="7" fontWeight="700" fill="currentColor" stroke="none" fontFamily="Helvetica, Arial, sans-serif">2</text>
+      <text x="2" y="20" fontSize="7" fontWeight="700" fill="currentColor" stroke="none" fontFamily="Helvetica, Arial, sans-serif">3</text>
+    </svg>
+  )
+}
+
 export function BellIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
   return (
     <svg {...base(size)} strokeWidth={strokeWidth} {...p}>

@@ -12,7 +12,7 @@ import { useLibrary } from '../store/useLibrary'
 import { useToggleFavorite } from '../logic/favorites'
 import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
-import { classifyShow, showColor, movieColor } from '../logic/status'
+import { classifyShow, showColor, movieColor, isUnreleased } from '../logic/status'
 import type { Media, Show, Movie } from '../types'
 
 // Module-scoped so Discover's mode + query survive navigating to a detail page
@@ -176,7 +176,7 @@ export function DiscoverScreen() {
                         ? showColor(classifyShow(lib.libraryShows[media.id] ?? { id: media.id, type: 'show', title: media.title }, lib.watchedEpisodes), !!lib.stoppedShows[media.id])
                         : undefined
                       : isFollow || lib.watchedMovies[media.id]
-                        ? movieColor(!!lib.watchedMovies[media.id])
+                        ? movieColor(!!lib.watchedMovies[media.id], isUnreleased((media as Movie).releaseDate))
                         : undefined
                   return (
                     <PosterThumb

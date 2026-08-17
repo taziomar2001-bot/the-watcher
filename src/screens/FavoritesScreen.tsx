@@ -12,7 +12,7 @@ import { useScrollMemory } from '../hooks/useScrollMemory'
 import { useAsync } from '../hooks/useAsync'
 import { search as searchCatalog } from '../data/catalog'
 import { toLibraryItem } from '../utils/media'
-import { showColor, movieColor } from '../logic/status'
+import { showColor, movieColor, isUnreleased } from '../logic/status'
 
 // Remember the selected TV/Movies tab across navigating into a title and back.
 let favKindMem: 'show' | 'movie' = 'show'
@@ -63,7 +63,7 @@ export function FavoritesScreen() {
         type: 'movie' as const,
         poster: e.item.poster,
         title: e.item.title,
-        color: movieColor(!!lib.watchedMovies[e.item.id]),
+        color: movieColor(!!lib.watchedMovies[e.item.id], isUnreleased(e.item.releaseDate)),
       }))
       .sort((a, b) => a.title.localeCompare(b.title))
   }, [kind, shows, movies, lib.favoriteShows, lib.favoriteMovies, lib.stoppedShows, lib.watchedMovies])
