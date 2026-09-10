@@ -8,6 +8,7 @@ import { SUPABASE_ENABLED } from './data/supabase'
 import { useLibrary } from './store/useLibrary'
 import { useToast } from './store/useToast'
 import { useSync } from './logic/sync'
+import { useNavTracker } from './logic/nav'
 import { runFullImport } from './data/importTVTime'
 import { initSync } from './logic/sync'
 import { ensureUpcoming } from './logic/upcoming'
@@ -44,6 +45,7 @@ function readOnboarded(): boolean {
 
 export default function App() {
   const location = useLocation()
+  useNavTracker()
   const syncStatus = useSync((s) => s.status)
   const [onboarded, setOnboarded] = useState(readOnboarded)
 

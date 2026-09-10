@@ -7,6 +7,7 @@ import { getShow } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
 import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
+import { useUpNavigation } from '../logic/nav'
 import { shortDate } from '../utils/dates'
 import { seasonAverageLive, seasonRatedCount, seasonSizesOf, fmtStars } from '../logic/ratings'
 
@@ -23,6 +24,7 @@ export function SeasonScreen() {
   const markAllUnwatched = useLibrary((s) => s.markAllUnwatched)
   const patchLibraryShow = useLibrary((s) => s.patchLibraryShow)
   const toast = useToast((s) => s.show)
+  const goUp = useUpNavigation()
   const [confirmReset, setConfirmReset] = useState(false)
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export function SeasonScreen() {
     <div className="scroll-area route-fade">
       <div className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <button className="pressable" onClick={() => nav(-1)} aria-label="Back" style={{ color: 'var(--text-dim)' }}>
+          <button className="pressable" onClick={() => goUp(`/show/${id}`)} aria-label="Back to show" style={{ color: 'var(--text-dim)' }}>
             <ChevronLeft size={26} />
           </button>
           <div style={{ minWidth: 0 }}>

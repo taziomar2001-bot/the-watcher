@@ -7,6 +7,7 @@ import { useAsync } from '../hooks/useAsync'
 import { getShow } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
 import { useToast } from '../store/useToast'
+import { useUpNavigation } from '../logic/nav'
 import { shortDate } from '../utils/dates'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -20,6 +21,7 @@ export function EpisodeScreen() {
   const epRatings = useLibrary((s) => s.episodeRatings)
   const setEpisodeRating = useLibrary((s) => s.setEpisodeRating)
   const toast = useToast((s) => s.show)
+  const goUp = useUpNavigation()
   const touch = useRef<{ x: number; y: number } | null>(null)
 
   if (!show)
@@ -59,7 +61,11 @@ export function EpisodeScreen() {
   const curIdx = flat.findIndex((f) => String(f.season) === String(season) && String(f.number) === String(ep.number))
   const prev = curIdx > 0 ? flat[curIdx - 1] : undefined
   const next = curIdx >= 0 && curIdx < flat.length - 1 ? flat[curIdx + 1] : undefined
-  const goTo = (t?: { season: number; number: number }) => t && nav(`/show/${id}/season/${t.season}/episode/${t.number}`)
+  // Moving between episodes is a LATERAL move, so it replaces the current entry
+  // rather than piling up history — Back then always lands on the season, and
+  // the OS back gesture agrees.
+  const goTo = (t?: { season: number; number: number }) =>
+    t && nav(`/show/${id}/season/${t.season}/episode/${t.number}`, { replace: true })
 
   // Horizontal swipe → previous / next episode (vertical scrolls are ignored).
   const onTouchStart = (e: React.TouchEvent) => {
@@ -88,7 +94,7 @@ export function EpisodeScreen() {
         <button
           className="icon-btn-float"
           style={{ left: 14 }}
-          onClick={() => nav(`/show/${id}/season/${season}`)}
+          onClick={() => goUp(`/show/${id}/season/${season}`)}
           aria-label="Back to season"
         >
           <ChevronLeft size={22} />
