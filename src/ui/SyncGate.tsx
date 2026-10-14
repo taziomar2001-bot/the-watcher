@@ -49,9 +49,11 @@ export function SyncGate() {
             <button className="sync-btn full primary pressable" disabled={busy} onClick={() => void run(sync.restoreNow)}>
               Keep cloud copy
             </button>
-            <button className="sync-btn full pressable" disabled={busy} onClick={() => void run(sync.backupNow)}>
-              Keep device copy
-            </button>
+            {sync.canKeepDeviceCopy && (
+              <button className="sync-btn full pressable" disabled={busy} onClick={() => void run(sync.backupNow)}>
+                Keep device copy
+              </button>
+            )}
           </div>
         ) : sync.error ? (
           <button className="sync-btn full primary pressable" disabled={busy} onClick={() => void run(sync.retrySync)}>
@@ -60,7 +62,11 @@ export function SyncGate() {
         ) : (
           <div className="sync-gate-progress" role="status">Checking cloud library…</div>
         )}
-        {sync.remoteNewer && <div className="sync-gate-note">Download a backup first if you may need both copies later.</div>}
+        {sync.remoteNewer && <div className="sync-gate-note">
+          {sync.canKeepDeviceCopy
+            ? 'Download a backup first if you may need both copies later.'
+            : 'The device copy belongs to another account and cannot be added to this one.'}
+        </div>}
       </div>
     </main>
   )

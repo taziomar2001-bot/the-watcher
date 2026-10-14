@@ -7,11 +7,6 @@ const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
 export const SUPABASE_ENABLED = Boolean(URL && ANON)
 
-// The owner's email (set VITE_OWNER_EMAIL in the environment). Only this account
-// may see/run the baked TV Time import, which reconstructs the owner's personal
-// library — so no other user can pull it into their own account.
-export const OWNER_EMAIL = (import.meta.env.VITE_OWNER_EMAIL as string | undefined)?.toLowerCase()
-
 export const supabase: SupabaseClient | null = SUPABASE_ENABLED
   ? createClient(URL as string, ANON as string, {
       auth: {

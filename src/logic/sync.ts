@@ -115,6 +115,7 @@ interface Meta {
   userId?: string
 }
 const META_KEY = 'tw-sync-meta'
+const LOCAL_OWNER_KEY = 'tw-local-library-owner'
 function getMeta(): Meta {
   try {
     const p = JSON.parse(localStorage.getItem(META_KEY) || '{}') as Partial<Meta>
@@ -126,8 +127,17 @@ function getMeta(): Meta {
 function setMeta(m: Meta) {
   try {
     localStorage.setItem(META_KEY, JSON.stringify(m))
+    if (m.userId) localStorage.setItem(LOCAL_OWNER_KEY, m.userId)
   } catch {
     /* ignore */
+  }
+}
+
+function localOwnerId(): string | undefined {
+  try {
+    return getMeta().userId || localStorage.getItem(LOCAL_OWNER_KEY) || undefined
+  } catch {
+    return getMeta().userId
   }
 }
 
@@ -140,6 +150,7 @@ interface SyncState {
   remoteNewer?: boolean
   syncReady?: boolean
   mayShowLocal?: boolean
+  canKeepDeviceCopy?: boolean
   pendingWrite?: boolean
   error?: string
   signIn: (email: string, password: string) => Promise<void>
@@ -159,11 +170,12 @@ let pushTimer: ReturnType<typeof setTimeout> | undefined
 let pushRetry: ReturnType<typeof setTimeout> | undefined
 let pushInFlight: Promise<boolean> | null = null
 let initialized = false
+let sessionInitialized = false
 
 export const useSync = create<SyncState>((set) => ({
-  status: SUPABASE_ENABLED ? 'signedOut' : 'disabled',
+  status: SUPABASE_ENABLED ? 'busy' : 'disabled',
   syncReady: false,
-  mayShowLocal: true,
+  mayShowLocal: !SUPABASE_ENABLED,
 
   signIn: async (email, password) => {
     if (!supabase) return
@@ -277,6 +289,10 @@ export const useSync = create<SyncState>((set) => ({
   },
 
   backupNow: async () => {
+    if (currentUserId && localOwnerId() && localOwnerId() !== currentUserId) {
+      set({ error: 'This device library belongs to a different account. Keep your cloud copy instead.' })
+      return
+    }
     if (!useSync.getState().syncReady && !useSync.getState().remoteNewer) {
       set({ error: 'Check the cloud connection before backing up.' })
       return
@@ -314,12 +330,14 @@ export const useSync = create<SyncState>((set) => ({
   retrySync: async () => {
     if (currentUserId) await reconcile()
   },
+
 }))
 
 function clearLocalAccount() {
   try {
     localStorage.removeItem('the-watcher-library-v1')
     localStorage.removeItem(META_KEY)
+    localStorage.removeItem(LOCAL_OWNER_KEY)
     localStorage.removeItem('tw-onboarded')
     localStorage.removeItem(PENDING_USERNAME_KEY)
   } catch {
@@ -422,15 +440,14 @@ async function reconcile() {
   if (!userId) return
   clearTimeout(pushTimer)
   clearTimeout(pushRetry)
-  useSync.setState({ syncReady: false, error: undefined, remoteNewer: false })
+  useSync.setState({ syncReady: false, error: undefined, remoteNewer: false, canKeepDeviceCopy: false })
   try {
     const remote = await fetchRemote(userId)
     if (currentUserId !== userId) return
-    const meta = getMeta()
     const local = snapshot()
     const localHasData = snapHasData(local)
     const remoteHasData = !!remote && snapHasData(remote.data)
-    const belongsElsewhere = !!meta.userId && meta.userId !== userId
+    const belongsElsewhere = !!localOwnerId() && localOwnerId() !== userId
 
     if (!localHasData && remoteHasData && remote) {
       applyRemote(remote, userId)
@@ -453,7 +470,8 @@ async function reconcile() {
     if (localHasData && !remoteHasData) {
       useSync.setState({
         remoteNewer: true,
-        error: belongsElsewhere ? 'This device has another account’s library. Download a backup before choosing which copy to keep.' : undefined,
+        canKeepDeviceCopy: !belongsElsewhere,
+        error: belongsElsewhere ? 'This device has another account’s library. Only the cloud copy can be used here.' : undefined,
       })
       return
     }
@@ -468,7 +486,8 @@ async function reconcile() {
     } else {
       useSync.setState({
         remoteNewer: true,
-        error: belongsElsewhere ? 'This device has another account’s library. Download a backup before choosing which copy to keep.' : undefined,
+        canKeepDeviceCopy: !belongsElsewhere,
+        error: belongsElsewhere ? 'This device has another account’s library. Only the cloud copy can be used here.' : undefined,
       })
     }
   } catch (e) {
@@ -507,23 +526,31 @@ export async function initSync() {
 
   const acceptSession = (session: { user: { id: string; email?: string } } | null) => {
     const userId = session?.user.id ?? null
-    if (userId === currentUserId) return
+    if (sessionInitialized && userId === currentUserId) return
+    sessionInitialized = true
     clearTimeout(pushTimer)
     clearTimeout(pushRetry)
     currentUserId = userId
     lastSavedJson = null
     if (session) {
-      const mayShowLocal = !snapHasData(snapshot()) || getMeta().userId === userId
+      const ownerId = localOwnerId()
+      const mayShowLocal = !snapHasData(snapshot()) || ownerId === userId
+      // Remember an account even if its first cloud write has not completed.
+      // This prevents a later signed-out visit from exposing its device copy.
+      if (!ownerId) {
+        try { localStorage.setItem(LOCAL_OWNER_KEY, session.user.id) } catch { /* ignore */ }
+      }
       useSync.setState({
         status: 'signedIn', email: session.user.email, syncReady: false,
-        remoteNewer: false, pendingWrite: false, mayShowLocal, error: undefined,
+        remoteNewer: false, pendingWrite: false, mayShowLocal, canKeepDeviceCopy: false, error: undefined,
       })
       void claimPendingUsername(session.user.email)
       void reconcile()
     } else {
       useSync.setState({
         status: 'signedOut', email: undefined, syncReady: false,
-        remoteNewer: false, pendingWrite: false, mayShowLocal: true,
+        remoteNewer: false, pendingWrite: false,
+        mayShowLocal: !localOwnerId(), canKeepDeviceCopy: false,
       })
     }
   }

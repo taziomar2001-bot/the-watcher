@@ -4,6 +4,7 @@ import { BottomNav } from './ui/BottomNav'
 import { ToastHost } from './components/ToastHost'
 import { Welcome } from './ui/Welcome'
 import { SyncGate } from './ui/SyncGate'
+import { SignedOutLibraryGate } from './ui/SignedOutLibraryGate'
 import { USE_TMDB } from './data/catalog'
 import { SUPABASE_ENABLED } from './data/supabase'
 import { useSync } from './logic/sync'
@@ -50,6 +51,7 @@ export default function App() {
   const showSyncGate = useSync((s) =>
     (s.status === 'signedIn' || s.status === 'busy') && (!!s.remoteNewer || s.mayShowLocal === false),
   )
+  const showSignedOutLibraryGate = useSync((s) => s.status === 'signedOut' && s.mayShowLocal === false)
   const [onboarded, setOnboarded] = useState(readOnboarded)
 
   const dismissWelcome = () => {
@@ -88,6 +90,13 @@ export default function App() {
   if (showSyncGate) return (
     <div className="app-shell">
       <SyncGate />
+      <ToastHost />
+    </div>
+  )
+
+  if (showSignedOutLibraryGate) return (
+    <div className="app-shell">
+      <SignedOutLibraryGate />
       <ToastHost />
     </div>
   )

@@ -23,9 +23,9 @@ setup guide.
 
 Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the app's build
 environment. The anon key is public; row-level security protects each user's
-data. Set `VITE_OWNER_EMAIL` to the owner's lowercase email if the owner
-still needs the manual TV Time import tool. Rebuild or redeploy after changing
-these values.
+data. The TV Time export is not shipped in the public website. The creator's
+existing library remains in their own cloud row; use a private backup file if
+it ever needs to be restored. Rebuild or redeploy after changing these values.
 
 ## Verify with two accounts
 
@@ -42,6 +42,7 @@ If device and cloud libraries differ, the app asks which one to keep. Download
 a backup before choosing. A failed cloud read or save should leave the device
 library intact and prevent sign-out until the sync issue is resolved.
 When signing into a different account on a device with existing data, the
-library-check screen hides that data until the cloud check succeeds or the
-user chooses a copy. A device library already verified for the same account
-remains visible during a temporary cloud outage, with syncing paused.
+library-check screen hides that data until the cloud check succeeds. A known
+previous account's copy cannot be uploaded into the new account. A device
+library already verified for the same account remains visible during a
+temporary cloud outage, with syncing paused.

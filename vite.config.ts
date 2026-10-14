@@ -7,6 +7,17 @@ export default defineConfig({
   base: './',
   plugins: [
     react(),
+    {
+      name: 'keep-private-tv-time-data-out-of-site',
+      generateBundle(_options, bundle) {
+        for (const output of Object.values(bundle)) {
+          if (output.type !== 'chunk') continue
+          if (Object.keys(output.modules).some((path) => /[\\/]src[\\/]data[\\/]tvTimeImport\.ts$/.test(path))) {
+            this.error('The private TV Time export must never be bundled into the public site.')
+          }
+        }
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
