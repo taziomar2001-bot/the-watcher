@@ -46,7 +46,7 @@
   --r-xl: 22px;
 
   --app-max: 480px;
-  --nav-h: 76px;
+  --nav-h: 64px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
@@ -129,9 +129,8 @@ input {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  /* The nav is now an in-flow sibling below this element, so the scroll area no
-     longer needs to reserve nav height — just a little breathing room. */
-  padding-bottom: var(--s-5);
+  /* The fixed dock overlays the viewport, so leave room to reach the last item. */
+  padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + var(--s-5));
 }
 .scroll-area::-webkit-scrollbar,
 .hscroll::-webkit-scrollbar {

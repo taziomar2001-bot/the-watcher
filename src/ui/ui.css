@@ -592,13 +592,15 @@
 }
 
 /* ---- Bottom nav ----
-   In-flow flex child of .app-shell (not absolutely positioned) so it is always
-   docked at the true bottom of the dynamic viewport and never drifts as the
-   scroll area moves or the mobile URL bar shows/hides. safe-bottom keeps it
-   clear of the home indicator on notched devices. */
+   Anchor the dock to the viewport. Safe-area padding keeps controls above the
+   home indicator while the background reaches the physical bottom edge. */
 .bottom-nav {
-  position: relative;
-  flex: 0 0 auto;
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: var(--app-max);
   height: calc(var(--nav-h) + var(--safe-bottom));
   padding-bottom: var(--safe-bottom);
   background: rgba(16, 20, 24, 0.92);
@@ -614,7 +616,6 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding-top: 8px;
   color: var(--text-mute);
 }
 .nav-item.active {
