@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { SeasonCard, ActionPill } from '../ui/cards'
 import { ProgressDot } from '../ui/primitives'
-import { ChevronLeft, HeartIcon, BellIcon, CheckIcon } from '../components/Icons'
+import { ChevronLeft, ChevronRight, HeartIcon, BellIcon, CheckIcon, PeopleIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
 import { getShow } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
@@ -130,6 +130,16 @@ export function ShowScreen() {
         </button>
         <AddToListButton type="show" id={show.id} />
       </div>
+
+      <button
+        className="community-link pressable"
+        onClick={() =>
+          nav(`/communities?topic=show:${show.id}`, { state: { topic: { type: 'show', id: show.id, title: show.title, poster: show.poster } } })
+        }
+      >
+        <PeopleIcon size={16} /> Communities about this show
+        <ChevronRight size={18} />
+      </button>
 
       {/* Status controls */}
       <div className="detail-actions" style={{ paddingTop: 0 }}>

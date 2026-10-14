@@ -5,7 +5,7 @@ import { ActionPill } from '../ui/cards'
 import { ProgressDot } from '../ui/primitives'
 import { StarRating } from '../ui/StarRating'
 import { AddToListButton } from '../ui/AddToList'
-import { ChevronLeft, HeartIcon } from '../components/Icons'
+import { ChevronLeft, ChevronRight, HeartIcon, PeopleIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
 import { getMovie, daysUntil } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
@@ -96,6 +96,16 @@ export function MovieScreen() {
         </button>
         <AddToListButton type="movie" id={movie.id} />
       </div>
+
+      <button
+        className="community-link pressable"
+        onClick={() =>
+          nav(`/communities?topic=movie:${movie.id}`, { state: { topic: { type: 'movie', id: movie.id, title: movie.title, poster: movie.poster } } })
+        }
+      >
+        <PeopleIcon size={16} /> Communities about this film
+        <ChevronRight size={18} />
+      </button>
 
       {/* Personal rating (independent of watched status) */}
       <div className="rating-card">

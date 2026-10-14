@@ -15,6 +15,7 @@ are safe to re-run and none restructure or delete library data):
 3. `supabase/003_social_permissions.sql`
 4. `supabase/004_social_profiles.sql`
 5. `supabase/005_library_history.sql` — automatic cloud backups
+6. `supabase/006_communities.sql` — communities (roles, announcements, chat, moderation)
 
 ## Backups
 
