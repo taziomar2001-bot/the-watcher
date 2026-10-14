@@ -8,6 +8,7 @@ import { getShow } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
 import { useToast } from '../store/useToast'
 import { useUpNavigation } from '../logic/nav'
+import { PublicScore } from '../ui/PublicScore'
 import { shortDate } from '../utils/dates'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -111,6 +112,9 @@ export function EpisodeScreen() {
         <div className="detail-sub" style={{ marginTop: 6 }}>
           {[ep.airDate ? shortDate(ep.airDate) : null, ep.runtime ? `${ep.runtime} min` : null].filter(Boolean).join('  ·  ')}
         </div>
+        <div className="detail-scores">
+          <PublicScore value={ep.communityRating} votes={ep.communityVotes} />
+        </div>
       </div>
 
       <div className="detail-actions">
@@ -127,11 +131,21 @@ export function EpisodeScreen() {
 
       {/* Personal rating (independent of watched status) */}
       <div className="rating-card">
-        <div className="rating-card-label">
-          Your rating
-          {rating != null && <span className="rating-card-value">{rating} ★</span>}
+        <div className="rating-split">
+          <div>
+            <div className="rating-card-label">
+              Your rating
+              {rating != null && <span className="rating-card-value" style={{ marginLeft: 8 }}>{rating} ★</span>}
+            </div>
+            <StarRating value={rating} onChange={(v) => setEpisodeRating(ep.id, v)} />
+          </div>
+          {ep.communityRating ? (
+            <div className="rating-public">
+              <div className="rating-public-label">Everyone</div>
+              <PublicScore value={ep.communityRating} votes={ep.communityVotes} compact />
+            </div>
+          ) : null}
         </div>
-        <StarRating value={rating} onChange={(v) => setEpisodeRating(ep.id, v)} />
         <div className="rating-card-hint">
           {rating != null ? 'Tap the same star again to remove your rating' : 'Tap a star to rate this episode'}
         </div>

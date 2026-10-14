@@ -15,12 +15,16 @@ export interface Episode {
   airTime?: string // "03:00"
   still?: string // thumbnail image url
   runtime?: number // minutes
+  communityRating?: number // TMDB vote_average, 0-10
+  communityVotes?: number // TMDB vote_count
 }
 
 export interface Season {
   season: number
   name: string
   episodes: Episode[]
+  communityRating?: number // TMDB season vote_average (or episode-weighted)
+  communityVotes?: number
 }
 
 export interface Show {
@@ -36,6 +40,7 @@ export interface Show {
   platforms: string[]
   firstAirYear?: number
   communityRating?: number // 0-10
+  communityVotes?: number
   seasons: Season[]
   totalEpisodes: number
 }
@@ -52,6 +57,7 @@ export interface Movie {
   runtime?: number // minutes
   platforms: string[]
   communityRating?: number
+  communityVotes?: number
   director?: string
   cast?: string[]
   year?: number

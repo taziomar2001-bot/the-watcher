@@ -13,6 +13,7 @@ import { classifyShow, seasonColor, showColor, DOT_COLOR, effectiveSeen } from '
 import { showAverageLive, seasonSizesOf, fmtStars } from '../logic/ratings'
 import { AddToListButton } from '../ui/AddToList'
 import { useToggleFavorite } from '../logic/favorites'
+import { PublicScore } from '../ui/PublicScore'
 import type { Season, Show } from '../types'
 
 const isReleased = (airDate?: string) => !airDate || new Date(airDate + 'T00:00:00') <= new Date()
@@ -104,7 +105,10 @@ export function ShowScreen() {
               .filter(Boolean)
               .join('  ·  ')}
           </div>
-          {showAvg != null && <div className="detail-avg">{fmtStars(showAvg)} your average</div>}
+          <div className="detail-scores">
+            <PublicScore value={show.communityRating} votes={show.communityVotes} />
+            {showAvg != null && <div className="detail-avg">{fmtStars(showAvg)} your average</div>}
+          </div>
         </div>
       </div>
 

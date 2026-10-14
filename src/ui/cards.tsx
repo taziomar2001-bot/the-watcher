@@ -103,6 +103,7 @@ export function EpisodeRow({
   airDate,
   watched,
   rating,
+  publicRating,
   onToggle,
   onClick,
 }: {
@@ -112,6 +113,7 @@ export function EpisodeRow({
   airDate?: string
   watched: boolean
   rating?: number
+  publicRating?: number
   onToggle?: () => void
   onClick?: () => void
 }) {
@@ -127,6 +129,7 @@ export function EpisodeRow({
           <div className="episode-meta">
             {airDate ?? 'TBA'}
             {rating != null && <span className="episode-rating"> · {rating}★</span>}
+            {publicRating ? <span className="episode-public"> · {publicRating.toFixed(1)}/10</span> : null}
           </div>
         </div>
       </button>

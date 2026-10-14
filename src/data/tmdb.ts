@@ -89,6 +89,7 @@ async function mapShow(r: any, gm: Record<number, string>): Promise<Show> {
     platforms: r.networks?.map((n: { name: string }) => n.name) ?? [],
     firstAirYear: r.first_air_date ? Number(r.first_air_date.slice(0, 4)) : undefined,
     communityRating: r.vote_average,
+    communityVotes: r.vote_count,
     seasons: [],
     totalEpisodes: r.number_of_episodes ?? 0,
   }
@@ -108,6 +109,7 @@ function mapMovie(r: any, gm: Record<number, string>): Movie {
     runtime: r.runtime,
     platforms: ['In Theaters'],
     communityRating: r.vote_average,
+    communityVotes: r.vote_count,
     year: r.release_date ? Number(r.release_date.slice(0, 4)) : undefined,
   }
 }
@@ -150,9 +152,21 @@ export async function getShow(id: string): Promise<Show | undefined> {
         airTime: '03:00',
         still: img(e.still_path, 'w300'),
         runtime: e.runtime,
+        communityRating: e.vote_count ? e.vote_average : undefined,
+        communityVotes: e.vote_count || undefined,
       }),
     )
-    return { season: sn, name: sd.name, episodes }
+    // Season score: TMDB's own when present, else episodes weighted by votes.
+    let communityRating: number | undefined = sd.vote_average > 0 ? sd.vote_average : undefined
+    let communityVotes: number | undefined
+    const rated = episodes.filter((e) => e.communityRating != null && e.communityVotes)
+    const votes = rated.reduce((n, e) => n + (e.communityVotes ?? 0), 0)
+    if (votes > 0) {
+      communityVotes = votes
+      if (communityRating == null)
+        communityRating = rated.reduce((n, e) => n + (e.communityRating ?? 0) * (e.communityVotes ?? 0), 0) / votes
+    }
+    return { season: sn, name: sd.name, episodes, communityRating, communityVotes }
   })
   seasons.sort((a, b) => a.season - b.season)
   return { ...base, seasons, totalEpisodes: seasons.reduce((n, s) => n + s.episodes.length, 0) }

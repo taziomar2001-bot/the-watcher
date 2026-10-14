@@ -9,6 +9,7 @@ import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
 import { useUpNavigation } from '../logic/nav'
 import { shortDate } from '../utils/dates'
+import { PublicScore } from '../ui/PublicScore'
 import { seasonAverageLive, seasonRatedCount, seasonSizesOf, fmtStars } from '../logic/ratings'
 
 const isReleased = (airDate?: string) => !airDate || new Date(airDate + 'T00:00:00') <= new Date()
@@ -78,6 +79,11 @@ export function SeasonScreen() {
 
       {/* Season average — only once more than half the episodes are rated */}
       <div className="season-avg-row">
+        {seasonObj.communityRating ? (
+          <span style={{ marginRight: 6 }}>
+            <PublicScore value={seasonObj.communityRating} votes={seasonObj.communityVotes} compact />
+          </span>
+        ) : null}
         {seasonAvg != null ? (
           <>
             <span className="season-avg-badge">{fmtStars(seasonAvg)}</span>
@@ -100,6 +106,7 @@ export function SeasonScreen() {
             airDate={e.airDate ? shortDate(e.airDate) : 'TBA'}
             watched={!!watched[e.id]}
             rating={epRatings[e.id]}
+            publicRating={e.communityRating}
             onToggle={() => toggle(e.id)}
             onClick={() => nav(`/show/${id}/season/${seasonObj.season}/episode/${e.number}`)}
           />

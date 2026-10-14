@@ -13,6 +13,7 @@ import { useToggleFavorite } from '../logic/favorites'
 import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
 import { movieColor, isUnreleased } from '../logic/status'
+import { PublicScore } from '../ui/PublicScore'
 import { shortDate } from '../utils/dates'
 
 export function MovieScreen() {
@@ -58,6 +59,9 @@ export function MovieScreen() {
           <div className="detail-sub">
             {[movie.year, movie.runtime ? `${movie.runtime} min` : null, movie.director].filter(Boolean).join('  ·  ')}
           </div>
+          <div className="detail-scores">
+            <PublicScore value={movie.communityRating} votes={movie.communityVotes} />
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
             <ProgressDot color={movieColor(watched, isUnreleased(movie.releaseDate))} />
             <span style={{ fontSize: 13, color: 'var(--text-mute)' }}>
@@ -95,11 +99,21 @@ export function MovieScreen() {
 
       {/* Personal rating (independent of watched status) */}
       <div className="rating-card">
-        <div className="rating-card-label">
-          Your rating
-          {lib.movieRatings[movie.id] != null && <span className="rating-card-value">{lib.movieRatings[movie.id]} ★</span>}
+        <div className="rating-split">
+          <div>
+            <div className="rating-card-label">
+              Your rating
+              {lib.movieRatings[movie.id] != null && <span className="rating-card-value" style={{ marginLeft: 8 }}>{lib.movieRatings[movie.id]} ★</span>}
+            </div>
+            <StarRating value={lib.movieRatings[movie.id]} onChange={(v) => lib.setMovieRating(movie.id, v)} />
+          </div>
+          {movie.communityRating ? (
+            <div className="rating-public">
+              <div className="rating-public-label">Everyone</div>
+              <PublicScore value={movie.communityRating} votes={movie.communityVotes} compact />
+            </div>
+          ) : null}
         </div>
-        <StarRating value={lib.movieRatings[movie.id]} onChange={(v) => lib.setMovieRating(movie.id, v)} />
         <div className="rating-card-hint">
           {lib.movieRatings[movie.id] != null ? 'Tap the same star again to remove your rating' : 'Tap a star to rate — rating is separate from watched'}
         </div>

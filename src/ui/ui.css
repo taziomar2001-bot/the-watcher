@@ -2052,3 +2052,20 @@ body.modal-open .scroll-area { overflow: hidden !important; }
 .private-card-title { font-weight: 800; font-size: 16px; margin-bottom: 6px; }
 .private-card-sub { color: var(--text-dim); font-size: 14px; line-height: 1.45; }
 .user-row .follow-btn { margin-left: 4px; }
+
+/* ---- Public score (TMDB, /10) ---- */
+.public-score { display: inline-flex; align-items: baseline; gap: 3px; font-size: 13px; color: var(--text-dim); }
+.public-score b { font-size: 15px; font-weight: 800; color: #fff; }
+.public-score.high b { color: var(--green); }
+.public-score.mid b { color: #fff; }
+.public-score.low b { color: var(--text-dim); }
+.public-score-of { font-weight: 700; color: var(--text-mute); }
+.public-score-src { margin-left: 6px; font-size: 12px; color: var(--text-mute); }
+.public-score.compact b { font-size: 12.5px; }
+.public-score.compact .public-score-of { font-size: 10.5px; }
+.detail-scores { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+.detail-scores .detail-avg { margin-top: 0; }
+.rating-split { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.rating-public { text-align: right; }
+.rating-public-label { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-mute); margin-bottom: 4px; }
+.episode-public { color: var(--text-mute); }
