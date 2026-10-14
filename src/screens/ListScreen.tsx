@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
@@ -11,6 +11,7 @@ import { useScrollMemory } from '../hooks/useScrollMemory'
 import { useAsync } from '../hooks/useAsync'
 import { search as searchCatalog } from '../data/catalog'
 import { toLibraryItem } from '../utils/media'
+import { fileToImage } from '../utils/image'
 import { classifyShow, showColor, movieColor, isUnreleased } from '../logic/status'
 
 export function ListScreen() {
@@ -28,6 +29,8 @@ export function ListScreen() {
   const [edit, setEdit] = useState(false)
   const [reordering, setReordering] = useState(false)
   const [name, setName] = useState(list?.name ?? '')
+  const [coverSheet, setCoverSheet] = useState(false)
+  const coverInput = useRef<HTMLInputElement>(null)
 
   if (!list)
     return (
@@ -171,6 +174,17 @@ export function ListScreen() {
             <button
               className="sheet-row"
               onClick={() => {
+                setCoverSheet(true)
+                setMenu(false)
+              }}
+            >
+              <span>
+                <EditIcon size={16} /> {list.cover ? 'Change picture' : 'Add a picture'}
+              </span>
+            </button>
+            <button
+              className="sheet-row"
+              onClick={() => {
                 setName(list.name)
                 setRenaming(true)
                 setMenu(false)
@@ -230,6 +244,70 @@ export function ListScreen() {
         </div>,
         document.body,
       )}
+
+      <input
+        ref={coverInput}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={async (e) => {
+          const f = e.target.files?.[0]
+          e.target.value = ''
+          if (!f) return
+          try {
+            lib.setListCover(list.id, await fileToImage(f, 240, 240))
+            setCoverSheet(false)
+          } catch {
+            /* unreadable image */
+          }
+        }}
+      />
+      {coverSheet &&
+        createPortal(
+          <div className="sheet-backdrop" onClick={() => setCoverSheet(false)}>
+            <div className="sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="sheet-handle" />
+              <div className="sheet-title">List picture</div>
+              <button className="sheet-row" onClick={() => coverInput.current?.click()}>
+                <span>Upload a photo</span>
+              </button>
+              {items.some((it) => it.poster) && (
+                <>
+                  <div className="cover-pick-label">Or use a poster from this list</div>
+                  <div className="cover-pick">
+                    {items
+                      .filter((it) => it.poster)
+                      .slice(0, 12)
+                      .map((it) => (
+                        <button
+                          key={it.ref}
+                          className={`cover-pick-item pressable ${list.cover === it.poster ? 'on' : ''}`}
+                          onClick={() => {
+                            lib.setListCover(list.id, it.poster)
+                            setCoverSheet(false)
+                          }}
+                        >
+                          <SmartImage src={it.poster} alt={it.title} />
+                        </button>
+                      ))}
+                  </div>
+                </>
+              )}
+              {list.cover && (
+                <button
+                  className="sheet-row danger"
+                  onClick={() => {
+                    lib.setListCover(list.id, undefined)
+                    setCoverSheet(false)
+                  }}
+                >
+                  <span>Remove picture</span>
+                </button>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {confirmDel && createPortal(
         <div className="sheet-backdrop" onClick={() => setConfirmDel(false)}>

@@ -46,6 +46,7 @@ export interface ShowcaseList {
   id: string
   name: string
   ranked?: boolean
+  cover?: string
   items: ShowcaseItem[]
 }
 export interface Showcase {

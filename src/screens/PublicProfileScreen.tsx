@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, HeartIcon, ClapperboardIcon, TvIcon, ListIcon, OrderedListIcon } from '../components/Icons'
+import { ChevronLeft, ChevronRight, HeartIcon, ClapperboardIcon, TvIcon } from '../components/Icons'
 import {
   getProfileById,
   getProfileStats,
@@ -14,6 +14,7 @@ import {
 import { useSync } from '../logic/sync'
 import { compositionLabel } from '../logic/stats'
 import { formatDuration as hm } from '../utils/duration'
+import { ListBadge } from '../ui/ListBadge'
 import { FollowButton, UserAvatar, nameOf } from '../ui/social'
 
 function Header({ title }: { title: string }) {
@@ -231,9 +232,7 @@ export function PublicProfileScreen() {
             const shows = l.items.filter((i) => i.type === 'show').length
             return (
               <button key={l.id} className="list-row pressable" onClick={() => nav(`/u/${profile.id}/list/${l.id}`)}>
-                <span className={`list-badge ${l.ranked ? 'ranked' : ''}`}>
-                  {l.ranked ? <OrderedListIcon size={16} /> : <ListIcon size={16} />}
-                </span>
+                <ListBadge cover={l.cover} ranked={l.ranked} />
                 <span className="list-row-text">
                   <span className="list-row-name">{l.name}</span>
                   <span className="list-row-sub">

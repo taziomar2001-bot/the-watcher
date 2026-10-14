@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CategoryCard } from '../ui/cards'
 import { Segmented } from '../ui/primitives'
-import { PosterGrid, type GridItem } from '../ui/PosterGrid'
+import { PosterGrid, SortChips, byRecentlyWatched, type GridItem, type LibrarySort } from '../ui/PosterGrid'
+import { useLibrary } from '../store/useLibrary'
 import { ChevronLeft } from '../components/Icons'
 import { useShowEntries } from '../logic/useLibraryData'
 import { useScrollMemory } from '../hooks/useScrollMemory'
@@ -10,11 +11,12 @@ import { categorize, showColor } from '../logic/status'
 
 // Preserve Category/Grid view when leaving to open a show and returning.
 let tvLibViewMem: 'category' | 'grid' = 'category'
+let tvLibSortMem: LibrarySort = 'recent'
 
 /**
  * Profile → TV Shows: the COMPLETE followed-TV library, every status included
  * (Finished and Stopped too). Category View reproduces the original Shows-tab
- * layout; Grid View shows everything together, alphabetical.
+ * layout; Grid View shows everything together, most recently watched first (or A–Z).
  */
 export function ProfileTVLibraryScreen() {
   const nav = useNavigate()
@@ -25,6 +27,10 @@ export function ProfileTVLibraryScreen() {
     setViewState(v)
   }
   const entries = useShowEntries()
+  const [sort, setSortState] = useState<LibrarySort>(tvLibSortMem)
+  const setSort = (v: LibrarySort) => ((tvLibSortMem = v), setSortState(v))
+  const lastWatched = useLibrary((s) => s.lastWatched)
+  const addedAt = useLibrary((s) => s.addedAt)
 
   const cats = useMemo(() => categorize(entries, Date.now()), [entries])
 
@@ -50,9 +56,9 @@ export function ProfileTVLibraryScreen() {
     const seen = new Set<string>()
     return all
       .filter((e) => (seen.has(e.item.id) ? false : (seen.add(e.item.id), true)))
-      .sort((a, b) => a.item.title.localeCompare(b.item.title))
+      .sort(sort === 'recent' ? byRecentlyWatched(lastWatched, addedAt) : (a, b) => a.item.title.localeCompare(b.item.title))
       .map((e) => ({ id: e.item.id, poster: e.item.poster, title: e.item.title, color: showColor(e.cls, e.stopped) }))
-  }, [cats])
+  }, [cats, sort, lastWatched, addedAt])
 
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
@@ -89,7 +95,10 @@ export function ProfileTVLibraryScreen() {
           ))}
         </div>
       ) : gridItems.length > 0 ? (
-        <PosterGrid items={gridItems} onOpen={(id) => nav(`/show/${id}`)} />
+        <>
+          <SortChips value={sort} onChange={setSort} />
+          <PosterGrid items={gridItems} onOpen={(id) => nav(`/show/${id}`)} />
+        </>
       ) : (
         <div className="empty">
           <div className="empty-title">No shows yet</div>

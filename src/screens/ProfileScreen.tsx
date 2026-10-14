@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { SettingsModal } from '../ui/SettingsModal'
-import { ChevronRight, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, ListIcon, OrderedListIcon, PlusIcon } from '../components/Icons'
+import { ChevronRight, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, PlusIcon } from '../components/Icons'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
-import { getMyProfile, listPendingRequests, type SocialProfile } from '../data/social'
+import { useMe, useMyProfile } from '../store/useMe'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { effectiveSeen } from '../logic/status'
 import { compositionLabel, countRefs } from '../logic/stats'
+import { ListBadge } from '../ui/ListBadge'
 import { formatDuration as hm } from '../utils/duration'
 
 const EP_MIN = 42
@@ -17,32 +17,21 @@ const MOVIE_MIN = 115
 export function ProfileScreen() {
   const nav = useNavigate()
   const signedIn = useSync((s) => s.status === 'signedIn')
-  const [settings, setSettings] = useState(false)
-  const [social, setSocial] = useState<SocialProfile | null>(null)
+  const me = useSync((s) => s.userId)
   const [newList, setNewList] = useState(false)
   const [listName, setListName] = useState('')
   const [listRanked, setListRanked] = useState(false)
-
-  // Load my public profile (followers/following) when signed in. Refreshes when
-  // the Settings modal closes (username/visibility may have changed).
-  const [requests, setRequests] = useState(0)
+  const social = useMyProfile(signedIn ? me : undefined)
+  const requests = useMe((s) => s.requests)
+  // Refresh in the background (cached copy shows instantly); adopt the
+  // account's display name on a device that doesn't have one yet.
   useEffect(() => {
-    let alive = true
-    if (signedIn && !settings) {
-      getMyProfile().then((p) => {
-        if (!alive) return
-        setSocial(p)
-        // Adopt the account's display name on a device that doesn't have one yet.
-        const local = useLibrary.getState().profile.displayName
-        if (!local && p?.display_name) useLibrary.getState().updateProfile({ displayName: p.display_name })
-      })
-      listPendingRequests().then((r) => alive && setRequests(r.length))
-    }
-    if (!signedIn) setSocial(null)
-    return () => {
-      alive = false
-    }
-  }, [signedIn, settings])
+    if (signedIn) void useMe.getState().refresh()
+  }, [signedIn])
+  useEffect(() => {
+    if (social?.display_name && !useLibrary.getState().profile.displayName)
+      useLibrary.getState().updateProfile({ displayName: social.display_name })
+  }, [social?.display_name])
   const lib = useLibrary()
   const shows = useShowEntries()
   const movies = useMovieEntries()
@@ -105,7 +94,7 @@ export function ProfileScreen() {
             </div>
           )}
         </div>
-        <button className="icon-round pressable" onClick={() => setSettings(true)} aria-label="Settings">
+        <button className="icon-round pressable" onClick={() => nav('/settings')} aria-label="Settings">
           <SettingsIcon size={20} />
         </button>
       </div>
@@ -194,9 +183,7 @@ export function ProfileScreen() {
 
       {lib.lists.map((l) => (
         <button key={l.id} className="list-row pressable" onClick={() => nav(`/list/${l.id}`)}>
-          <span className={`list-badge ${l.ranked ? 'ranked' : ''}`}>
-            {l.ranked ? <OrderedListIcon size={16} /> : <ListIcon size={16} />}
-          </span>
+          <ListBadge cover={l.cover} ranked={l.ranked} />
           <span className="list-row-text">
             <span className="list-row-name">{l.name}</span>
             <span className="list-row-sub">
@@ -209,7 +196,6 @@ export function ProfileScreen() {
       ))}
 
       <div style={{ height: 28 }} />
-      {settings && <SettingsModal onClose={() => setSettings(false)} />}
 
       {newList && createPortal(
         <div className="dialog-backdrop" onClick={() => { setNewList(false); setListRanked(false) }}>

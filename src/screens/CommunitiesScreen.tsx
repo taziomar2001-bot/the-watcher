@@ -17,13 +17,54 @@ export interface TopicDraft {
 
 const mem = { q: '' }
 
+const HUES = ['#2a8fc0', '#7b5cd6', '#c0612a', '#2aa676', '#c03a5a', '#4a6bd6', '#b08a1e']
+export function communityHue(id: string) {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
+  return HUES[Math.abs(h) % HUES.length]
+}
+
+/** Community picture: its own photo, else the linked title's poster, else its initial. */
+export function CommunityAvatar({ c, className = 'community-avatar' }: { c: Community; className?: string }) {
+  const src = c.avatar || c.topic_poster
+  return (
+    <span className={className} style={src ? undefined : { background: communityHue(c.id) }}>
+      {src ? <SmartImage src={src} alt="" /> : c.name[0].toUpperCase()}
+    </span>
+  )
+}
+
+/** Full-width discover card: banner strip, picture, name, size and a line of description. */
+export function CommunityCard({ c, badge }: { c: Community; badge?: string }) {
+  const nav = useNavigate()
+  const hue = communityHue(c.id)
+  return (
+    <button className="community-card pressable" onClick={() => nav(`/c/${c.id}`)}>
+      <span className="community-card-banner" style={{ background: `linear-gradient(135deg, ${hue}, color-mix(in srgb, ${hue} 40%, #0e1318))` }}>
+        {c.banner_thumb && <img src={c.banner_thumb} alt="" />}
+        {badge && <span className="community-card-badge">{badge}</span>}
+      </span>
+      <span className="community-card-body">
+        <CommunityAvatar c={c} className="community-avatar card" />
+        <span className="community-row-text">
+          <span className="community-row-name">{c.name}</span>
+          <span className="community-row-sub">
+            {c.visibility === 'private' ? 'Private · ' : ''}
+            {c.member_count.toLocaleString()} member{c.member_count === 1 ? '' : 's'}
+            {c.topic_title ? ` · ${c.topic_title}` : ''}
+          </span>
+          {c.description && <span className="community-card-desc">{c.description}</span>}
+        </span>
+      </span>
+    </button>
+  )
+}
+
 export function CommunityRow({ c, right }: { c: Community; right?: React.ReactNode }) {
   const nav = useNavigate()
   return (
     <button className="community-row pressable" onClick={() => nav(`/c/${c.id}`)}>
-      <span className="community-avatar">
-        {c.topic_poster ? <SmartImage src={c.topic_poster} alt="" /> : c.name[0].toUpperCase()}
-      </span>
+      <CommunityAvatar c={c} />
       <span className="community-row-text">
         <span className="community-row-name">{c.name}</span>
         <span className="community-row-sub">
@@ -86,8 +127,13 @@ export function CommunitiesScreen() {
     }
   }, [q, signedIn, topicParam])
 
-  const mineIds = new Set((mine ?? []).map((c) => c.id))
-  const discover = (found ?? []).filter((c) => !mineIds.has(c.id))
+  const myStatus = new Map((mine ?? []).map((c) => [c.id, c]))
+  const discover = found ?? []
+  const badgeFor = (c: Community) => {
+    const m = myStatus.get(c.id)
+    if (!m) return undefined
+    return m.status === 'pending' ? 'Requested' : m.role === 'owner' ? 'Owner' : m.role === 'admin' ? 'Admin' : 'Joined'
+  }
 
   return (
     <div className="scroll-area route-fade">
@@ -125,7 +171,7 @@ export function CommunitiesScreen() {
             ) : found.length === 0 ? (
               <Empty title="No communities yet" sub="Start the first one for this title." />
             ) : (
-              found.map((c) => <CommunityRow key={c.id} c={c} />)
+              found.map((c) => <CommunityCard key={c.id} c={c} badge={badgeFor(c)} />)
             )}
             <button className="sync-btn primary full pressable" style={{ marginTop: 10 }} onClick={() => setCreating(topic)}>
               Start a community{topic.title ? ` for ${topic.title}` : ''}
@@ -171,7 +217,7 @@ export function CommunitiesScreen() {
                   <div className="soon-icon">
                     <PeopleIcon size={30} />
                   </div>
-                  <div className="empty-title">{(mine?.length ?? 0) > 0 ? 'You’re in every community so far' : 'No communities yet'}</div>
+                  <div className="empty-title">No communities yet</div>
                   <div className="empty-sub">Start one for a show, a film, or anything you watch with friends.</div>
                   <button className="sync-btn primary pressable" style={{ marginTop: 14 }} onClick={() => setCreating(null)}>
                     Start a community
@@ -179,7 +225,7 @@ export function CommunitiesScreen() {
                 </div>
               )
             ) : (
-              discover.map((c) => <CommunityRow key={c.id} c={c} />)
+              discover.map((c) => <CommunityCard key={c.id} c={c} badge={badgeFor(c)} />)
             )}
           </div>
         </>

@@ -160,6 +160,7 @@ export function useMyShowcase(): Showcase {
         id: l.id,
         name: l.name,
         ranked: !!l.ranked,
+        cover: l.cover,
         items: l.items
           .slice(0, 250)
           .map((ref) => {

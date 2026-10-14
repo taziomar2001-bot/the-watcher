@@ -10,6 +10,7 @@ import { NewPassword } from './ui/NewPassword'
 import { USE_TMDB } from './data/catalog'
 import { SUPABASE_ENABLED } from './data/supabase'
 import { useToast } from './store/useToast'
+import { useMe } from './store/useMe'
 import { useSync } from './logic/sync'
 import { useNavTracker } from './logic/nav'
 import { useStatsSync } from './logic/stats'
@@ -36,6 +37,7 @@ import { ListScreen } from './screens/ListScreen'
 import { FavoritesScreen } from './screens/FavoritesScreen'
 import { LeaderboardScreen } from './screens/LeaderboardScreen'
 import { PublicProfileScreen } from './screens/PublicProfileScreen'
+import { SettingsScreen } from './screens/SettingsScreen'
 import { CommunitiesScreen } from './screens/CommunitiesScreen'
 import { CommunityScreen } from './screens/CommunityScreen'
 import { lastContentPath } from './logic/content'
@@ -68,6 +70,15 @@ export default function App() {
     if (syncStatus !== 'busy') setBooted(true)
   }, [syncStatus])
   const recovering = useSync((s) => s.recovering)
+  // Keep the member's profile (username, follower counts) fresh in the
+  // background; screens read the device copy so they never pop in late.
+  const userId = useSync((s) => s.userId)
+  useEffect(() => {
+    if (syncStatus === 'signedIn' && userId) {
+      if (useMe.getState().profile?.id !== userId) useMe.getState().clear()
+      void useMe.getState().refresh()
+    }
+  }, [syncStatus, userId])
   // A reset link that didn't produce a session (expired, or opened in another
   // browser) leaves the person signed out: say so instead of failing silently.
   useEffect(() => {
@@ -144,6 +155,7 @@ export default function App() {
         <Route path="/" element={<Navigate to={lastContentPath()} replace />} />
         <Route path="/content" element={<Navigate to={lastContentPath()} replace />} />
         <Route path="/communities" element={<CommunitiesScreen />} />
+        <Route path="/settings" element={<SettingsScreen />} />
         <Route path="/c/:id" element={<CommunityScreen />} />
         <Route path="/tv" element={<TVShowsScreen />} />
         <Route path="/tv/category/:key" element={<TVCategoryScreen />} />

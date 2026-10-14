@@ -20,6 +20,9 @@ export interface Community {
   topic_poster: string | null
   member_count: number
   created_at: string
+  avatar?: string | null
+  banner_thumb?: string | null
+  banner?: string | null
 }
 
 export interface Membership {
@@ -65,7 +68,19 @@ export interface Message {
 
 export const REACTIONS = ['👍', '❤️', '😂', '😮', '🔥'] as const
 
-const C_COLS = 'id,name,description,visibility,topic_type,topic_id,topic_title,topic_poster,member_count,created_at'
+const BASE_COLS = 'id,name,description,visibility,topic_type,topic_id,topic_title,topic_poster,member_count,created_at'
+// Pictures come from 007_community_images.sql; until it runs, queries fall back.
+const C_COLS = BASE_COLS + ',avatar,banner_thumb'
+let imagesAvailable = true
+
+async function selectCommunities<T>(run: (cols: string) => PromiseLike<{ data: T | null; error: { code?: string; message?: string } | null }>, extra = '') {
+  if (imagesAvailable) {
+    const r = await run(C_COLS + extra)
+    if (!r.error || !/avatar|banner/.test(r.error.message ?? '')) return r
+    imagesAvailable = false
+  }
+  return run(BASE_COLS)
+}
 const P_COLS = 'id,username,display_name,avatar,bio,visibility,follower_count,following_count'
 
 type Result<T> = { ok: true; value: T } | { ok: false; code: string }
@@ -104,7 +119,7 @@ export async function myCommunities(): Promise<Result<(Community & Membership)[]
   if (error) return { ok: false, code: codeOf(error) }
   const rows = (mem as { community_id: string; role: CommunityRole; status: MemberStatus }[]) ?? []
   if (rows.length === 0) return { ok: true, value: [] }
-  const { data: cs, error: e2 } = await supabase.from('communities').select(C_COLS).in('id', rows.map((r) => r.community_id))
+  const { data: cs, error: e2 } = await selectCommunities<Community[]>((cols) => supabase!.from('communities').select(cols).in('id', rows.map((r) => r.community_id)) as never)
   if (e2) return { ok: false, code: codeOf(e2) }
   const byId = new Map(rows.map((r) => [r.community_id, r]))
   const value = ((cs as Community[]) ?? [])
@@ -116,18 +131,20 @@ export async function myCommunities(): Promise<Result<(Community & Membership)[]
 /** Search / browse all communities (biggest first). Optional title filter. */
 export async function findCommunities(q: string, topic?: { type: string; id: string }): Promise<Result<Community[]>> {
   if (!supabase) return { ok: false, code: 'disabled' }
-  let query = supabase.from('communities').select(C_COLS).order('member_count', { ascending: false }).limit(40)
   const term = q.trim().replace(/[,()*%]/g, ' ').trim()
-  if (term) query = query.or(`name.ilike.%${term}%,description.ilike.%${term}%,topic_title.ilike.%${term}%`)
-  if (topic) query = query.eq('topic_type', topic.type).eq('topic_id', topic.id)
-  const { data, error } = await query
+  const { data, error } = await selectCommunities<Community[]>((cols) => {
+    let query = supabase!.from('communities').select(cols).order('member_count', { ascending: false }).limit(40)
+    if (term) query = query.or(`name.ilike.%${term}%,description.ilike.%${term}%,topic_title.ilike.%${term}%`)
+    if (topic) query = query.eq('topic_type', topic.type).eq('topic_id', topic.id)
+    return query as never
+  })
   if (error) return { ok: false, code: codeOf(error) }
   return { ok: true, value: (data as Community[]) ?? [] }
 }
 
 export async function getCommunity(id: string): Promise<Result<{ community: Community; me: Membership | null }>> {
   if (!supabase) return { ok: false, code: 'disabled' }
-  const { data, error } = await supabase.from('communities').select(C_COLS).eq('id', id).maybeSingle()
+  const { data, error } = await selectCommunities<Community>((cols) => supabase!.from('communities').select(cols).eq('id', id).maybeSingle() as never, ',banner')
   if (error) return { ok: false, code: codeOf(error) }
   if (!data) return { ok: false, code: 'not_found' }
   const uid = await myId()
@@ -181,7 +198,10 @@ export async function moderateMember(id: string, userId: string, action: ModActi
   return error ? { ok: false, code: codeOf(error) } : { ok: true, value: null }
 }
 
-export async function updateCommunity(id: string, patch: Partial<Pick<Community, 'name' | 'description' | 'visibility'>>): Promise<Result<null>> {
+export async function updateCommunity(
+  id: string,
+  patch: Partial<Pick<Community, 'name' | 'description' | 'visibility' | 'avatar' | 'banner' | 'banner_thumb'>>,
+): Promise<Result<null>> {
   if (!supabase) return { ok: false, code: 'disabled' }
   const { error } = await supabase.from('communities').update(patch).eq('id', id)
   return error ? { ok: false, code: codeOf(error) } : { ok: true, value: null }

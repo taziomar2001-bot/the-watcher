@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { AuthScreen } from './AuthScreen'
+import { useNavigate } from 'react-router-dom'
+import { AuthScreen } from '../ui/AuthScreen'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
 import { useToast } from '../store/useToast'
 import { SUPABASE_ENABLED } from '../data/supabase'
-import { claimUsername, updateMyIdentity, getMyProfile, type SocialProfile } from '../data/social'
-import { PersonIcon, SettingsIcon } from '../components/Icons'
+import { claimUsername, updateMyIdentity } from '../data/social'
+import { useMe, useMyProfile } from '../store/useMe'
+import { fileToImage } from '../utils/image'
+import { PersonIcon, ChevronLeft } from '../components/Icons'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -19,29 +21,8 @@ function timeAgo(ms?: number): string {
   return `${Math.floor(s / 86400)}d ago`
 }
 
-// Resize an uploaded image to a small square data URL (keeps storage tiny).
-function fileToAvatar(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      const size = 128
-      const c = document.createElement('canvas')
-      c.width = size
-      c.height = size
-      const ctx = c.getContext('2d')
-      if (!ctx) return reject(new Error('no ctx'))
-      const s = Math.min(img.width, img.height)
-      ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size)
-      URL.revokeObjectURL(url)
-      resolve(c.toDataURL('image/jpeg', 0.82))
-    }
-    img.onerror = reject
-    img.src = url
-  })
-}
-
-export function SettingsModal({ onClose }: { onClose: () => void }) {
+export function SettingsScreen() {
+  const nav = useNavigate()
   const lib = useLibrary()
   const sync = useSync()
   const toast = useToast((s) => s.show)
@@ -50,61 +31,59 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
 
-  // Public (Supabase) profile, loaded when signed in.
-  const [social, setSocial] = useState<SocialProfile | null>(null)
-  const [unameEdit, setUnameEdit] = useState('')
-  const [bioEdit, setBioEdit] = useState('')
-  const [savingUname, setSavingUname] = useState(false)
-
   const signedIn = sync.status === 'signedIn'
+  // Public profile: the cached copy shows instantly, a refresh follows.
+  const social = useMyProfile(signedIn ? sync.userId : undefined)
+  const patchMe = useMe((s) => s.patch)
+  const [unameEdit, setUnameEdit] = useState(social?.username ?? '')
+  const [bioEdit, setBioEdit] = useState(social?.bio ?? '')
+  const [savingUname, setSavingUname] = useState(false)
+  const loadedFor = useRef<string | null>(null)
 
   useEffect(() => {
-    let alive = true
-    if (signedIn) {
-      getMyProfile().then((p) => {
-        if (!alive || !p) return
-        setSocial(p)
-        setUnameEdit(p.username ?? '')
-        setBioEdit(p.bio ?? '')
-        // Carry local display name / avatar up to the public profile if unset.
-        const patch: Record<string, string> = {}
-        if (!p.display_name && lib.profile.displayName) patch.display_name = lib.profile.displayName
-        if (!p.avatar && lib.profile.avatar) patch.avatar = lib.profile.avatar
-        if (Object.keys(patch).length) void updateMyIdentity(patch)
-      })
-    } else {
-      setSocial(null)
-    }
-    return () => {
-      alive = false
-    }
+    if (signedIn) void useMe.getState().refresh()
+  }, [signedIn])
+  useEffect(() => {
+    // Fill the editable fields once per account, without clobbering typing.
+    if (!social || loadedFor.current === social.id) return
+    loadedFor.current = social.id
+    setUnameEdit(social.username ?? '')
+    setBioEdit(social.bio ?? '')
+    // Carry local display name / avatar up to the public profile if unset.
+    const patch: Record<string, string> = {}
+    if (!social.display_name && lib.profile.displayName) patch.display_name = lib.profile.displayName
+    if (!social.avatar && lib.profile.avatar) patch.avatar = lib.profile.avatar
+    if (Object.keys(patch).length) void updateMyIdentity(patch)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sync.status])
-
-  // Lock the Profile page behind the modal so only the modal scrolls.
-  useEffect(() => {
-    document.body.classList.add('modal-open')
-    return () => document.body.classList.remove('modal-open')
-  }, [])
+  }, [social])
 
   const name = lib.profile.displayName || lib.profile.username || 'you'
 
   const pickAvatar = async (f?: File) => {
     if (!f) return
     try {
-      const dataUrl = await fileToAvatar(f)
+      const dataUrl = await fileToImage(f, 128, 128)
       lib.updateProfile({ avatar: dataUrl })
-      if (signedIn) void updateMyIdentity({ avatar: dataUrl })
+      if (signedIn) {
+        void updateMyIdentity({ avatar: dataUrl })
+        patchMe({ avatar: dataUrl })
+      }
     } catch {
       /* ignore */
     }
   }
   const removeAvatar = () => {
     lib.updateProfile({ avatar: '' })
-    if (signedIn) void updateMyIdentity({ avatar: '' })
+    if (signedIn) {
+      void updateMyIdentity({ avatar: '' })
+      patchMe({ avatar: '' })
+    }
   }
   const syncDisplayName = () => {
-    if (signedIn) void updateMyIdentity({ display_name: lib.profile.displayName || '' })
+    if (signedIn) {
+      void updateMyIdentity({ display_name: lib.profile.displayName || '' })
+      patchMe({ display_name: lib.profile.displayName || '' })
+    }
   }
 
   const saveUsername = async () => {
@@ -117,7 +96,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     const r = await claimUsername(u)
     setSavingUname(false)
     if (r.ok) {
-      setSocial((s) => (s ? { ...s, username: r.username } : s))
+      patchMe({ username: r.username })
       toast('Username saved')
     } else {
       toast(r.code === 'username_taken' ? 'That username is already taken' : 'Could not save that username')
@@ -125,7 +104,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   const setVisibility = async (v: 'public' | 'private') => {
-    setSocial((s) => (s ? { ...s, visibility: v } : s))
+    patchMe({ visibility: v })
     const ok = await updateMyIdentity({ visibility: v })
     if (!ok) toast('Could not update visibility')
   }
@@ -133,7 +112,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const saveBio = async () => {
     const ok = await updateMyIdentity({ bio: bioEdit.trim() })
     if (ok) {
-      setSocial((s) => (s ? { ...s, bio: bioEdit.trim() } : s))
+      patchMe({ bio: bioEdit.trim() })
       toast('Bio saved')
     }
   }
@@ -151,19 +130,18 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     location.reload()
   }
 
-  return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="settings-head">
-          <span className="settings-title">
-            <SettingsIcon size={18} /> Settings
-          </span>
-          <button className="settings-close pressable" onClick={onClose} aria-label="Close">
-            ✕
+  return (
+    <div className="scroll-area route-fade">
+      <div className="app-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button className="pressable" onClick={() => nav(-1)} aria-label="Back" style={{ color: 'var(--text-dim)' }}>
+            <ChevronLeft size={26} />
           </button>
+          <h1 style={{ fontSize: 24 }}>Settings</h1>
         </div>
-
-        <div className="settings-body">
+      </div>
+      <div>
+        <div className="settings-body settings-page">
           {/* ---- Account ---- */}
           {signedIn ? (
             <div className="settings-card">
@@ -178,12 +156,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
               <SyncStatusLine />
-              <button className="sync-btn full pressable" onClick={() => setConfirmSignOut(true)}>
-                Sign out
-              </button>
-              <button className="settings-textlink danger" onClick={() => setConfirmDelete(true)}>
-                Delete my library
-              </button>
             </div>
           ) : SUPABASE_ENABLED ? (
             <div className="settings-card">
@@ -284,6 +256,20 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
 
+          {signedIn && (
+            <>
+              <div className="settings-group-label">Account</div>
+              <div className="settings-card settings-rows">
+                <button className="settings-row pressable" onClick={() => setConfirmSignOut(true)}>
+                  <span>Sign out</span>
+                </button>
+                <button className="settings-row danger pressable" onClick={() => setConfirmDelete(true)}>
+                  <span>Delete my library</span>
+                </button>
+              </div>
+            </>
+          )}
+
           <div className="settings-note">
             {signedIn ? 'Your library saves to your private account automatically.' : 'Your library is saved on this device.'}
           </div>
@@ -348,8 +334,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-    </div>,
-    document.body,
+    </div>
   )
 }
 

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, DotsIcon } from '../components/Icons'
-import { SmartImage } from '../components/ui'
+import { CommunityAvatar, communityHue } from './CommunitiesScreen'
+import { SendIcon } from '../ui/SendIcon'
+import { fileToImage } from '../utils/image'
 import { Segmented } from '../ui/primitives'
 import { UserAvatar, nameOf } from '../ui/social'
 import { useSync } from '../logic/sync'
@@ -144,8 +146,11 @@ export function CommunityScreen() {
         ) : undefined
       }
     >
+      <div className="community-banner" style={{ background: `linear-gradient(135deg, ${communityHue(c.id)}, color-mix(in srgb, ${communityHue(c.id)} 35%, #0e1318))` }}>
+        {(c.banner || c.banner_thumb) && <img src={c.banner || c.banner_thumb || ''} alt="" />}
+      </div>
       <div className="community-head">
-        <span className="community-avatar large">{c.topic_poster ? <SmartImage src={c.topic_poster} alt="" /> : c.name[0].toUpperCase()}</span>
+        <CommunityAvatar c={c} className="community-avatar large" />
         <div style={{ minWidth: 0 }}>
           <div className="community-meta">
             {c.visibility === 'private' ? 'Private' : 'Public'} · {c.member_count.toLocaleString()} member{c.member_count === 1 ? '' : 's'}
@@ -330,14 +335,9 @@ function Announcements({ c, isMember, isMod }: { c: Community; isMember: boolean
   }
 
   return (
-    <div className="page-pad">
+    <div className={`page-pad ${isMod ? 'has-composer' : ''}`}>
       {isMod && (
-        <div className="composer">
-          <textarea className="sync-input" rows={3} maxLength={4000} placeholder="Write an announcement…" value={draft} onChange={(e) => setDraft(e.target.value)} />
-          <button className="sync-btn primary pressable" disabled={!draft.trim() || posting} onClick={() => void publish()}>
-            {posting ? 'Posting…' : 'Post'}
-          </button>
-        </div>
+        <ComposerBar value={draft} onChange={setDraft} onSend={() => void publish()} busy={posting} placeholder="Write an announcement…" maxLength={4000} />
       )}
       {posts === undefined ? (
         <div className="empty">
@@ -346,7 +346,7 @@ function Announcements({ c, isMember, isMod }: { c: Community; isMember: boolean
       ) : posts.length === 0 ? (
         <div className="empty">
           <div className="empty-title">No announcements yet</div>
-          <div className="empty-sub">{isMod ? 'Post the first one above.' : 'Owners and admins post announcements here.'}</div>
+          <div className="empty-sub">{isMod ? 'Write the first one below.' : 'Owners and admins post announcements here.'}</div>
         </div>
       ) : (
         posts.map((p) => (
@@ -482,8 +482,8 @@ function Comments({ post, isMember, isMod, onCount }: { post: Post; isMember: bo
           }}
         >
           <input className="sync-input" maxLength={1000} placeholder="Add a comment…" value={draft} onChange={(e) => setDraft(e.target.value)} />
-          <button type="submit" className="sync-btn pressable" disabled={!draft.trim()}>
-            Send
+          <button type="submit" className="send-btn small pressable" disabled={!draft.trim()} aria-label="Send comment">
+            <SendIcon size={16} />
           </button>
         </form>
       )}
@@ -567,7 +567,7 @@ function Chat({ c, isMod }: { c: Community; isMod: boolean }) {
   }
 
   return (
-    <div className="chat">
+    <div className="chat has-composer">
       {more && (
         <button className="auth-link" onClick={() => void older()}>
           Load earlier messages
@@ -611,18 +611,7 @@ function Chat({ c, isMod }: { c: Community; isMod: boolean }) {
         })
       )}
       <div ref={endRef} />
-      <form
-        className="chat-input"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void send()
-        }}
-      >
-        <input className="sync-input" maxLength={1000} placeholder={`Message ${c.name}`} value={draft} onChange={(e) => setDraft(e.target.value)} />
-        <button type="submit" className="sync-btn primary pressable" disabled={!draft.trim()}>
-          Send
-        </button>
-      </form>
+      <ComposerBar value={draft} onChange={setDraft} onSend={() => void send()} placeholder={`Message ${c.name}`} maxLength={1000} />
     </div>
   )
 }
@@ -789,11 +778,35 @@ function EditSheet({ c, onClose, onSaved }: { c: Community; onClose: () => void;
   const [name, setName] = useState(c.name)
   const [description, setDescription] = useState(c.description)
   const [visibility, setVisibility] = useState(c.visibility)
+  const [avatar, setAvatar] = useState<string | null | undefined>(c.avatar)
+  const [banner, setBanner] = useState<{ full: string | null; thumb: string | null } | undefined>(
+    c.banner || c.banner_thumb ? { full: c.banner ?? null, thumb: c.banner_thumb ?? null } : undefined,
+  )
+  const [saving, setSaving] = useState(false)
+  const avatarInput = useRef<HTMLInputElement>(null)
+  const bannerInput = useRef<HTMLInputElement>(null)
   const valid = name.trim().length >= 3
   const save = async () => {
-    const r = await updateCommunity(c.id, { name: name.trim(), description: description.trim(), visibility })
+    setSaving(true)
+    const patch: Parameters<typeof updateCommunity>[1] = { name: name.trim(), description: description.trim(), visibility }
+    if (avatar !== c.avatar) patch.avatar = avatar ?? null
+    if ((banner?.full ?? null) !== (c.banner ?? null)) {
+      patch.banner = banner?.full ?? null
+      patch.banner_thumb = banner?.thumb ?? null
+    }
+    const r = await updateCommunity(c.id, patch)
+    setSaving(false)
     if (r.ok) onSaved()
-    else toast('Couldn’t save changes')
+    else toast(patch.avatar !== undefined || patch.banner !== undefined ? 'Couldn’t save the pictures — run 007_community_images.sql in Supabase' : 'Couldn’t save changes')
+  }
+  const pick = async (f: File | undefined, kind: 'avatar' | 'banner') => {
+    if (!f) return
+    try {
+      if (kind === 'avatar') setAvatar(await fileToImage(f, 256, 256))
+      else setBanner({ full: await fileToImage(f, 1200, 400, 0.78), thumb: await fileToImage(f, 480, 144, 0.72) })
+    } catch {
+      toast('Couldn’t read that image')
+    }
   }
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
@@ -807,6 +820,31 @@ function EditSheet({ c, onClose, onSaved }: { c: Community; onClose: () => void;
       >
         <div className="sheet-handle" />
         <div className="sheet-title">Edit community</div>
+        <div className="edit-pictures">
+          <button type="button" className="edit-banner pressable" onClick={() => bannerInput.current?.click()} style={{ background: communityHue(c.id) }}>
+            {banner?.full || banner?.thumb ? <img src={banner.full || banner.thumb || ''} alt="" /> : <span>Add a banner</span>}
+          </button>
+          <button type="button" className="edit-avatar pressable" onClick={() => avatarInput.current?.click()} style={{ background: communityHue(c.id) }}>
+            {avatar ? <img src={avatar} alt="" /> : <span>{name.trim()[0]?.toUpperCase() ?? '+'}</span>}
+          </button>
+        </div>
+        <div className="edit-picture-actions">
+          <button type="button" className="auth-link" onClick={() => avatarInput.current?.click()}>
+            {avatar ? 'Change picture' : 'Add picture'}
+          </button>
+          {avatar && (
+            <button type="button" className="auth-link danger" onClick={() => setAvatar(null)}>
+              Remove picture
+            </button>
+          )}
+          {banner && (
+            <button type="button" className="auth-link danger" onClick={() => setBanner(undefined)}>
+              Remove banner
+            </button>
+          )}
+        </div>
+        <input ref={avatarInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => (void pick(e.target.files?.[0], 'avatar'), (e.target.value = ''))} />
+        <input ref={bannerInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => (void pick(e.target.files?.[0], 'banner'), (e.target.value = ''))} />
         <input className="sync-input" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
         <textarea className="sync-input" rows={3} maxLength={500} placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
         <div className="vis-choice">
@@ -817,11 +855,65 @@ function EditSheet({ c, onClose, onSaved }: { c: Community; onClose: () => void;
             Private
           </button>
         </div>
-        <button type="submit" className="welcome-primary pressable" disabled={!valid}>
-          Save
+        <button type="submit" className="welcome-primary pressable" disabled={!valid || saving}>
+          {saving ? 'Saving…' : 'Save'}
         </button>
       </form>
     </div>,
     document.body,
+  )
+}
+
+/** Bottom-docked composer, like a messaging app: grows to 4 lines, arrow sends. */
+function ComposerBar({
+  value,
+  onChange,
+  onSend,
+  placeholder,
+  maxLength,
+  busy,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onSend: () => void
+  placeholder: string
+  maxLength: number
+  busy?: boolean
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 110) + 'px'
+  }, [value])
+  return createPortal(
+    <form
+      className="composer-bar"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (value.trim() && !busy) onSend()
+      }}
+    >
+      <textarea
+        ref={ref}
+        rows={1}
+        className="composer-input"
+        maxLength={maxLength}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(pointer: fine)').matches) {
+            e.preventDefault()
+            if (value.trim() && !busy) onSend()
+          }
+        }}
+      />
+      <button type="submit" className="send-btn pressable" disabled={!value.trim() || busy} aria-label="Send">
+        <SendIcon size={18} />
+      </button>
+    </form>,
+    document.querySelector('.app-shell') ?? document.body,
   )
 }

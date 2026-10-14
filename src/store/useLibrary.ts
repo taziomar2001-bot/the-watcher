@@ -101,6 +101,7 @@ interface LibraryState {
   updateProfile: (patch: Partial<{ username: string; displayName: string; avatar: string; hideFavorites: boolean }>) => void
   renameList: (id: string, name: string) => void
   setListVisibility: (id: string, visibility: 'public' | 'private') => void
+  setListCover: (id: string, cover?: string) => void
   deleteList: (id: string) => void
   removeFromList: (listId: string, ref: string) => void
   reorderList: (listId: string, items: string[]) => void
@@ -284,6 +285,8 @@ export const useLibrary = create<LibraryState>()(
       updateProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),
       renameList: (id, name) =>
         set((s) => ({ lists: s.lists.map((l) => (l.id === id ? { ...l, name } : l)) })),
+      setListCover: (id, cover) =>
+        set((s) => ({ lists: s.lists.map((l) => (l.id === id ? { ...l, cover: cover || undefined } : l)) })),
       setListVisibility: (id, visibility) =>
         set((s) => ({ lists: s.lists.map((l) => (l.id === id ? { ...l, visibility } : l)) })),
       deleteList: (id) => set((s) => ({ lists: s.lists.filter((l) => l.id !== id) })),

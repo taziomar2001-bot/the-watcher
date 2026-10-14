@@ -388,6 +388,7 @@ function clearLocalAccount() {
     localStorage.removeItem(LOCAL_OWNER_KEY)
     localStorage.removeItem('tw-onboarded')
     localStorage.removeItem(PENDING_USERNAME_KEY)
+    localStorage.removeItem('tw-me')
   } catch {
     /* ignore */
   }

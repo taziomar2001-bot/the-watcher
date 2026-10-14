@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Segmented } from '../ui/primitives'
-import { PosterGrid, type GridItem } from '../ui/PosterGrid'
+import { PosterGrid, SortChips, byRecentlyWatched, type GridItem, type LibrarySort } from '../ui/PosterGrid'
 import { ChevronLeft } from '../components/Icons'
 import { useLibrary } from '../store/useLibrary'
 import { useMovieEntries } from '../logic/useLibraryData'
@@ -12,6 +12,7 @@ type Filter = 'all' | 'watched' | 'unwatched'
 
 // Preserve the chosen filter when leaving to view a movie and returning.
 let movieLibFilterMem: Filter = 'all'
+let movieLibSortMem: LibrarySort = 'recent'
 
 /**
  * Profile → Movies: the COMPLETE followed-movie library (watched + unwatched).
@@ -29,6 +30,10 @@ export function ProfileMoviesLibraryScreen() {
   const watchlist = useLibrary((s) => s.watchlistMovies)
   const watchedMovies = useLibrary((s) => s.watchedMovies)
   const entries = useMovieEntries()
+  const lastWatched = useLibrary((s) => s.lastWatched)
+  const addedAt = useLibrary((s) => s.addedAt)
+  const [sort, setSortState] = useState<LibrarySort>(movieLibSortMem)
+  const setSort = (v: LibrarySort) => ((movieLibSortMem = v), setSortState(v))
 
   const items = useMemo<GridItem[]>(() => {
     return entries
@@ -37,9 +42,9 @@ export function ProfileMoviesLibraryScreen() {
         const watched = !!watchedMovies[e.item.id]
         return filter === 'all' ? true : filter === 'watched' ? watched : !watched
       })
-      .sort((a, b) => a.item.title.localeCompare(b.item.title))
+      .sort(sort === 'recent' ? byRecentlyWatched(lastWatched, addedAt) : (a, b) => a.item.title.localeCompare(b.item.title))
       .map((e) => ({ id: e.item.id, poster: e.item.poster, title: e.item.title, color: movieColor(!!watchedMovies[e.item.id], isUnreleased(e.item.releaseDate)) }))
-  }, [entries, watchlist, watchedMovies, filter])
+  }, [entries, watchlist, watchedMovies, filter, sort, lastWatched, addedAt])
 
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
@@ -64,6 +69,7 @@ export function ProfileMoviesLibraryScreen() {
         />
       </div>
 
+      <SortChips value={sort} onChange={setSort} />
       {items.length === 0 ? (
         <div className="empty">
           <div className="empty-title">Nothing here</div>
