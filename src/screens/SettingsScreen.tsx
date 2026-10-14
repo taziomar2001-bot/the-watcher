@@ -8,6 +8,7 @@ import { SUPABASE_ENABLED } from '../data/supabase'
 import { claimUsername, updateMyIdentity } from '../data/social'
 import { useMe, useMyProfile } from '../store/useMe'
 import { fileToImage } from '../utils/image'
+import { useTheme } from '../logic/theme'
 import { PersonIcon, ChevronLeft } from '../components/Icons'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
@@ -23,6 +24,8 @@ function timeAgo(ms?: number): string {
 
 export function SettingsScreen() {
   const nav = useNavigate()
+  const themePref = useTheme((t) => t.pref)
+  const setThemePref = useTheme((t) => t.setPref)
   const lib = useLibrary()
   const sync = useSync()
   const toast = useToast((s) => s.show)
@@ -254,6 +257,25 @@ export function SettingsScreen() {
                 <div className="vis-hint">Lists are shown or hidden one by one from each list’s ••• menu.</div>
               </>
             )}
+          </div>
+
+          <div className="settings-group-label">Appearance</div>
+          <div className="settings-card settings-rows" role="radiogroup" aria-label="Appearance">
+            {(
+              [
+                ['system', 'Use device setting', 'Matches your phone or computer'],
+                ['light', 'Light', undefined],
+                ['dark', 'Dark', undefined],
+              ] as const
+            ).map(([key, label, sub]) => (
+              <button key={key} role="radio" aria-checked={themePref === key} className="settings-row pressable" onClick={() => setThemePref(key)}>
+                <span className="settings-row-text">
+                  <span>{label}</span>
+                  {sub && <span className="settings-row-hint">{sub}</span>}
+                </span>
+                <span className={`radio-dot ${themePref === key ? 'on' : ''}`} aria-hidden="true" />
+              </button>
+            ))}
           </div>
 
           {signedIn && (

@@ -132,7 +132,7 @@ export function UpComingScreen() {
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      <style>{`@keyframes ptr-spin{to{transform:rotate(360deg)}} .ptr-spin{width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,.18);border-top-color:#f5c518;animation:ptr-spin .7s linear infinite}`}</style>
+      <style>{`@keyframes ptr-spin{to{transform:rotate(360deg)}} .ptr-spin{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--accent);animation:ptr-spin .7s linear infinite}`}</style>
 
       {/* Pull-to-refresh indicator */}
       <div
@@ -142,7 +142,7 @@ export function UpComingScreen() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#9aa0a6',
+          color: 'var(--text-mute)',
           fontSize: 13,
           fontWeight: 600,
           transition: dragging ? 'none' : 'height .2s ease',

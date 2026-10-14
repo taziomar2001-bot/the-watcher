@@ -26,13 +26,16 @@ export function Segmented<T extends string>({
 }) {
   const idx = Math.max(0, options.findIndex((o) => o.key === value))
   return (
-    <div className="segmented" style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}>
-      <span
-        className="segmented-thumb"
-        style={{ width: `calc(${100 / options.length}% - 6px)`, transform: `translateX(calc(${idx * 100}% + ${idx * 6}px))` }}
-      />
+    <div className="segmented" role="tablist" style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}>
+      <span className="segmented-thumb" style={{ width: `${100 / options.length}%`, transform: `translateX(${idx * 100}%)` }} />
       {options.map((o) => (
-        <button key={o.key} className={`segmented-opt ${o.key === value ? 'active' : ''}`} onClick={() => onChange(o.key)}>
+        <button
+          key={o.key}
+          role="tab"
+          aria-selected={o.key === value}
+          className={`segmented-opt ${o.key === value ? 'active' : ''}`}
+          onClick={() => onChange(o.key)}
+        >
           {o.label}
         </button>
       ))}

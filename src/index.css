@@ -1,32 +1,46 @@
 :root {
-  /* ---- Letterboxd-inspired dark palette ---- */
-  --bg: #101418;
-  --bg-2: #14181d;
-  --surface: #1b2027;
-  --surface-2: #222932;
-  --surface-3: #2a323c;
-  --border: #2b333d;
-  --border-soft: #222a32;
+  /* ---- Colour tokens (dark theme by default; light below) ----
+     Deep, X/Instagram-style blacks with a faint indigo cast; a solar-gold
+     accent from the galaxy palette. Text stays white/black for legibility —
+     colour is for actions, state and data. */
+  --bg: #000000;
+  --bg-2: #05060a;
+  --surface: #0c0d14;
+  --surface-2: #14151f;
+  --surface-3: #1e2030;
+  --border: #272a3a;
+  --border-soft: #171925;
 
-  --text: #ffffff;
-  --text-dim: #9bacba;
-  --text-mute: #6b7c8a;
+  --text: #f4f4f8;
+  --text-dim: #a2a5b8;
+  --text-mute: #767990;
 
-  /* progress semantics
-     Status indicators: "not started / unwatched" now renders WHITE and
-     "in progress" now renders ORANGE (previously orange / yellow). Rating
-     accents (stars, averages) follow --yellow, so they read orange too. */
+  /* galaxy accents */
+  --accent: #ffb534; /* sun gold — fills (buttons, bars, active marks) */
+  --accent-ink: #1b1200; /* text on gold */
+  --accent-text: #ffc04d; /* gold safe for text/icons on the background */
+  --nebula-violet: #7b5cff;
+  --nebula-blue: #4f7bff;
+  --nebula-rose: #ff4f7b;
+  --solar-orange: #ff7a3d;
+  --nebula: linear-gradient(135deg, #ffb534 0%, #ff7a3d 38%, #ff4f7b 62%, #7b5cff 100%);
+
+  /* progress semantics (status dots; rating accents follow --yellow) */
   --red: #ff5964;
-  --orange: #ffffff; /* was #ff9838 — now the "not started / unwatched" colour */
-  --yellow: #ff9838; /* was #f2c744 — now the "in progress" / rating accent colour */
+  --orange: #ffffff; /* "not started / unwatched" — the strong neutral of the theme */
+  --yellow: #ff9838; /* "in progress" / rating accent */
   --green: #46d369;
   --purple: #b98cff;
-  --blue: #4aa8ff; /* followed movie that hasn't been released yet */
+  --blue: #4f8bff; /* followed movie that hasn't been released yet */
 
-  /* interactive accent (kept distinct from progress hues) */
-  --accent: #64d2ff;
-  --accent-ink: #06212e;
-
+  /* surfaces over images keep white text in both themes */
+  --on-image: #ffffff;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --nav-bg: rgba(0, 0, 0, 0.82);
+  --sheet-bg: #0e0f17;
+  --hover: rgba(255, 255, 255, 0.06);
+  --skeleton-a: #10111a;
+  --skeleton-b: #1b1d2a;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 
   /* spacing */
@@ -56,11 +70,44 @@
   --z-overlay: 100;
   --z-toast: 1000;
 
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI',
+  --font-display: 'Archivo Variable', 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI',
     'Helvetica Neue', system-ui, sans-serif;
   color-scheme: dark;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---- Light theme ---- */
+:root[data-theme='light'] {
+  --bg: #ffffff;
+  --bg-2: #f7f7fa;
+  --surface: #f6f6fa;
+  --surface-2: #ececf3;
+  --surface-3: #e1e2ec;
+  --border: #d9dae6;
+  --border-soft: #ebebf2;
+  --text: #0b0b14;
+  --text-dim: #4e5164;
+  --text-mute: #6c6f84;
+  --accent: #ffb534;
+  --accent-ink: #1b1200;
+  --accent-text: #9a5b00;
+  --orange: #1d1f2b;
+  --yellow: #e07a12;
+  --green: #1f9d48;
+  --red: #e0384a;
+  --blue: #2f6fe8;
+  --purple: #7b4fe0;
+  --scrim: rgba(0, 0, 0, 0.45);
+  --nav-bg: rgba(255, 255, 255, 0.88);
+  --sheet-bg: #ffffff;
+  --hover: rgba(0, 0, 0, 0.05);
+  --skeleton-a: #eeeef4;
+  --skeleton-b: #f7f7fb;
+  --shadow: 0 10px 30px rgba(20, 22, 40, 0.14);
+  color-scheme: light;
 }
 
 * {
@@ -85,7 +132,7 @@ body {
 #root {
   display: flex;
   justify-content: center;
-  background: #000;
+  background: var(--bg);
 }
 
 .app-shell {
@@ -188,9 +235,12 @@ input {
   gap: 12px;
 }
 .app-header h1 {
-  font-size: 30px;
+  font-family: var(--font-display);
+  font-stretch: 112%;
+  font-size: 28px;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  color: var(--text);
   margin: 0;
 }
 .app-header .sub {

@@ -9,6 +9,15 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content"
     />
     <meta name="theme-color" content="#000000" />
+    <script>
+      // Apply the saved appearance before first paint (no flash of the wrong theme).
+      try {
+        var p = localStorage.getItem('tw-theme') || 'system'
+        var t = p === 'system' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : p
+        document.documentElement.dataset.theme = t
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', t === 'light' ? '#ffffff' : '#000000')
+      } catch (e) {}
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Watcher" />

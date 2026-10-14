@@ -168,14 +168,18 @@ export function RandomScreen() {
           value={kind}
           onChange={setKind}
         />
-        <Segmented
-          options={[
-            { key: 'anything', label: 'Anything' },
-            { key: 'watchlist', label: 'My watchlist' },
-          ]}
-          value={source}
-          onChange={setSource}
-        />
+        <div className="genre-chips" role="radiogroup" aria-label="Pick from">
+          {(
+            [
+              ['anything', 'Anything'],
+              ['watchlist', 'From my watchlist'],
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} role="radio" aria-checked={source === k} className={`toggle-pill pressable ${source === k ? 'active' : ''}`} onClick={() => setSource(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
         {genres.length > 0 && (
           <div className="genre-chips" role="listbox" aria-label="Genre">
             <button className={`toggle-pill pressable ${!genre ? 'active' : ''}`} onClick={() => setGenre(null)}>
