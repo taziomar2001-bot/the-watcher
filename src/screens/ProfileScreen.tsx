@@ -160,6 +160,17 @@ export function ProfileScreen() {
         </div>
       </button>
 
+      <button className="cta-row stats-entry pressable" onClick={() => nav('/profile/stats')}>
+        <span className="stats-entry-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M5 20V11M12 20V4M19 20v-6" /></svg>
+        </span>
+        <span>
+          <span className="stats-entry-title">Your stats</span>
+          <span className="stats-entry-sub">Genres, decades, languages & how you rate</span>
+        </span>
+        <ChevronRight size={20} />
+      </button>
+
       {/* ---- Lists ---- */}
       <div className="section-header" style={{ marginTop: 18 }}>
         <div className="section-header-title">Lists</div>

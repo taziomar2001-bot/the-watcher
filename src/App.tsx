@@ -37,6 +37,7 @@ import { ListScreen } from './screens/ListScreen'
 import { FavoritesScreen } from './screens/FavoritesScreen'
 import { LeaderboardScreen } from './screens/LeaderboardScreen'
 import { PublicProfileScreen } from './screens/PublicProfileScreen'
+import { StatsScreen } from './screens/StatsScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { CommunitiesScreen } from './screens/CommunitiesScreen'
 import { CommunityScreen } from './screens/CommunityScreen'
@@ -156,6 +157,7 @@ export default function App() {
         <Route path="/content" element={<Navigate to={lastContentPath()} replace />} />
         <Route path="/communities" element={<CommunitiesScreen />} />
         <Route path="/settings" element={<SettingsScreen />} />
+        <Route path="/profile/stats" element={<StatsScreen />} />
         <Route path="/c/:id" element={<CommunityScreen />} />
         <Route path="/tv" element={<TVShowsScreen />} />
         <Route path="/tv/category/:key" element={<TVCategoryScreen />} />

@@ -376,3 +376,36 @@ export async function search(query: string): Promise<Media[]> {
   }
   return out
 }
+
+// ---- Lightweight per-title facts for the Stats page (genres, year, language…) ----
+
+export interface TitleMeta {
+  g: string[] // genres
+  y?: number // release / first-air year
+  l?: string // original language (ISO 639-1)
+  c?: string // first production / origin country (ISO 3166-1)
+  r?: number // runtime (movies) or typical episode runtime (shows), minutes
+  v?: number // TMDB vote_average
+  n?: string // network (shows)
+}
+
+export async function getTitleMeta(type: 'show' | 'movie', id: string): Promise<TitleMeta | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await api<any>(type === 'show' ? `/tv/${id}` : `/movie/${id}`)
+    const date: string | undefined = type === 'show' ? r.first_air_date : r.release_date
+    return {
+      g: (r.genres ?? []).map((x: { name: string }) => x.name).filter(Boolean),
+      y: date ? Number(date.slice(0, 4)) || undefined : undefined,
+      l: r.original_language || undefined,
+      c: (type === 'show' ? r.origin_country?.[0] : r.production_countries?.[0]?.iso_3166_1) || undefined,
+      r: type === 'show' ? r.episode_run_time?.[0] || undefined : r.runtime || undefined,
+      v: r.vote_count ? r.vote_average : undefined,
+      n: type === 'show' ? r.networks?.[0]?.name : undefined,
+    }
+  } catch (e) {
+    // A title TMDB no longer knows: remember it as empty so we don't retry forever.
+    if (String(e).includes('TMDB 404')) return { g: [] }
+    return null
+  }
+}
