@@ -12,6 +12,25 @@ export interface SignUpOpts {
 
 const PENDING_USERNAME_KEY = 'tw-pending-username'
 
+// Where auth emails and OAuth send people back: the app root, no #/route.
+const appUrl = () => window.location.origin + window.location.pathname
+
+// A password-reset email links back with ?reset=1 (plus Supabase's ?code=).
+const OPENED_FROM_RESET = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('reset')
+
+/** Supabase auth messages → plain language. */
+function friendlyAuthError(message: string): string {
+  const m = message.toLowerCase()
+  if (m.includes('invalid login')) return 'Wrong email or password.'
+  if (m.includes('already registered') || m.includes('already been registered')) return 'That email already has an account. Sign in instead.'
+  if (m.includes('email not confirmed')) return 'Confirm your email first. Check your inbox for the link.'
+  if (m.includes('password should be') || m.includes('at least')) return 'Use a password with at least 6 characters.'
+  if (m.includes('rate limit') || m.includes('too many')) return 'Too many attempts. Wait a minute and try again.'
+  if (m.includes('unable to validate email') || m.includes('invalid email')) return 'That email address doesn’t look right.'
+  if (m.includes('failed to fetch') || m.includes('network')) return 'Can’t reach the server. Check your connection.'
+  return message
+}
+
 /** True while an email signup's chosen @username is still waiting to be claimed. */
 export function hasPendingUsernameFor(email?: string): boolean {
   if (!email) return false
@@ -159,11 +178,22 @@ function localOwnerId(): string | undefined {
   }
 }
 
+export interface LibrarySummary {
+  shows: number
+  movies: number
+  updatedAt?: number
+}
+export function summarize(d: Record<string, unknown>, updatedAt?: number): LibrarySummary {
+  const n = (v: unknown) => (v && typeof v === 'object' ? Object.keys(v as object).length : 0)
+  return { shows: n(d.libraryShows), movies: n(d.libraryMovies), updatedAt }
+}
+
 type Status = 'disabled' | 'signedOut' | 'signedIn' | 'busy'
 
 interface SyncState {
   status: Status
   email?: string
+  userId?: string
   lastSyncedAt?: number
   remoteNewer?: boolean
   syncReady?: boolean
@@ -171,11 +201,17 @@ interface SyncState {
   canKeepDeviceCopy?: boolean
   /** The signed-in account's cloud library is empty, so "keep cloud" clears this device. */
   cloudEmpty?: boolean
+  /** Size of the account's cloud library, shown when choosing between copies. */
+  remoteSummary?: LibrarySummary
   pendingWrite?: boolean
   error?: string
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string, opts?: SignUpOpts) => Promise<void>
+  signUp: (email: string, password: string, opts?: SignUpOpts) => Promise<'signedIn' | 'confirm' | 'error'>
   signInWithGoogle: () => Promise<void>
+  sendPasswordReset: (email: string) => Promise<boolean>
+  updatePassword: (password: string) => Promise<boolean>
+  /** Opened from a password-reset email: ask for a new password once signed in. */
+  recovering?: boolean
   signOut: () => Promise<void>
   backupNow: () => Promise<void>
   restoreNow: () => Promise<void>
@@ -196,13 +232,14 @@ let sessionInitialized = false
 export const useSync = create<SyncState>((set) => ({
   status: SUPABASE_ENABLED ? 'busy' : 'disabled',
   syncReady: false,
+  recovering: OPENED_FROM_RESET,
   mayShowLocal: !SUPABASE_ENABLED,
 
   signIn: async (email, password) => {
     if (!supabase) return
     set({ status: 'busy', mayShowLocal: !snapHasData(snapshot()), error: undefined })
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) return set({ status: 'signedOut', error: error.message })
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+    if (error) return set({ status: 'signedOut', error: friendlyAuthError(error.message) })
     // onAuthStateChange fires and drives reconcile.
   },
 
@@ -211,43 +248,61 @@ export const useSync = create<SyncState>((set) => ({
     set({ status: 'busy', error: undefined })
     // Return to the app root without the #/route; HashRouter restores a route
     // and the auth client exchanges the ?code=… for a session on load.
-    const redirectTo = window.location.origin + window.location.pathname
+    const redirectTo = appUrl()
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo, queryParams: { prompt: 'select_account' } },
     })
-    if (error) set({ status: 'signedOut', error: error.message })
+    if (error) set({ status: 'signedOut', error: friendlyAuthError(error.message) })
     // On success the browser navigates to Google; nothing else runs here.
   },
 
   signUp: async (email, password, opts) => {
-    if (!supabase) return
+    if (!supabase) return 'error'
     set({ status: 'busy', mayShowLocal: !snapHasData(snapshot()), error: undefined })
-    const { error } = await supabase.auth.signUp({
-      email,
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
       password,
-      // display name + public/private choice are carried as signup metadata and
-      // applied to the profile row by the handle_new_user trigger.
-      options: { data: { display_name: opts?.displayName || '', visibility: opts?.visibility || 'public' } },
+      // @username and public/private are chosen on the "Finish your profile"
+      // step right after the first sign-in (same for email and Google).
+      options: {
+        emailRedirectTo: appUrl(),
+        data: { display_name: opts?.displayName || '', visibility: opts?.visibility || 'public' },
+      },
     })
-    if (error) return set({ status: 'signedOut', error: error.message })
-    // Remember the chosen username to claim once a session exists.
-    if (opts?.username) {
-      try {
-        localStorage.setItem(PENDING_USERNAME_KEY, JSON.stringify({
-          email: email.trim().toLowerCase(),
-          username: opts.username,
-        }))
-      } catch {
-        /* ignore */
-      }
+    if (error) {
+      set({ status: 'signedOut', error: friendlyAuthError(error.message) })
+      return 'error'
     }
-    const { data } = await supabase.auth.getSession()
-    if (data.session) {
-      await claimPendingUsername(data.session.user.email)
-    } else {
-      set({ status: 'signedOut', error: 'Check your email to confirm your account, then sign in.' })
+    if (data.session) return 'signedIn'
+    // Email confirmation is on: no session until the link is opened.
+    set({ status: 'signedOut' })
+    return 'confirm'
+  },
+
+  sendPasswordReset: async (email) => {
+    if (!supabase) return false
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: appUrl() + '?reset=1' })
+    if (error) set({ error: friendlyAuthError(error.message) })
+    return !error
+  },
+
+  updatePassword: async (password) => {
+    if (!supabase) return false
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) {
+      set({ error: friendlyAuthError(error.message) })
+      return false
     }
+    set({ recovering: false, error: undefined })
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('reset')
+      window.history.replaceState(window.history.state, '', url.toString())
+    } catch {
+      /* ignore */
+    }
+    return true
   },
 
   signOut: async () => {
@@ -369,6 +424,17 @@ export const useSync = create<SyncState>((set) => ({
 
 }))
 
+/** Remove the library saved on this device (explicit user choice, signed out). */
+export function forgetDeviceLibrary() {
+  clearLocalAccount()
+  try {
+    localStorage.setItem('tw-onboarded', '1')
+  } catch {
+    /* ignore */
+  }
+  location.reload()
+}
+
 function clearLocalAccount() {
   try {
     localStorage.removeItem('the-watcher-library-v1')
@@ -476,7 +542,7 @@ async function reconcile() {
   if (!userId) return
   clearTimeout(pushTimer)
   clearTimeout(pushRetry)
-  useSync.setState({ syncReady: false, error: undefined, remoteNewer: false, canKeepDeviceCopy: false, cloudEmpty: false })
+  useSync.setState({ syncReady: false, error: undefined, remoteNewer: false, canKeepDeviceCopy: false, cloudEmpty: false, remoteSummary: undefined })
   try {
     const remote = await fetchRemote(userId)
     if (currentUserId !== userId) return
@@ -508,6 +574,7 @@ async function reconcile() {
       useSync.setState({
         remoteNewer: true,
         cloudEmpty: true,
+        remoteSummary: summarize({}, remote?.ms),
         canKeepDeviceCopy: !belongsElsewhere,
         error: belongsElsewhere ? 'This device has another account’s library. Only the cloud copy can be used here.' : undefined,
       })
@@ -524,10 +591,11 @@ async function reconcile() {
       lastJson = JSON.stringify(local)
       lastSavedJson = lastJson
       setMeta({ localUpdatedAt: remote.ms, hasSynced: true, userId })
-      useSync.setState({ syncReady: true, mayShowLocal: true, pendingWrite: false })
+      useSync.setState({ syncReady: true, mayShowLocal: true, pendingWrite: false, lastSyncedAt: remote.ms })
     } else {
       useSync.setState({
         remoteNewer: true,
+        remoteSummary: remote ? summarize(remote.data, remote.ms) : undefined,
         canKeepDeviceCopy: !belongsElsewhere,
         error: belongsElsewhere ? 'This device has another account’s library. Only the cloud copy can be used here.' : undefined,
       })
@@ -584,20 +652,23 @@ export async function initSync() {
         try { localStorage.setItem(LOCAL_OWNER_KEY, session.user.id) } catch { /* ignore */ }
       }
       useSync.setState({
-        status: 'signedIn', email: session.user.email, syncReady: false,
+        status: 'signedIn', email: session.user.email, userId: session.user.id, syncReady: false,
         remoteNewer: false, pendingWrite: false, mayShowLocal, canKeepDeviceCopy: false, error: undefined,
       })
       void claimPendingUsername(session.user.email)
       void reconcile()
     } else {
       useSync.setState({
-        status: 'signedOut', email: undefined, syncReady: false,
+        status: 'signedOut', email: undefined, userId: undefined, syncReady: false,
         remoteNewer: false, pendingWrite: false,
         mayShowLocal: !localOwnerId() && !hasTvTimeImportData(snapshot()), canKeepDeviceCopy: false,
       })
     }
   }
-  supabase.auth.onAuthStateChange((_event, session) => acceptSession(session))
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') useSync.setState({ recovering: true })
+    acceptSession(session)
+  })
 
   const { data, error } = await supabase.auth.getSession()
   if (error) useSync.setState({ error: error.message })

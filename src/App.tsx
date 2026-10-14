@@ -6,8 +6,10 @@ import { Welcome } from './ui/Welcome'
 import { SyncGate } from './ui/SyncGate'
 import { SignedOutLibraryGate } from './ui/SignedOutLibraryGate'
 import { CompleteProfile, useNeedsProfile } from './ui/CompleteProfile'
+import { NewPassword } from './ui/NewPassword'
 import { USE_TMDB } from './data/catalog'
 import { SUPABASE_ENABLED } from './data/supabase'
+import { useToast } from './store/useToast'
 import { useSync } from './logic/sync'
 import { useNavTracker } from './logic/nav'
 import { useStatsSync } from './logic/stats'
@@ -34,6 +36,7 @@ import { ListScreen } from './screens/ListScreen'
 import { FavoritesScreen } from './screens/FavoritesScreen'
 import { LeaderboardScreen } from './screens/LeaderboardScreen'
 import { PublicProfileScreen } from './screens/PublicProfileScreen'
+import { ConnectionsScreen } from './screens/ConnectionsScreen'
 import { PublicLibraryScreen } from './screens/PublicLibraryScreen'
 
 function readOnboarded(): boolean {
@@ -61,6 +64,15 @@ export default function App() {
   useEffect(() => {
     if (syncStatus !== 'busy') setBooted(true)
   }, [syncStatus])
+  const recovering = useSync((s) => s.recovering)
+  // A reset link that didn't produce a session (expired, or opened in another
+  // browser) leaves the person signed out: say so instead of failing silently.
+  useEffect(() => {
+    if (booted && recovering && syncStatus === 'signedOut') {
+      useSync.setState({ recovering: false })
+      useToast.getState().show('That reset link didn’t work. Request a new one from Sign in → Forgot password.', { duration: 6000 })
+    }
+  }, [booted, recovering, syncStatus])
 
   const dismissWelcome = () => {
     try {
@@ -98,6 +110,13 @@ export default function App() {
   if (showSyncGate) return (
     <div className="app-shell">
       <SyncGate />
+      <ToastHost />
+    </div>
+  )
+
+  if (recovering && syncStatus === 'signedIn') return (
+    <div className="app-shell">
+      <NewPassword />
       <ToastHost />
     </div>
   )
@@ -143,6 +162,7 @@ export default function App() {
         <Route path="/u/:id/movies" element={<PublicLibraryScreen kind="movies" />} />
         <Route path="/u/:id/favorites" element={<PublicLibraryScreen kind="favorites" />} />
         <Route path="/u/:id/list/:listId" element={<PublicLibraryScreen kind="list" />} />
+        <Route path="/people/:id/:tab" element={<ConnectionsScreen />} />
         <Route path="*" element={<Navigate to="/tv" replace />} />
       </Routes>
       <BottomNav />

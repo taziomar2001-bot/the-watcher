@@ -3,7 +3,8 @@ import { useLibrary } from '../store/useLibrary'
 import { useShowEntries, useMovieEntries } from './useLibraryData'
 import { effectiveSeen } from './status'
 import { useSync } from './sync'
-import { pushMyStats } from '../data/social'
+import { pushMyStats, pushMyShowcase, type Showcase, type ShowcaseItem } from '../data/social'
+import { parseRef, type LibraryItem } from '../store/useLibrary'
 
 // Shared watch-time assumptions (kept in one place so Profile, public profiles
 // and the Leaderboard all agree).
@@ -90,7 +91,9 @@ export function useStatsSync() {
   const status = useSync((s) => s.status)
   const syncReady = useSync((s) => s.syncReady)
   const stats = useMyStats()
+  const showcase = useMyShowcase()
   const last = useRef('')
+  const lastShowcase = useRef('')
   useEffect(() => {
     if (status !== 'signedIn' || !syncReady) {
       last.current = ''
@@ -102,6 +105,10 @@ export function useStatsSync() {
       shows_finished: stats.showsFinished,
       movies_watched: stats.moviesWatched,
       minutes_watched: stats.totalMin,
+      shows_followed: stats.showsFollowed,
+      movies_followed: stats.moviesFollowed,
+      tv_minutes: stats.tvMin,
+      movie_minutes: stats.movieMin,
     }
     const key = JSON.stringify(payload)
     if (key === last.current) return
@@ -111,4 +118,56 @@ export function useStatsSync() {
     }, 2500)
     return () => clearTimeout(t)
   }, [status, syncReady, stats])
+
+  useEffect(() => {
+    if (status !== 'signedIn' || !syncReady) {
+      lastShowcase.current = ''
+      return
+    }
+    const key = JSON.stringify(showcase)
+    if (key === lastShowcase.current) return
+    const t = setTimeout(async () => {
+      if (await pushMyShowcase(showcase)) lastShowcase.current = key
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [status, syncReady, showcase])
+}
+
+const toShowcaseItem = (type: 'show' | 'movie', id: string, it?: LibraryItem): ShowcaseItem | null =>
+  it?.title ? { id, type, title: it.title, poster: it.poster, year: it.year } : null
+
+/**
+ * What this user shows on their public profile: favorites (unless hidden in
+ * Settings) and lists marked Public. Nothing else from the private library.
+ */
+export function useMyShowcase(): Showcase {
+  const favoriteShows = useLibrary((s) => s.favoriteShows)
+  const favoriteMovies = useLibrary((s) => s.favoriteMovies)
+  const libraryShows = useLibrary((s) => s.libraryShows)
+  const libraryMovies = useLibrary((s) => s.libraryMovies)
+  const lists = useLibrary((s) => s.lists)
+  const hideFavorites = useLibrary((s) => !!s.profile.hideFavorites)
+  return useMemo(() => {
+    const favorites = hideFavorites
+      ? []
+      : [
+          ...Object.keys(favoriteShows).map((id) => toShowcaseItem('show', id, libraryShows[id])),
+          ...Object.keys(favoriteMovies).map((id) => toShowcaseItem('movie', id, libraryMovies[id])),
+        ].filter((x): x is ShowcaseItem => !!x)
+    const publicLists = lists
+      .filter((l) => l.visibility === 'public')
+      .map((l) => ({
+        id: l.id,
+        name: l.name,
+        ranked: !!l.ranked,
+        items: l.items
+          .slice(0, 250)
+          .map((ref) => {
+            const { type, id } = parseRef(ref)
+            return toShowcaseItem(type, id, type === 'show' ? libraryShows[id] : libraryMovies[id])
+          })
+          .filter((x): x is ShowcaseItem => !!x),
+      }))
+    return { favorites, lists: publicLists }
+  }, [favoriteShows, favoriteMovies, libraryShows, libraryMovies, lists, hideFavorites])
 }

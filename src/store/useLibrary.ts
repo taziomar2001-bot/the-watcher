@@ -79,7 +79,7 @@ interface LibraryState {
   addedAt: Record<string, number>
   stoppedShows: IdMap // manually "Stopped Watching" shows
   lists: CustomList[]
-  profile: { username: string; displayName?: string; avatar?: string; following: number; followers: number; comments: number }
+  profile: { username: string; displayName?: string; avatar?: string; hideFavorites?: boolean; following: number; followers: number; comments: number }
   tvTimeImported: boolean
   tvTimeMoviesImported: boolean
   migrationVersion: number
@@ -98,8 +98,9 @@ interface LibraryState {
   // Never changes watched status.
   setMovieRating: (id: string, rating: number) => void
   setEpisodeRating: (epId: string, rating: number) => void
-  updateProfile: (patch: Partial<{ username: string; displayName: string; avatar: string }>) => void
+  updateProfile: (patch: Partial<{ username: string; displayName: string; avatar: string; hideFavorites: boolean }>) => void
   renameList: (id: string, name: string) => void
+  setListVisibility: (id: string, visibility: 'public' | 'private') => void
   deleteList: (id: string) => void
   removeFromList: (listId: string, ref: string) => void
   reorderList: (listId: string, items: string[]) => void
@@ -283,6 +284,8 @@ export const useLibrary = create<LibraryState>()(
       updateProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),
       renameList: (id, name) =>
         set((s) => ({ lists: s.lists.map((l) => (l.id === id ? { ...l, name } : l)) })),
+      setListVisibility: (id, visibility) =>
+        set((s) => ({ lists: s.lists.map((l) => (l.id === id ? { ...l, visibility } : l)) })),
       deleteList: (id) => set((s) => ({ lists: s.lists.filter((l) => l.id !== id) })),
       removeFromList: (listId, ref) =>
         set((s) => ({

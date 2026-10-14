@@ -5,16 +5,17 @@ Social profiles, follows, and aggregate stats live in separate tables.
 
 ## Before changing the database
 
-1. In the app, open **Settings → Library & Data → Download backup** on the
+1. In the app, open **Settings → Your data → Export library** on the
    device that has your library. Keep the downloaded file somewhere safe.
 2. Confirm you are using the intended Supabase project.
 3. Run the SQL files in order in Supabase's SQL Editor:
    - `supabase/migration.sql`
    - `supabase/002_social_foundation.sql`
    - `supabase/003_social_permissions.sql`
+   - `supabase/004_social_profiles.sql`
 
-If the first two files have already run, run only the new `003` file. All
-three scripts are designed to be rerun. The third script narrows direct
+Run any files you haven't run yet, in order. All scripts are designed to be
+rerun. The third script narrows direct
 profile and follow-row edits; it does not restructure or delete library data.
 Do not use the older single-table SQL snippet from a previous copy of this
 setup guide.

@@ -78,7 +78,9 @@ export function ListScreen() {
           </button>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 24, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</h1>
-            <div className="sub">{compositionLabel(countRefs(list.items).movies, countRefs(list.items).shows)}</div>
+            <div className="sub">
+              {compositionLabel(countRefs(list.items).movies, countRefs(list.items).shows)} · {list.visibility === 'public' ? 'On your profile' : 'Only you'}
+            </div>
           </div>
         </div>
         <button className="icon-round pressable" onClick={() => setMenu(true)} aria-label="List options">
@@ -175,6 +177,17 @@ export function ListScreen() {
               }}
             >
               <span><EditIcon size={16} /> Rename list</span>
+            </button>
+            <button
+              className="sheet-row"
+              onClick={() => {
+                lib.setListVisibility(list.id, list.visibility === 'public' ? 'private' : 'public')
+                setMenu(false)
+              }}
+            >
+              <span>
+                <EditIcon size={16} /> {list.visibility === 'public' ? 'Hide from my profile' : 'Show on my profile'}
+              </span>
             </button>
             <button
               className="sheet-row danger"

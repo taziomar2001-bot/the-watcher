@@ -1,24 +1,34 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSync } from '../logic/sync'
-import { useToast } from '../store/useToast'
 
-const USERNAME_RE = /^[a-z0-9_]{3,20}$/
+type Mode = 'in' | 'up' | 'forgot' | 'checkEmail' | 'resetSent'
 
 /**
- * Full-screen sign in / create account. Used both as the first-run welcome
- * (firstRun) and on demand from Settings so people can always switch accounts.
- * Create-account captures the social identity (username + public/private).
+ * Sign in / create account. Google first, email as the alternative. Creating
+ * an account only asks for email + password; the @username and public/private
+ * choice come on the "Finish your profile" step right after, for everyone.
  */
-export function AuthScreen({ onClose, firstRun }: { onClose: () => void; firstRun?: boolean }) {
+export function AuthScreen({
+  onClose,
+  firstRun,
+  note,
+  skipLabel,
+  onSkip,
+}: {
+  onClose: () => void
+  firstRun?: boolean
+  /** Extra context under the title (e.g. why sign-in is needed here). */
+  note?: string
+  /** Quiet secondary action at the bottom; hides the ✕ when provided. */
+  skipLabel?: string
+  onSkip?: () => void
+}) {
   const sync = useSync()
-  const toast = useToast((s) => s.show)
-  const [mode, setMode] = useState<'in' | 'up'>(firstRun ? 'up' : 'in')
+  const [mode, setMode] = useState<Mode>(firstRun ? 'up' : 'in')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [username, setUsername] = useState('')
-  const [displayName, setDisplayName] = useState('')
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public')
+  const [showPw, setShowPw] = useState(false)
   const busy = sync.status === 'busy'
 
   // Close automatically once signed in; clear any stale auth error on unmount.
@@ -28,118 +38,143 @@ export function AuthScreen({ onClose, firstRun }: { onClose: () => void; firstRu
   }, [sync.status])
   useEffect(() => () => useSync.setState({ error: undefined }), [])
 
-  const submit = () => {
-    if (!email || !password) return
+  const switchTo = (m: Mode) => {
+    useSync.setState({ error: undefined })
+    setMode(m)
+  }
+
+  const submit = async () => {
+    if (busy) return
+    if (mode === 'forgot') {
+      if (!email.trim()) return
+      if (await sync.sendPasswordReset(email)) setMode('resetSent')
+      return
+    }
+    if (!email.trim() || !password) return
     if (mode === 'up') {
-      const u = username.trim().toLowerCase()
-      if (!USERNAME_RE.test(u)) {
-        toast('Username must be 3–20 letters, numbers or underscores')
-        return
-      }
-      sync.signUp(email, password, { username: u, displayName: displayName.trim(), visibility })
+      const r = await sync.signUp(email, password)
+      if (r === 'confirm') setMode('checkEmail')
     } else {
-      sync.signIn(email, password)
+      await sync.signIn(email, password)
     }
   }
 
+  const title =
+    mode === 'up' ? 'Create your account' : mode === 'forgot' ? 'Reset your password' : mode === 'in' ? 'Welcome back' : 'Check your email'
+
   return createPortal(
     // stopPropagation: when opened from Settings this is a React child of the
-    // settings backdrop (events bubble through the React tree across the portal),
-    // so without this a click in the form would close Settings underneath.
+    // settings backdrop (events bubble through the React tree across the portal).
     <div className="auth-screen" onClick={(e) => e.stopPropagation()}>
-      <button className="auth-close pressable" onClick={onClose} aria-label="Close">
-        ✕
-      </button>
+      {!onSkip && (
+        <button className="auth-close pressable" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+      )}
       <div className="welcome-inner">
         <div className="welcome-brand">
           <div className="welcome-logo">W</div>
-          <h1 className="welcome-title">The Watcher</h1>
-          <p className="welcome-tag">
-            {mode === 'up'
-              ? 'Track everything you watch, keep it synced forever, and connect with other watchers.'
-              : 'Welcome back — sign in to sync your library and your community.'}
-          </p>
+          <h1 className="welcome-title">{title}</h1>
+          {(mode === 'in' || mode === 'up') && (
+            <p className="welcome-tag">{note ?? 'Track what you watch, on every device, with friends.'}</p>
+          )}
         </div>
 
-        <div className="welcome-form">
-          <button className="google-btn pressable" disabled={busy} onClick={() => void sync.signInWithGoogle()}>
-            <GoogleMark />
-            Continue with Google
-          </button>
-          <div className="auth-or"><span>or use email</span></div>
-          <input
-            className="sync-input"
-            type="email"
-            inputMode="email"
-            autoCapitalize="none"
-            autoComplete="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <input
-            className="sync-input"
-            type="password"
-            autoComplete={mode === 'up' ? 'new-password' : 'current-password'}
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submit()}
-          />
-          {mode === 'up' && (
-            <>
-              <div className="uname-row">
-                <span className="uname-at">@</span>
-                <input
-                  className="sync-input"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  placeholder="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value.toLowerCase())}
-                />
-              </div>
-              <input
-                className="sync-input"
-                placeholder="Display name (optional)"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-              />
-              <div className="vis-choice">
-                <button type="button" className={`vis-opt pressable ${visibility === 'public' ? 'on' : ''}`} onClick={() => setVisibility('public')}>
-                  Public
-                </button>
-                <button type="button" className={`vis-opt pressable ${visibility === 'private' ? 'on' : ''}`} onClick={() => setVisibility('private')}>
-                  Private
-                </button>
-              </div>
-              <div className="vis-hint">
-                {visibility === 'public'
-                  ? 'Anyone can find your profile and follow you.'
-                  : 'You approve who can follow you and see your activity.'}
-              </div>
-            </>
-          )}
-          {sync.error && <div className="sync-error">{sync.error}</div>}
-
-          <button className="welcome-primary pressable" disabled={busy || !email || !password || (mode === 'up' && !username)} onClick={submit}>
-            {busy ? 'Working…' : mode === 'up' ? 'Create account' : 'Sign in'}
-          </button>
-
-          <button
-            className="welcome-switch pressable"
-            onClick={() => {
-              useSync.setState({ error: undefined })
-              setMode(mode === 'up' ? 'in' : 'up')
+        {mode === 'checkEmail' || mode === 'resetSent' ? (
+          <div className="welcome-form">
+            <p className="auth-note">
+              {mode === 'checkEmail' ? 'We sent a confirmation link to ' : 'We sent a password reset link to '}
+              <b>{email.trim()}</b>. Open it on this device to continue.
+            </p>
+            <button className="welcome-primary pressable" onClick={() => switchTo('in')}>
+              Back to sign in
+            </button>
+          </div>
+        ) : (
+          <form
+            className="welcome-form"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void submit()
             }}
           >
-            {mode === 'up' ? 'Already have an account? Sign in' : 'New to The Watcher? Create account'}
-          </button>
-        </div>
+            {mode !== 'forgot' && (
+              <>
+                <button type="button" className="google-btn pressable" disabled={busy} onClick={() => void sync.signInWithGoogle()}>
+                  <GoogleMark />
+                  Continue with Google
+                </button>
+                <div className="auth-or">
+                  <span>or with email</span>
+                </div>
+              </>
+            )}
 
-        {firstRun && (
-          <button className="welcome-skip pressable" onClick={onClose}>
-            Not now — use without an account
+            <input
+              className="sync-input"
+              type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoComplete="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            {mode !== 'forgot' && (
+              <div className="pw-row">
+                <input
+                  className="sync-input"
+                  type={showPw ? 'text' : 'password'}
+                  autoComplete={mode === 'up' ? 'new-password' : 'current-password'}
+                  placeholder={mode === 'up' ? 'Password (6+ characters)' : 'Password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button type="button" className="pw-toggle" onClick={() => setShowPw((v) => !v)}>
+                  {showPw ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            )}
+
+            {sync.error && (
+              <div className="sync-error" role="alert">
+                {sync.error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="welcome-primary pressable"
+              disabled={busy || !email.trim() || (mode !== 'forgot' && !password)}
+            >
+              {busy ? 'One moment…' : mode === 'up' ? 'Create account' : mode === 'forgot' ? 'Send reset link' : 'Sign in'}
+            </button>
+
+            {mode === 'in' && (
+              <button type="button" className="auth-link" onClick={() => switchTo('forgot')}>
+                Forgot password?
+              </button>
+            )}
+
+            <button type="button" className="welcome-switch pressable" onClick={() => switchTo(mode === 'up' ? 'in' : mode === 'in' ? 'up' : 'in')}>
+              {mode === 'up' ? (
+                <>
+                  Have an account? <b>Sign in</b>
+                </>
+              ) : mode === 'in' ? (
+                <>
+                  New here? <b>Create an account</b>
+                </>
+              ) : (
+                'Back to sign in'
+              )}
+            </button>
+          </form>
+        )}
+
+        {(onSkip || firstRun) && (
+          <button className="welcome-skip pressable" onClick={onSkip ?? onClose}>
+            {skipLabel ?? 'Continue without an account'}
           </button>
         )}
       </div>
@@ -148,7 +183,7 @@ export function AuthScreen({ onClose, firstRun }: { onClose: () => void; firstRu
   )
 }
 
-function GoogleMark() {
+export function GoogleMark() {
   return (
     <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
       <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />

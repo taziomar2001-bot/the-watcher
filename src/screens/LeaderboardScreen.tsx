@@ -1,73 +1,69 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, FilterIcon, CheckIcon, TrophyIcon } from '../components/Icons'
-import { MOCK_USERS } from '../data/users'
-import { useLibrary } from '../store/useLibrary'
+import { Segmented } from '../ui/primitives'
+import { UserAvatar, nameOf } from '../ui/social'
+import { getLeaderboard, type LeaderMetric, type LeaderRow, type ProfileStats } from '../data/social'
+import { useSync } from '../logic/sync'
 import { useMyStats } from '../logic/stats'
 import { formatDuration as hm } from '../utils/duration'
 
-interface Row {
-  id: string
-  name: string
-  handle: string
-  accent: string
-  isMe: boolean
-  tvMin: number
-  movieMin: number
-  moviesWatched: number
-  showsWatched: number
-  episodesWatched: number
-}
-
-type MetricKey = 'time' | 'movies' | 'shows' | 'episodes'
-const METRICS: { key: MetricKey; label: string; value: (r: Row) => number; format: (n: number) => string }[] = [
-  { key: 'time', label: 'Total time watched', value: (r) => r.tvMin + r.movieMin, format: hm },
-  { key: 'movies', label: 'Movies watched', value: (r) => r.moviesWatched, format: (n) => n.toLocaleString() },
-  { key: 'shows', label: 'TV shows watched', value: (r) => r.showsWatched, format: (n) => n.toLocaleString() },
-  { key: 'episodes', label: 'Episodes watched', value: (r) => r.episodesWatched, format: (n) => n.toLocaleString() },
+const METRICS: { key: LeaderMetric; label: string; value: (s: ProfileStats) => number; format: (n: number) => string }[] = [
+  { key: 'minutes_watched', label: 'Total time watched', value: (s) => s.minutes_watched, format: hm },
+  { key: 'movies_watched', label: 'Movies watched', value: (s) => s.movies_watched, format: (n) => n.toLocaleString() },
+  { key: 'shows_watched', label: 'TV shows watched', value: (s) => s.shows_watched, format: (n) => n.toLocaleString() },
+  { key: 'episodes_watched', label: 'Episodes watched', value: (s) => s.episodes_watched, format: (n) => n.toLocaleString() },
 ]
 
+// Survives navigating into a profile and back.
+const mem = { metric: 'minutes_watched' as LeaderMetric, scope: 'everyone' as 'everyone' | 'following' }
+
+/**
+ * Real leaderboard: only accounts that exist, with a username, whose stats the
+ * viewer is allowed to see (public, followed, or yourself). No sample users.
+ */
 export function LeaderboardScreen() {
   const nav = useNavigate()
-  const me = useMyStats()
-  const profile = useLibrary((s) => s.profile)
-  const [metric, setMetric] = useState<MetricKey>('time')
+  const signedIn = useSync((s) => s.status === 'signedIn')
+  const me = useSync((s) => s.userId)
+  const local = useMyStats()
+  const [metric, setMetricState] = useState<LeaderMetric>(mem.metric)
+  const [scope, setScopeState] = useState(mem.scope)
   const [filterOpen, setFilterOpen] = useState(false)
+  const [rows, setRows] = useState<LeaderRow[] | null | undefined>(undefined)
+  const setMetric = (m: LeaderMetric) => ((mem.metric = m), setMetricState(m))
+  const setScope = (s: 'everyone' | 'following') => ((mem.scope = s), setScopeState(s))
 
-  const rows = useMemo<Row[]>(() => {
-    const others: Row[] = MOCK_USERS.map((u) => ({
-      id: u.id,
-      name: u.name,
-      handle: u.handle,
-      accent: u.accent,
-      isMe: false,
-      tvMin: u.stats.tvMin,
-      movieMin: u.stats.movieMin,
-      moviesWatched: u.stats.moviesWatched,
-      showsWatched: u.stats.showsWatched,
-      episodesWatched: u.stats.episodesWatched,
-    }))
-    const mine: Row = {
-      id: 'me',
-      name: profile.displayName || profile.username || 'You',
-      handle: profile.username || 'you',
-      accent: '#4aa8ff',
-      isMe: true,
-      tvMin: me.tvMin,
-      movieMin: me.movieMin,
-      moviesWatched: me.moviesWatched,
-      showsWatched: me.showsStarted,
-      episodesWatched: me.episodesWatched,
+  useEffect(() => {
+    if (!signedIn) return
+    let alive = true
+    setRows(undefined)
+    getLeaderboard(metric, scope).then((r) => alive && setRows(r))
+    return () => {
+      alive = false
     }
-    return [...others, mine]
-  }, [me, profile])
+  }, [metric, scope, signedIn])
 
   const active = METRICS.find((m) => m.key === metric)!
-  const ranked = useMemo(() => [...rows].sort((a, b) => active.value(b) - active.value(a)), [rows, active])
-  const myRank = ranked.findIndex((r) => r.isMe) + 1
-
-  const open = (r: Row) => nav(r.isMe ? '/profile' : `/u/${r.id}`)
+  // Your own row uses this device's numbers, which are always the freshest.
+  const ranked = (rows ?? [])
+    .map((r) =>
+      r.profile.id === me
+        ? {
+            ...r,
+            stats: {
+              ...r.stats,
+              minutes_watched: local.totalMin,
+              movies_watched: local.moviesWatched,
+              shows_watched: local.showsStarted,
+              episodes_watched: local.episodesWatched,
+            },
+          }
+        : r,
+    )
+    .sort((a, b) => active.value(b.stats) - active.value(a.stats))
+  const myRank = ranked.findIndex((r) => r.profile.id === me) + 1
 
   return (
     <div className="scroll-area route-fade">
@@ -81,35 +77,68 @@ export function LeaderboardScreen() {
             <div className="sub">Ranked by {active.label.toLowerCase()}</div>
           </div>
         </div>
-        <button className="icon-round pressable" onClick={() => setFilterOpen(true)} aria-label="Filter">
-          <FilterIcon size={20} />
-        </button>
-      </div>
-
-      {myRank > 0 && (
-        <div className="page-pad" style={{ paddingBottom: 8 }}>
-          <div className="lb-you-card">
-            <TrophyIcon size={18} />
-            <span>You’re ranked <b>#{myRank}</b> of {ranked.length} by {active.label.toLowerCase()}</span>
-          </div>
-        </div>
-      )}
-
-      <div className="lb-list">
-        {ranked.map((r, i) => (
-          <button key={r.id} className={`lb-row pressable ${r.isMe ? 'me' : ''}`} onClick={() => open(r)}>
-            <span className={`lb-rank ${i < 3 ? 'top top-' + (i + 1) : ''}`}>{i + 1}</span>
-            <span className="lb-avatar" style={{ background: r.accent }}>
-              {r.name[0].toUpperCase()}
-            </span>
-            <span className="lb-id">
-              <span className="lb-name">{r.name}{r.isMe ? ' (You)' : ''}</span>
-              <span className="lb-handle">@{r.handle}</span>
-            </span>
-            <span className="lb-metric">{active.format(active.value(r))}</span>
+        {signedIn && (
+          <button className="icon-round pressable" onClick={() => setFilterOpen(true)} aria-label="Rank by">
+            <FilterIcon size={20} />
           </button>
-        ))}
+        )}
       </div>
+
+      {!signedIn ? (
+        <div className="empty">
+          <div className="empty-title">Sign in to see the leaderboard</div>
+          <div className="empty-sub">It ranks real Watcher accounts — create one in Settings to join.</div>
+        </div>
+      ) : (
+        <>
+          <div className="page-pad" style={{ paddingBottom: 10 }}>
+            <Segmented
+              options={[
+                { key: 'everyone', label: 'Everyone' },
+                { key: 'following', label: 'Following' },
+              ]}
+              value={scope}
+              onChange={setScope}
+            />
+          </div>
+
+          {myRank > 0 && ranked.length > 1 && (
+            <div className="page-pad" style={{ paddingBottom: 8 }}>
+              <div className="lb-you-card">
+                <TrophyIcon size={18} />
+                <span>
+                  You’re <b>#{myRank}</b> of {ranked.length} by {active.label.toLowerCase()}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {rows === undefined ? (
+            <div className="empty">
+              <div className="empty-sub">Loading…</div>
+            </div>
+          ) : rows === null ? (
+            <div className="empty">
+              <div className="empty-title">Couldn’t load the leaderboard</div>
+              <div className="empty-sub">Check your connection and try again.</div>
+            </div>
+          ) : ranked.length <= 1 ? (
+            <>
+              {ranked.length === 1 && <LbList rows={ranked} me={me} active={active} onOpen={(id) => nav(id === me ? '/profile' : `/u/${id}`)} />}
+              <div className="empty">
+                <div className="empty-title">{scope === 'following' ? 'Follow people to compare' : 'It’s just you so far'}</div>
+                <div className="empty-sub">
+                  {scope === 'following'
+                    ? 'Find friends from the search bar in Discover.'
+                    : 'As more people join The Watcher, they’ll show up here.'}
+                </div>
+              </div>
+            </>
+          ) : (
+            <LbList rows={ranked} me={me} active={active} onOpen={(id) => nav(id === me ? '/profile' : `/u/${id}`)} />
+          )}
+        </>
+      )}
       <div style={{ height: 24 }} />
 
       {filterOpen &&
@@ -135,6 +164,40 @@ export function LeaderboardScreen() {
           </div>,
           document.body,
         )}
+    </div>
+  )
+}
+
+function LbList({
+  rows,
+  me,
+  active,
+  onOpen,
+}: {
+  rows: LeaderRow[]
+  me?: string
+  active: (typeof METRICS)[number]
+  onOpen: (id: string) => void
+}) {
+  return (
+    <div className="lb-list">
+      {rows.map((r, i) => {
+        const isMe = r.profile.id === me
+        return (
+          <button key={r.profile.id} className={`lb-row pressable ${isMe ? 'me' : ''}`} onClick={() => onOpen(r.profile.id)}>
+            <span className={`lb-rank ${i < 3 ? 'top top-' + (i + 1) : ''}`}>{i + 1}</span>
+            <UserAvatar profile={r.profile} className="lb-avatar" />
+            <span className="lb-id">
+              <span className="lb-name">
+                {nameOf(r.profile)}
+                {isMe ? ' (You)' : ''}
+              </span>
+              <span className="lb-handle">@{r.profile.username}</span>
+            </span>
+            <span className="lb-metric">{active.format(active.value(r.stats))}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }

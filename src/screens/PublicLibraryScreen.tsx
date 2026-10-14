@@ -1,15 +1,16 @@
-import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { Segmented } from '../ui/primitives'
 import { ChevronLeft } from '../components/Icons'
-import { getUser, type PublicRef } from '../data/users'
+import { getProfileById, getShowcase, type Showcase, type ShowcaseItem, type SocialProfile } from '../data/social'
 import { useScrollMemory } from '../hooks/useScrollMemory'
+import { nameOf } from '../ui/social'
 
 type Kind = 'tv' | 'movies' | 'favorites' | 'list'
 
-/** Read-only poster grid (data-URI posters). No status dots or edit controls. */
-function ReadOnlyGrid({ items, ranked }: { items: PublicRef[]; ranked?: boolean }) {
+function Grid({ items, ranked }: { items: ShowcaseItem[]; ranked?: boolean }) {
+  const nav = useNavigate()
   if (items.length === 0)
     return (
       <div className="empty">
@@ -19,55 +20,56 @@ function ReadOnlyGrid({ items, ranked }: { items: PublicRef[]; ranked?: boolean 
   return (
     <div className="poster-grid">
       {items.map((it, i) => (
-        <div key={it.id} className="poster-thumb" style={{ width: 'auto' }}>
+        <button key={`${it.type}:${it.id}`} className="poster-thumb pressable" style={{ width: 'auto', textAlign: 'left' }} onClick={() => nav(`/${it.type}/${it.id}`)}>
           <div className="poster-thumb-art">
             <SmartImage src={it.poster} alt={it.title} />
             {ranked && <span className="rank-badge">{i + 1}</span>}
           </div>
           <div className="poster-thumb-title">{it.title}</div>
-        </div>
+        </button>
       ))}
     </div>
   )
 }
 
-/**
- * A single read-only browsing screen for another user's TV library, movie
- * library, favorites, or a specific list — same grid language as the owner's
- * screens, with per-screen scroll memory.
- */
+/** Another member's favorites or one of their public lists (from their showcase). */
 export function PublicLibraryScreen({ kind }: { kind: Kind }) {
   const nav = useNavigate()
   const { id = '', listId = '' } = useParams()
-  const user = getUser(id)
   const scrollRef = useScrollMemory<HTMLDivElement>(`pub-${id}-${kind}-${listId}`)
   const [favTab, setFavTab] = useState<'show' | 'movie'>('show')
+  const [data, setData] = useState<{ profile: SocialProfile | null; showcase: Showcase | null } | undefined>()
 
-  if (!user)
-    return (
-      <div className="scroll-area route-fade">
-        <div className="app-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button className="pressable" onClick={() => nav(-1)} aria-label="Back" style={{ color: 'var(--text-dim)' }}>
-              <ChevronLeft size={26} />
-            </button>
-            <h1 style={{ fontSize: 22 }}>Library</h1>
-          </div>
-        </div>
-        <div className="empty">
-          <div className="empty-title">User not found</div>
-        </div>
-      </div>
-    )
+  useEffect(() => {
+    let alive = true
+    Promise.all([getProfileById(id), getShowcase(id)]).then(([profile, showcase]) => alive && setData({ profile, showcase }))
+    return () => {
+      alive = false
+    }
+  }, [id])
 
-  const list = kind === 'list' ? user.lists.find((l) => l.id === listId) : undefined
-  const title =
-    kind === 'tv' ? 'TV Shows' : kind === 'movies' ? 'Movies' : kind === 'favorites' ? 'Favorites' : list?.name ?? 'List'
+  // Full libraries stay private; these old routes just go back to the profile.
+  if (kind === 'tv' || kind === 'movies') return <Navigate to={`/u/${id}`} replace />
+
+  const list = kind === 'list' ? data?.showcase?.lists.find((l) => l.id === listId) : undefined
+  const title = kind === 'favorites' ? 'Favorites' : list?.name ?? 'List'
 
   let body: React.ReactNode
-  if (kind === 'tv') body = <ReadOnlyGrid items={user.shows} />
-  else if (kind === 'movies') body = <ReadOnlyGrid items={user.movies} />
-  else if (kind === 'favorites')
+  if (data === undefined)
+    body = (
+      <div className="empty">
+        <div className="empty-sub">Loading…</div>
+      </div>
+    )
+  else if (!data.showcase)
+    body = (
+      <div className="empty">
+        <div className="empty-title">Not available</div>
+        <div className="empty-sub">This account is private or hasn’t shared anything yet.</div>
+      </div>
+    )
+  else if (kind === 'favorites') {
+    const favs = data.showcase.favorites
     body = (
       <>
         <div className="page-pad" style={{ paddingBottom: 10 }}>
@@ -80,10 +82,10 @@ export function PublicLibraryScreen({ kind }: { kind: Kind }) {
             onChange={setFavTab}
           />
         </div>
-        <ReadOnlyGrid items={favTab === 'show' ? user.favoriteShows : user.favoriteMovies} />
+        <Grid items={favs.filter((f) => f.type === favTab)} />
       </>
     )
-  else body = <ReadOnlyGrid items={list?.items ?? []} ranked={list?.ranked} />
+  } else body = list ? <Grid items={list.items} ranked={list.ranked} /> : <div className="empty"><div className="empty-title">List not found</div></div>
 
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
@@ -94,7 +96,7 @@ export function PublicLibraryScreen({ kind }: { kind: Kind }) {
           </button>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 22, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</h1>
-            <div className="sub">{user.name}</div>
+            {data?.profile && <div className="sub">{nameOf(data.profile)}</div>}
           </div>
         </div>
       </div>

@@ -5,7 +5,7 @@ import { SettingsModal } from '../ui/SettingsModal'
 import { ChevronRight, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, ListIcon, OrderedListIcon, PlusIcon } from '../components/Icons'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
-import { getMyProfile, type SocialProfile } from '../data/social'
+import { getMyProfile, listPendingRequests, type SocialProfile } from '../data/social'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { effectiveSeen } from '../logic/status'
 import { compositionLabel, countRefs } from '../logic/stats'
@@ -25,9 +25,19 @@ export function ProfileScreen() {
 
   // Load my public profile (followers/following) when signed in. Refreshes when
   // the Settings modal closes (username/visibility may have changed).
+  const [requests, setRequests] = useState(0)
   useEffect(() => {
     let alive = true
-    if (signedIn && !settings) getMyProfile().then((p) => alive && setSocial(p))
+    if (signedIn && !settings) {
+      getMyProfile().then((p) => {
+        if (!alive) return
+        setSocial(p)
+        // Adopt the account's display name on a device that doesn't have one yet.
+        const local = useLibrary.getState().profile.displayName
+        if (!local && p?.display_name) useLibrary.getState().updateProfile({ displayName: p.display_name })
+      })
+      listPendingRequests().then((r) => alive && setRequests(r.length))
+    }
     if (!signedIn) setSocial(null)
     return () => {
       alive = false
@@ -62,7 +72,7 @@ export function ProfileScreen() {
   const createList = () => {
     const n = listName.trim()
     if (!n) return
-    lib.addList({ name: n, visibility: 'private', kind: 'mixed', items: [], ranked: listRanked })
+    lib.addList({ name: n, visibility: 'public', kind: 'mixed', items: [], ranked: listRanked })
     setListName('')
     setListRanked(false)
     setNewList(false)
@@ -81,12 +91,17 @@ export function ProfileScreen() {
           <div className="profile-handle">{hm(totalWatched)} watched</div>
           {social && (
             <div className="profile-social-row">
-              <span className="profile-social-stat">
+              <button className="profile-social-stat pressable" onClick={() => nav('/people/me/followers')}>
                 <b>{social.follower_count}</b> followers
-              </span>
-              <span className="profile-social-stat">
+              </button>
+              <button className="profile-social-stat pressable" onClick={() => nav('/people/me/following')}>
                 <b>{social.following_count}</b> following
-              </span>
+              </button>
+              {requests > 0 && (
+                <button className="request-chip pressable" onClick={() => nav('/people/me/requests')}>
+                  {requests} request{requests === 1 ? '' : 's'}
+                </button>
+              )}
             </div>
           )}
         </div>

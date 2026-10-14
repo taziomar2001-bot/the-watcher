@@ -29,7 +29,7 @@ export function AddToListButton({ type, id }: { type: 'show' | 'movie'; id: stri
   const create = () => {
     const name = newName.trim()
     if (!name) return
-    addList({ name, visibility: 'private', kind: 'mixed', items: [ref] })
+    addList({ name, visibility: 'public', kind: 'mixed', items: [ref] })
     setNewName('')
     toast(`Added to “${name}”`)
   }

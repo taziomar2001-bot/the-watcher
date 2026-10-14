@@ -7,7 +7,7 @@ import { downloadLocalBackup } from '../logic/backup'
 import { useToast } from '../store/useToast'
 import { SUPABASE_ENABLED } from '../data/supabase'
 import { claimUsername, updateMyIdentity, getMyProfile, type SocialProfile } from '../data/social'
-import { CheckIcon, CloudIcon, PersonIcon, TvIcon, SettingsIcon } from '../components/Icons'
+import { PersonIcon, TvIcon, SettingsIcon } from '../components/Icons'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -145,9 +145,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const exportBackup = () => {
     try {
       downloadLocalBackup()
-      toast('Backup downloaded')
+      toast('Library exported')
     } catch {
-      toast("Couldn't create the backup file")
+      toast("Couldn't export the library")
     }
   }
 
@@ -158,7 +158,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     try {
       const payload = JSON.parse(await file.text())
       if (payload?.app !== 'the-watcher' || !payload.library) {
-        toast("That doesn't look like a Watcher backup file")
+        toast("That isn't a Watcher library file")
         return
       }
       localStorage.setItem('the-watcher-library-v1', JSON.stringify(payload.library))
@@ -167,7 +167,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       localStorage.setItem('tw-sync-meta', JSON.stringify({ localUpdatedAt: Date.now(), hasSynced: true }))
       location.reload()
     } catch {
-      toast('Could not read that backup file')
+      toast('Could not read that file')
     }
   }
 
@@ -197,11 +197,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="settings-body">
-          {/* ---- Account (top: who you are / sign in / sign out) ---- */}
-          <div className="settings-group-label">
-            <PersonIcon size={15} /> Account
-          </div>
-
+          {/* ---- Account ---- */}
           {signedIn ? (
             <div className="settings-card">
               <div className="account-head">
@@ -214,28 +210,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   <div className="account-email">{sync.email}</div>
                 </div>
               </div>
-              {social && (
-                <div className="account-counts">
-                  <span>
-                    <b>{social.follower_count}</b> followers
-                  </span>
-                  <span>
-                    <b>{social.following_count}</b> following
-                  </span>
-                </div>
-              )}
+              <SyncStatusLine />
               <button className="sync-btn full pressable" onClick={() => setConfirmSignOut(true)}>
                 Sign out
-              </button>
-              <button className="settings-textlink danger" onClick={() => setConfirmDelete(true)}>
-                Delete cloud library
               </button>
             </div>
           ) : SUPABASE_ENABLED ? (
             <div className="settings-card">
-              <div className="settings-muted">
-                Sign in or create a free account to sync your library across devices and connect with other watchers.
-              </div>
+              <div className="account-cta-title">Your library, everywhere</div>
+              <div className="settings-muted">Sign in to sync across devices, get a profile and follow friends.</div>
               <button className="sync-btn primary full pressable" onClick={() => setShowAuth(true)}>
                 Sign in or create account
               </button>
@@ -246,7 +229,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {/* ---- Profile (identity you show others) ---- */}
+          {/* ---- Profile (what others see) ---- */}
           <div className="settings-group-label">
             <PersonIcon size={15} /> Profile
           </div>
@@ -279,7 +262,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               />
             </label>
 
-            {signedIn ? (
+            {signedIn && (
               <>
                 <label className="settings-field">
                   <span>Username</span>
@@ -293,9 +276,11 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                       placeholder="username"
                       onChange={(e) => setUnameEdit(e.target.value.toLowerCase())}
                     />
-                    <button className="sync-btn pressable" disabled={savingUname || unameEdit === (social?.username ?? '')} onClick={saveUsername}>
-                      {savingUname ? '…' : 'Save'}
-                    </button>
+                    {unameEdit !== (social?.username ?? '') && (
+                      <button className="sync-btn pressable" disabled={savingUname} onClick={saveUsername}>
+                        {savingUname ? '…' : 'Save'}
+                      </button>
+                    )}
                   </div>
                 </label>
                 <label className="settings-field">
@@ -303,7 +288,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   <input className="sync-input" value={bioEdit} placeholder="A short line about you" maxLength={160} onChange={(e) => setBioEdit(e.target.value)} onBlur={saveBio} />
                 </label>
                 <div className="settings-field">
-                  <span>Account visibility</span>
+                  <span>Account</span>
                   <div className="vis-choice">
                     <button type="button" className={`vis-opt pressable ${social?.visibility !== 'private' ? 'on' : ''}`} onClick={() => setVisibility('public')}>
                       Public
@@ -314,32 +299,38 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   </div>
                   <div className="vis-hint">
                     {social?.visibility === 'private'
-                      ? 'You approve who can follow you and see your activity.'
-                      : 'Anyone can find your profile and follow you.'}
+                      ? 'You approve who can follow you and see your stats and lists.'
+                      : 'Anyone on The Watcher can see your stats, favorites and public lists.'}
                   </div>
                 </div>
+                <button className="settings-switch-row" onClick={() => lib.updateProfile({ hideFavorites: !lib.profile.hideFavorites })}>
+                  <span>Show favorites on my profile</span>
+                  <span className={`switch ${lib.profile.hideFavorites ? '' : 'on'}`}>
+                    <span className="switch-knob" />
+                  </span>
+                </button>
+                <div className="vis-hint">Lists are shown or hidden one by one from each list’s ••• menu.</div>
               </>
-            ) : (
-              SUPABASE_ENABLED && <div className="settings-muted">Sign in to claim an @username, add a bio, and make your profile public.</div>
             )}
           </div>
 
-          {/* ---- Library & Data ---- */}
+          {/* ---- Your data (quiet, for the rare times you need it) ---- */}
           <div className="settings-group-label">
-            <TvIcon size={15} /> Library &amp; Data
+            <TvIcon size={15} /> Your data
           </div>
-          <div className="settings-card">
-            <div className="settings-muted">
-              Download a complete copy of everything on this device — watch history, ratings, lists, favorites and settings — to a file you keep. You can restore it here at any time.
-            </div>
-            <div className="sync-actions">
-              <button className="sync-btn primary pressable" onClick={exportBackup}>
-                <CheckIcon size={15} /> Download backup
+          <div className="settings-card settings-rows">
+            <button className="settings-row pressable" onClick={exportBackup}>
+              <span>Export library</span>
+              <span className="settings-row-hint">Save a file</span>
+            </button>
+            <button className="settings-row pressable" onClick={() => restoreInput.current?.click()}>
+              <span>Import library file</span>
+            </button>
+            {signedIn && (
+              <button className="settings-row danger pressable" onClick={() => setConfirmDelete(true)}>
+                <span>Delete my library</span>
               </button>
-              <button className="sync-btn pressable" onClick={() => restoreInput.current?.click()}>
-                Restore from file
-              </button>
-            </div>
+            )}
             <input
               ref={restoreInput}
               type="file"
@@ -353,52 +344,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             />
           </div>
 
-          {/* ---- Cloud sync (signed in) ---- */}
-          {signedIn && (
-            <>
-              <div className="settings-group-label">
-                <CloudIcon size={15} /> Cloud sync
-              </div>
-              <div className="settings-card">
-                <div className="settings-row-flat">
-                  <span>Status</span>
-                  <span className="sync-badge">{sync.pendingWrite ? 'Pending' : sync.syncReady ? 'On' : sync.error || sync.remoteNewer ? 'Needs attention' : 'Checking'}</span>
-                </div>
-                <div className="settings-row-flat">
-                  <span>Last synced</span>
-                  <b>{timeAgo(sync.lastSyncedAt)}</b>
-                </div>
-                {sync.pendingWrite && !sync.error && <div className="sync-warn">Sync pending — will retry automatically.</div>}
-                {sync.error && (
-                  <div className="sync-error" style={{ userSelect: 'text' }}>
-                    Sync error: {sync.error}
-                  </div>
-                )}
-                {sync.remoteNewer && (
-                  <div className="sync-warn">
-                    This device and your cloud account have different libraries. Download a backup before choosing which copy to keep.
-                    <button onClick={() => sync.restoreNow()}>Keep cloud copy</button>
-                    <button onClick={() => sync.backupNow()}>Keep device copy</button>
-                  </div>
-                )}
-                {!sync.syncReady && !sync.remoteNewer && (
-                  <button className="sync-btn pressable" onClick={() => sync.retrySync()}>Retry cloud check</button>
-                )}
-                {sync.syncReady && !sync.remoteNewer && (
-                  <div className="sync-actions">
-                    <button className="sync-btn primary pressable" onClick={() => sync.backupNow()}>
-                      <CheckIcon size={15} /> Back up now
-                    </button>
-                    <button className="sync-btn pressable" onClick={() => sync.restoreNow()}>
-                      Restore
-                    </button>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          <div className="settings-note">The Watcher · your library lives on this device and, when signed in, syncs to your private cloud.</div>
+          <div className="settings-note">
+            {signedIn ? 'Your library saves to your private account automatically.' : 'Your library is saved on this device.'}
+          </div>
         </div>
       </div>
 
@@ -415,7 +363,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
             <div className="confirm-title">Sign out?</div>
-            <div className="confirm-body">Your latest changes will be backed up, then this device's library will be cleared. If the backup fails, you will stay signed in.</div>
+            <div className="confirm-body">Your library is saved in your account. Signing out removes it from this device until you sign in again.</div>
             <div className="confirm-actions">
               <button className="sync-btn ghost pressable" onClick={() => setConfirmSignOut(false)}>
                 Cancel
@@ -444,9 +392,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         >
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
-            <div className="confirm-title">Delete cloud library?</div>
+            <div className="confirm-title">Delete your library?</div>
             <div className="confirm-body">
-              This deletes your Watcher library from the cloud and this device, then signs you out. Your login and social profile remain. Download a backup first if you may want this library later.
+              This permanently deletes your watch history, ratings and lists from your account and this device. Your login and profile stay. Export a copy first if you might want it back.
             </div>
             <div className="confirm-actions">
               <button className="sync-btn ghost pressable" onClick={() => setConfirmDelete(false)}>
@@ -470,16 +418,16 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         >
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
-            <div className="confirm-title">Restore from backup?</div>
+            <div className="confirm-title">Import this file?</div>
             <div className="confirm-body">
-              This replaces the library currently on this device with the contents of “{pendingRestore.name}”, then reloads. Download a backup first if you’re unsure.
+              This replaces the library on this device with “{pendingRestore.name}”. When you’re signed in, you’ll then choose whether it replaces your account’s library too.
             </div>
             <div className="confirm-actions">
               <button className="sync-btn ghost pressable" onClick={() => setPendingRestore(null)}>
                 Cancel
               </button>
               <button className="sync-btn pressable" onClick={doRestore}>
-                Restore
+                Import
               </button>
             </div>
           </div>
@@ -487,5 +435,41 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       )}
     </div>,
     document.body,
+  )
+}
+
+/** One quiet line: is the library saved? Only asks for action when it must. */
+function SyncStatusLine() {
+  const sync = useSync()
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 30000)
+    return () => clearInterval(t)
+  }, [])
+  let tone: 'ok' | 'wait' | 'warn' = 'ok'
+  let text = `Synced · ${timeAgo(sync.lastSyncedAt)}`
+  if (sync.remoteNewer) {
+    tone = 'warn'
+    text = 'Choose which library to keep'
+  } else if (sync.error) {
+    tone = 'warn'
+    text = 'Sync paused — your changes are safe on this device'
+  } else if (!sync.syncReady) {
+    tone = 'wait'
+    text = 'Connecting…'
+  } else if (sync.pendingWrite) {
+    tone = 'wait'
+    text = 'Saving when you’re back online'
+  } else if (!sync.lastSyncedAt) text = 'Synced'
+  return (
+    <div className={`sync-line ${tone}`}>
+      <span className="sync-dot" />
+      <span>{text}</span>
+      {tone === 'warn' && !sync.remoteNewer && (
+        <button className="sync-line-action" onClick={() => void sync.retrySync()}>
+          Retry
+        </button>
+      )}
+    </div>
   )
 }

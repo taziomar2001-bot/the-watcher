@@ -1,10 +1,29 @@
 import { useState } from 'react'
 import { downloadLocalBackup } from '../logic/backup'
-import { useSync } from '../logic/sync'
+import { summarize, useSync, type LibrarySummary } from '../logic/sync'
+import { useLibrary } from '../store/useLibrary'
 import { useToast } from '../store/useToast'
 
+function ago(ms?: number) {
+  if (!ms) return ''
+  const s = Math.floor((Date.now() - ms) / 1000)
+  if (s < 60) return 'updated just now'
+  if (s < 3600) return `updated ${Math.floor(s / 60)} min ago`
+  if (s < 86400) return `updated ${Math.floor(s / 3600)} h ago`
+  return `updated ${Math.floor(s / 86400)} days ago`
+}
+const sizeLabel = (s: LibrarySummary) =>
+  s.shows + s.movies === 0 ? 'Empty' : `${s.shows.toLocaleString()} shows · ${s.movies.toLocaleString()} movies`
+
+/**
+ * Shown only while signing in on a device whose library can't simply be used:
+ * while we check the account (a quiet loading screen), when the account can't
+ * be reached, or when the device and account hold different libraries.
+ */
 export function SyncGate() {
   const sync = useSync()
+  const libraryShows = useLibrary((s) => s.libraryShows)
+  const libraryMovies = useLibrary((s) => s.libraryMovies)
   const toast = useToast((s) => s.show)
   const [working, setWorking] = useState(false)
   const [confirmEmpty, setConfirmEmpty] = useState(false)
@@ -18,66 +37,90 @@ export function SyncGate() {
       setWorking(false)
     }
   }
-
-  const backup = () => {
+  const saveCopy = () => {
     try {
       downloadLocalBackup()
-      toast('Backup downloaded')
+      toast('Saved a copy of this device’s library')
     } catch {
-      toast("Couldn't create the backup file")
+      toast("Couldn't save a copy")
     }
   }
+
+  // 1. Still checking — no decision needed, so no alarming text.
+  if (!sync.remoteNewer && !sync.error)
+    return (
+      <main className="sync-gate" aria-busy="true">
+        <div className="sync-gate-card" style={{ textAlign: 'center' }}>
+          <div className="welcome-logo">W</div>
+          <div className="sync-gate-progress" role="status">
+            Loading your library…
+          </div>
+        </div>
+      </main>
+    )
+
+  // 2. Couldn't reach the account.
+  if (!sync.remoteNewer)
+    return (
+      <main className="sync-gate" aria-labelledby="sync-gate-title">
+        <div className="sync-gate-card">
+          <h1 id="sync-gate-title">Can’t reach your account</h1>
+          <p>Check your connection and try again. Nothing on this device has been changed.</p>
+          {sync.email && <div className="sync-gate-account">Signed in as {sync.email}</div>}
+          <button className="sync-btn full primary pressable" disabled={busy} onClick={() => void run(sync.retrySync)}>
+            Try again
+          </button>
+          <button className="auth-link" onClick={saveCopy}>
+            Save a copy of this device’s library
+          </button>
+        </div>
+      </main>
+    )
+
+  // 3. Device and account differ: pick one.
+  const local = summarize({ libraryShows, libraryMovies })
+  const remote = sync.remoteSummary ?? { shows: 0, movies: 0 }
+  const accountEmpty = !!sync.cloudEmpty
 
   return (
     <main className="sync-gate" aria-labelledby="sync-gate-title">
       <div className="sync-gate-card">
-        <div className="sync-gate-eyebrow">THE WATCHER · LIBRARY CHECK</div>
-        <h1 id="sync-gate-title">Check this device’s library</h1>
+        <h1 id="sync-gate-title">{sync.canKeepDeviceCopy ? 'Which library should we use?' : 'Use your account’s library'}</h1>
         <p>
-          {sync.remoteNewer
-            ? 'This device and your cloud account have different libraries. Choose which copy to keep.'
-            : sync.error
-              ? 'We could not verify which account owns this device’s library. It stays hidden until the cloud check succeeds.'
-              : 'Checking which account owns this device’s library before showing it.'}
+          {sync.canKeepDeviceCopy
+            ? 'This device and your account have different libraries. The one you pick replaces the other.'
+            : 'This device has a library from a different account. It will be replaced by yours.'}
         </p>
         {sync.email && <div className="sync-gate-account">Signed in as {sync.email}</div>}
-        {sync.error && <div className="sync-error" role="alert">{sync.error}</div>}
-        <button className="sync-btn full pressable" disabled={busy} onClick={backup}>
-          Download device backup
+
+        <div className="choice-list">
+          {accountEmpty && !confirmEmpty ? (
+            <button className="choice-card pressable" disabled={busy} onClick={() => setConfirmEmpty(true)}>
+              <span className="choice-title">Your account</span>
+              <span className="choice-sub">Empty — start fresh</span>
+            </button>
+          ) : (
+            <button className={`choice-card pressable ${accountEmpty ? 'danger' : ''}`} disabled={busy} onClick={() => void run(sync.restoreNow)}>
+              <span className="choice-title">{accountEmpty ? 'Yes, start fresh' : 'Your account'}</span>
+              <span className="choice-sub">
+                {accountEmpty ? 'This device’s library will be cleared' : [sizeLabel(remote), ago(remote.updatedAt)].filter(Boolean).join(' · ')}
+              </span>
+            </button>
+          )}
+          {sync.canKeepDeviceCopy && (
+            <button className="choice-card pressable" disabled={busy} onClick={() => void run(sync.backupNow)}>
+              <span className="choice-title">This device</span>
+              <span className="choice-sub">{sizeLabel(local)} · saved to your account</span>
+            </button>
+          )}
+        </div>
+
+        <button className="auth-link" onClick={saveCopy}>
+          Save a copy of this device’s library first
         </button>
-        {sync.remoteNewer ? (
-          <div className="sync-gate-actions">
-            {sync.cloudEmpty && !confirmEmpty ? (
-              <button className="sync-btn full primary pressable" disabled={busy} onClick={() => setConfirmEmpty(true)}>
-                Keep cloud copy (empty)
-              </button>
-            ) : (
-              <button className="sync-btn full primary pressable" disabled={busy} onClick={() => void run(sync.restoreNow)}>
-                {sync.cloudEmpty ? 'Yes, clear this device' : 'Keep cloud copy'}
-              </button>
-            )}
-            {sync.canKeepDeviceCopy && (
-              <button className="sync-btn full pressable" disabled={busy} onClick={() => void run(sync.backupNow)}>
-                Keep device copy
-              </button>
-            )}
-          </div>
-        ) : sync.error ? (
-          <button className="sync-btn full primary pressable" disabled={busy} onClick={() => void run(sync.retrySync)}>
-            Retry cloud check
-          </button>
-        ) : (
-          <div className="sync-gate-progress" role="status">Checking cloud library…</div>
+        {accountEmpty && !sync.canKeepDeviceCopy && (
+          <div className="sync-gate-note">If this device’s library is yours, save a copy, then use Settings → Import library file.</div>
         )}
-        {sync.remoteNewer && <div className="sync-gate-note">
-          {sync.canKeepDeviceCopy
-            ? 'Download a backup first if you may need both copies later.'
-            : 'The device copy belongs to another account and cannot be added to this one.'}
-        </div>}
-        {sync.remoteNewer && sync.cloudEmpty && <div className="sync-gate-note" role="alert">
-          This account’s cloud library is empty. Keeping the cloud copy clears the library on this device.
-          {confirmEmpty ? ' Download the backup first — if it is yours, you can bring it back later from Settings → Library & Data → Restore from file.' : ''}
-        </div>}
       </div>
     </main>
   )

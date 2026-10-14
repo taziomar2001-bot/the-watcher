@@ -1,13 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { Segmented, SearchField, SectionHeader } from '../ui/primitives'
 import { PosterThumb } from '../ui/cards'
-import { HeartIcon, TrophyIcon, ChevronRight } from '../components/Icons'
+import { HeartIcon, TrophyIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { discoverShows, discoverMovies, search as searchCatalog } from '../data/catalog'
-import { searchUsers } from '../data/users'
+import { searchProfiles, type SocialProfile } from '../data/social'
+import { useSync } from '../logic/sync'
+import { UserRow } from '../ui/social'
 import { useLibrary } from '../store/useLibrary'
 import { useToggleFavorite } from '../logic/favorites'
 import { toLibraryItem } from '../utils/media'
@@ -42,7 +44,25 @@ export function DiscoverScreen() {
 
   // Universal search — both movies AND shows, regardless of the toggle.
   const { data: results } = useAsync(() => searchCatalog(q), [q])
-  const userResults = q.trim() ? searchUsers(q) : []
+  // Real members only (Supabase profiles with a claimed @username), debounced.
+  const signedIn = useSync((s) => s.status === 'signedIn')
+  const me = useSync((s) => s.userId)
+  const [userResults, setUserResults] = useState<SocialProfile[]>([])
+  useEffect(() => {
+    const term = q.trim()
+    if (!term || !signedIn) {
+      setUserResults([])
+      return
+    }
+    let alive = true
+    const t = setTimeout(() => {
+      searchProfiles(term).then((r) => alive && setUserResults(r.filter((p) => p.id !== me)))
+    }, 300)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [q, signedIn, me])
   const searching = q.trim().length > 0
 
   const following = (m: Media) => (m.type === 'show' ? !!lib.watchlistShows[m.id] : !!lib.watchlistMovies[m.id])
@@ -92,16 +112,7 @@ export function DiscoverScreen() {
               <SectionHeader title="People" />
               <div className="card-list" style={{ marginTop: 2, marginBottom: 6 }}>
                 {userResults.map((u) => (
-                  <button key={u.id} className="user-row pressable" onClick={() => nav(`/u/${u.id}`)}>
-                    <span className="user-avatar" style={{ background: u.accent }}>
-                      {u.name[0].toUpperCase()}
-                    </span>
-                    <span className="user-info">
-                      <span className="user-name">{u.name}</span>
-                      <span className="user-handle">@{u.handle}</span>
-                    </span>
-                    <ChevronRight size={20} className="user-chevron" />
-                  </button>
+                  <UserRow key={u.id} profile={u} onOpen={() => nav(`/u/${u.id}`)} />
                 ))}
               </div>
             </>
