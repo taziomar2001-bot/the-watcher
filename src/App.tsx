@@ -53,7 +53,7 @@ export default function App() {
   useStatsSync()
   const syncStatus = useSync((s) => s.status)
   const showSyncGate = useSync((s) =>
-    (s.status === 'signedIn' || s.status === 'busy') && (!!s.remoteNewer || s.mayShowLocal === false),
+    (s.status === 'signedIn' || s.status === 'busy') && s.mayShowLocal === false,
   )
   const showSignedOutLibraryGate = useSync((s) => s.status === 'signedOut' && s.mayShowLocal === false)
   const [onboarded, setOnboarded] = useState(readOnboarded)

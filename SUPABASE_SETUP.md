@@ -1,49 +1,55 @@
 # Supabase setup for The Watcher
 
-The private library stays in one owner-only JSON row in `public.library`.
-Social profiles, follows, and aggregate stats live in separate tables.
+Each account's library is one owner-only JSON row in `public.library` — the
+real, permanent copy. Devices keep a local copy so the app opens instantly and
+works offline, and sync it automatically. Social profiles, follows and stats
+live in separate tables.
 
-## Before changing the database
+## SQL files
 
-1. In the app, open **Settings → Your data → Export library** on the
-   device that has your library. Keep the downloaded file somewhere safe.
-2. Confirm you are using the intended Supabase project.
-3. Run the SQL files in order in Supabase's SQL Editor:
-   - `supabase/migration.sql`
-   - `supabase/002_social_foundation.sql`
-   - `supabase/003_social_permissions.sql`
-   - `supabase/004_social_profiles.sql`
+Run these in order in Supabase → SQL Editor (skip any you've already run; all
+are safe to re-run and none restructure or delete library data):
 
-Run any files you haven't run yet, in order. All scripts are designed to be
-rerun. The third script narrows direct
-profile and follow-row edits; it does not restructure or delete library data.
-Do not use the older single-table SQL snippet from a previous copy of this
-setup guide.
+1. `supabase/migration.sql`
+2. `supabase/002_social_foundation.sql`
+3. `supabase/003_social_permissions.sql`
+4. `supabase/004_social_profiles.sql`
+5. `supabase/005_library_history.sql` — automatic cloud backups
+
+## Backups
+
+There is nothing to back up by hand. `005` makes the server keep copies of
+each library automatically (at most every 6 hours, plus a copy before any save
+that would shrink it by more than 30%), 20 per account. To inspect them:
+
+```sql
+select user_id, saved_at, kept_at, reason, length(data::text) as size
+from public.library_history order by kept_at desc;
+```
+
+To restore one (replace the id), run as the project owner in the SQL Editor:
+
+```sql
+update public.library l set data = h.data
+from public.library_history h
+where h.id = 123 and l.user_id = h.user_id;
+```
+
+Devices pick up the restored library the next time the app opens.
+
+## How sync behaves
+
+- The account's cloud library always wins on sign-in, unless that device has
+  the same account's own unsynced changes — then they're saved (and merged if
+  the cloud also changed meanwhile). No "which copy" questions.
+- A library created on a device without an account becomes the account's
+  library on first sign-in if the account is empty.
+- A device copy from a different account is never shown or uploaded.
+- Offline edits are kept on the device and uploaded on reconnect.
 
 ## Configure the app
 
-Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the app's build
-environment. The anon key is public; row-level security protects each user's
-data. The TV Time export is not shipped in the public website. The creator's
-existing library remains in their own cloud row; use a private backup file if
-it ever needs to be restored. Rebuild or redeploy after changing these values.
-
-## Verify with two accounts
-
-1. Sign in on the device that holds the owner's library. If the cloud account
-   is empty, choose **Keep device copy** to upload it. Check that cloud sync
-   completes, and keep the downloaded backup until you have verified it.
-2. Sign out, then create a second test account. Its library should be empty.
-3. Check that the second account cannot see or update the owner's library.
-4. Check that a private profile's follow request stays pending until accepted.
-5. Check that a signed-in user cannot directly change username or follower
-   counts through the `profiles` table, or rewrite IDs on a `follows` row.
-
-If device and cloud libraries differ, the app asks which one to keep. Download
-a backup before choosing. A failed cloud read or save should leave the device
-library intact and prevent sign-out until the sync issue is resolved.
-When signing into a different account on a device with existing data, the
-library-check screen hides that data until the cloud check succeeds. A known
-previous account's copy cannot be uploaded into the new account. A device
-library already verified for the same account remains visible during a
-temporary cloud outage, with syncing paused.
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the build environment
+(Netlify). The anon key is public; row-level security protects each user's
+data. Google sign-in: enable the Google provider in Supabase and set the
+Google Cloud redirect URI to `https://<project-ref>.supabase.co/auth/v1/callback`.

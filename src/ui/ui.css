@@ -2009,17 +2009,6 @@ body.modal-open .scroll-area { overflow: hidden !important; }
 .pw-row .sync-input { width: 100%; padding-right: 64px; }
 .pw-toggle { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--text-mute); font-size: 13px; font-weight: 700; padding: 8px; }
 
-/* ---- Library choice (sync gate) ---- */
-.choice-list { display: grid; gap: 10px; margin: 4px 0 6px; }
-.choice-card {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
-  width: 100%; padding: 14px 16px; text-align: left;
-  border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border);
-}
-.choice-card:disabled { opacity: 0.6; }
-.choice-card.danger { border-color: color-mix(in srgb, var(--red) 55%, transparent); }
-.choice-title { font-weight: 800; font-size: 16px; color: #fff; }
-.choice-sub { font-size: 13px; color: var(--text-dim); }
 .sync-gate .welcome-logo { margin: 0 auto 14px; }
 
 /* ---- Settings: compact rows + sync status ---- */

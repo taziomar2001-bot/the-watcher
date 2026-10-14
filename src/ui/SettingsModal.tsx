@@ -3,11 +3,10 @@ import { createPortal } from 'react-dom'
 import { AuthScreen } from './AuthScreen'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
-import { downloadLocalBackup } from '../logic/backup'
 import { useToast } from '../store/useToast'
 import { SUPABASE_ENABLED } from '../data/supabase'
 import { claimUsername, updateMyIdentity, getMyProfile, type SocialProfile } from '../data/social'
-import { PersonIcon, TvIcon, SettingsIcon } from '../components/Icons'
+import { PersonIcon, SettingsIcon } from '../components/Icons'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -47,10 +46,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const sync = useSync()
   const toast = useToast((s) => s.show)
   const fileInput = useRef<HTMLInputElement>(null)
-  const restoreInput = useRef<HTMLInputElement>(null)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [pendingRestore, setPendingRestore] = useState<File | null>(null)
   const [showAuth, setShowAuth] = useState(false)
 
   // Public (Supabase) profile, loaded when signed in.
@@ -141,36 +138,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  // ---- Local backup / restore (a verifiable, in-hand rollback path) ----
-  const exportBackup = () => {
-    try {
-      downloadLocalBackup()
-      toast('Library exported')
-    } catch {
-      toast("Couldn't export the library")
-    }
-  }
-
-  const doRestore = async () => {
-    const file = pendingRestore
-    setPendingRestore(null)
-    if (!file) return
-    try {
-      const payload = JSON.parse(await file.text())
-      if (payload?.app !== 'the-watcher' || !payload.library) {
-        toast("That isn't a Watcher library file")
-        return
-      }
-      localStorage.setItem('the-watcher-library-v1', JSON.stringify(payload.library))
-      // A file can come from another account or an older device. Reconcile it
-      // explicitly instead of trusting its old sync timestamp or owner.
-      localStorage.setItem('tw-sync-meta', JSON.stringify({ localUpdatedAt: Date.now(), hasSynced: true }))
-      location.reload()
-    } catch {
-      toast('Could not read that file')
-    }
-  }
-
   const doDelete = async () => {
     if (!await sync.deleteCloudData()) return
     try {
@@ -213,6 +180,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <SyncStatusLine />
               <button className="sync-btn full pressable" onClick={() => setConfirmSignOut(true)}>
                 Sign out
+              </button>
+              <button className="settings-textlink danger" onClick={() => setConfirmDelete(true)}>
+                Delete my library
               </button>
             </div>
           ) : SUPABASE_ENABLED ? (
@@ -314,36 +284,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
 
-          {/* ---- Your data (quiet, for the rare times you need it) ---- */}
-          <div className="settings-group-label">
-            <TvIcon size={15} /> Your data
-          </div>
-          <div className="settings-card settings-rows">
-            <button className="settings-row pressable" onClick={exportBackup}>
-              <span>Export library</span>
-              <span className="settings-row-hint">Save a file</span>
-            </button>
-            <button className="settings-row pressable" onClick={() => restoreInput.current?.click()}>
-              <span>Import library file</span>
-            </button>
-            {signedIn && (
-              <button className="settings-row danger pressable" onClick={() => setConfirmDelete(true)}>
-                <span>Delete my library</span>
-              </button>
-            )}
-            <input
-              ref={restoreInput}
-              type="file"
-              accept="application/json,.json"
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) setPendingRestore(f)
-                e.target.value = ''
-              }}
-            />
-          </div>
-
           <div className="settings-note">
             {signedIn ? 'Your library saves to your private account automatically.' : 'Your library is saved on this device.'}
           </div>
@@ -394,7 +334,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <div className="sheet-handle" />
             <div className="confirm-title">Delete your library?</div>
             <div className="confirm-body">
-              This permanently deletes your watch history, ratings and lists from your account and this device. Your login and profile stay. Export a copy first if you might want it back.
+              This deletes your watch history, ratings and lists from your account and this device. Your login and profile stay.
             </div>
             <div className="confirm-actions">
               <button className="sync-btn ghost pressable" onClick={() => setConfirmDelete(false)}>
@@ -408,31 +348,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      {pendingRestore && (
-        <div
-          className="sheet-backdrop"
-          onClick={(e) => {
-            e.stopPropagation()
-            setPendingRestore(null)
-          }}
-        >
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="confirm-title">Import this file?</div>
-            <div className="confirm-body">
-              This replaces the library on this device with “{pendingRestore.name}”. When you’re signed in, you’ll then choose whether it replaces your account’s library too.
-            </div>
-            <div className="confirm-actions">
-              <button className="sync-btn ghost pressable" onClick={() => setPendingRestore(null)}>
-                Cancel
-              </button>
-              <button className="sync-btn pressable" onClick={doRestore}>
-                Import
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>,
     document.body,
   )
@@ -446,26 +361,20 @@ function SyncStatusLine() {
     const t = setInterval(() => tick((n) => n + 1), 30000)
     return () => clearInterval(t)
   }, [])
-  let tone: 'ok' | 'wait' | 'warn' = 'ok'
+  let tone: 'ok' | 'wait' = 'ok'
   let text = `Synced · ${timeAgo(sync.lastSyncedAt)}`
-  if (sync.remoteNewer) {
-    tone = 'warn'
-    text = 'Choose which library to keep'
-  } else if (sync.error) {
-    tone = 'warn'
-    text = 'Sync paused — your changes are safe on this device'
+  if (sync.pendingWrite || (sync.error && !sync.syncReady)) {
+    tone = 'wait'
+    text = 'Offline · changes sync when you’re back online'
   } else if (!sync.syncReady) {
     tone = 'wait'
     text = 'Connecting…'
-  } else if (sync.pendingWrite) {
-    tone = 'wait'
-    text = 'Saving when you’re back online'
   } else if (!sync.lastSyncedAt) text = 'Synced'
   return (
     <div className={`sync-line ${tone}`}>
       <span className="sync-dot" />
       <span>{text}</span>
-      {tone === 'warn' && !sync.remoteNewer && (
+      {tone === 'wait' && sync.error && (
         <button className="sync-line-action" onClick={() => void sync.retrySync()}>
           Retry
         </button>

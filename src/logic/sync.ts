@@ -147,16 +147,19 @@ function hasTvTimeImportData(d: Snap): boolean {
   return hasEntries(d.importedShowIds) || hasEntries(d.importedMovieKeys)
 }
 interface Meta {
+  /** Server time of the cloud copy this device last matched (saved or loaded). */
   localUpdatedAt: number
   hasSynced?: boolean
   userId?: string
+  /** This account changed the library on this device and the cloud doesn't have it yet. */
+  dirty?: boolean
 }
 const META_KEY = 'tw-sync-meta'
 const LOCAL_OWNER_KEY = 'tw-local-library-owner'
 function getMeta(): Meta {
   try {
     const p = JSON.parse(localStorage.getItem(META_KEY) || '{}') as Partial<Meta>
-    return { localUpdatedAt: p.localUpdatedAt ?? 0, hasSynced: p.hasSynced, userId: p.userId }
+    return { localUpdatedAt: p.localUpdatedAt ?? 0, hasSynced: p.hasSynced, userId: p.userId, dirty: p.dirty }
   } catch {
     return { localUpdatedAt: 0 }
   }
@@ -178,16 +181,6 @@ function localOwnerId(): string | undefined {
   }
 }
 
-export interface LibrarySummary {
-  shows: number
-  movies: number
-  updatedAt?: number
-}
-export function summarize(d: Record<string, unknown>, updatedAt?: number): LibrarySummary {
-  const n = (v: unknown) => (v && typeof v === 'object' ? Object.keys(v as object).length : 0)
-  return { shows: n(d.libraryShows), movies: n(d.libraryMovies), updatedAt }
-}
-
 type Status = 'disabled' | 'signedOut' | 'signedIn' | 'busy'
 
 interface SyncState {
@@ -195,14 +188,8 @@ interface SyncState {
   email?: string
   userId?: string
   lastSyncedAt?: number
-  remoteNewer?: boolean
   syncReady?: boolean
   mayShowLocal?: boolean
-  canKeepDeviceCopy?: boolean
-  /** The signed-in account's cloud library is empty, so "keep cloud" clears this device. */
-  cloudEmpty?: boolean
-  /** Size of the account's cloud library, shown when choosing between copies. */
-  remoteSummary?: LibrarySummary
   pendingWrite?: boolean
   error?: string
   signIn: (email: string, password: string) => Promise<void>
@@ -213,8 +200,6 @@ interface SyncState {
   /** Opened from a password-reset email: ask for a new password once signed in. */
   recovering?: boolean
   signOut: () => Promise<void>
-  backupNow: () => Promise<void>
-  restoreNow: () => Promise<void>
   retrySync: () => Promise<void>
   deleteCloudData: () => Promise<boolean>
 }
@@ -307,8 +292,8 @@ export const useSync = create<SyncState>((set) => ({
 
   signOut: async () => {
     if (!supabase || !currentUserId) return
-    if (!useSync.getState().syncReady || useSync.getState().remoteNewer) {
-      set({ error: 'Resolve the cloud sync issue before signing out. Your library is still on this device.' })
+    if (!useSync.getState().syncReady) {
+      useToast.getState().show('Connect to the internet to sign out, so your latest changes are saved first.', { duration: 4000 })
       return
     }
     set({ status: 'busy', error: undefined })
@@ -322,7 +307,7 @@ export const useSync = create<SyncState>((set) => ({
     }
     if (!saved) {
       set({ status: 'signedIn' })
-      useToast.getState().show("Sign-out paused: your latest changes are not backed up.", { duration: 5000 })
+      useToast.getState().show('Couldn’t save your latest changes, so you’re still signed in. Try again in a moment.', { duration: 5000 })
       return
     }
     clearTimeout(pushTimer)
@@ -334,10 +319,6 @@ export const useSync = create<SyncState>((set) => ({
       return
     }
     currentUserId = null
-    if (lastSavedJson !== JSON.stringify(snapshot())) {
-      useToast.getState().show('Signed out, but a change made during sign-out remains on this device. Download a backup before switching accounts.', { duration: 7000 })
-      return
-    }
     clearLocalAccount()
     location.reload()
   },
@@ -371,51 +352,11 @@ export const useSync = create<SyncState>((set) => ({
     }
     const { error: signOutError } = await supabase.auth.signOut()
     if (signOutError) {
-      set({ status: 'signedIn', syncReady: false, remoteNewer: true, error: signOutError.message })
+      set({ status: 'signedIn', syncReady: false, error: signOutError.message })
       return false
     }
     currentUserId = null
     return true
-  },
-
-  backupNow: async () => {
-    const ownerId = localOwnerId()
-    if (currentUserId && (ownerId ? ownerId !== currentUserId : hasTvTimeImportData(snapshot()))) {
-      set({ error: 'This device library belongs to a different account. Keep your cloud copy instead.' })
-      return
-    }
-    if (!useSync.getState().syncReady && !useSync.getState().remoteNewer) {
-      set({ error: 'Check the cloud connection before backing up.' })
-      return
-    }
-    set({ status: 'busy' })
-    const ok = await pushNow()
-    set({ status: 'signedIn', ...(ok ? { remoteNewer: false, syncReady: true, mayShowLocal: true } : {}) })
-  },
-
-  restoreNow: async () => {
-    set({ status: 'busy' })
-    try {
-      if (!await download()) {
-        if (!useSync.getState().remoteNewer || !currentUserId) {
-          set({ status: 'signedIn', error: 'No cloud library was found for this account.' })
-          return
-        }
-        // Explicitly choosing the empty cloud account discards this device copy.
-        applyingRemote = true
-        try {
-          hydrate({})
-          lastJson = JSON.stringify(snapshot())
-          lastSavedJson = lastJson
-          setMeta({ localUpdatedAt: Date.now(), hasSynced: true, userId: currentUserId })
-        } finally {
-          applyingRemote = false
-        }
-      }
-      set({ status: 'signedIn', remoteNewer: false, syncReady: true, mayShowLocal: true, pendingWrite: false, error: undefined })
-    } catch (e) {
-      set({ status: 'signedIn', error: errorMessage(e) })
-    }
   },
 
   retrySync: async () => {
@@ -423,6 +364,11 @@ export const useSync = create<SyncState>((set) => ({
   },
 
 }))
+
+/** Did this device's account change its library without the cloud getting it yet? */
+export function hasUnsavedDeviceChanges(): boolean {
+  return !!getMeta().dirty
+}
 
 /** Remove the library saved on this device (explicit user choice, signed out). */
 export function forgetDeviceLibrary() {
@@ -475,18 +421,18 @@ async function pushNow(): Promise<boolean> {
       if (currentUserId !== userId) return false
       if (error) throw error
       const ms = Date.parse(saved.updated_at)
-      setMeta({ localUpdatedAt: ms, hasSynced: true, userId })
       lastSavedJson = json
       lastJson = json
       clearTimeout(pushRetry)
       const changedAgain = json !== JSON.stringify(snapshot())
+      setMeta({ localUpdatedAt: ms, hasSynced: true, userId, dirty: changedAgain })
       useSync.setState({ lastSyncedAt: ms, error: undefined, pendingWrite: changedAgain })
       if (changedAgain) pushTimer = setTimeout(() => void pushNow(), 1500)
       return true
     } catch (e) {
       if (currentUserId !== userId) return false
+      // Quietly retry; the change is kept on this device (marked dirty) meanwhile.
       useSync.setState({ error: errorMessage(e), pendingWrite: true })
-      useToast.getState().show("Couldn't back up to the cloud — will retry", { duration: 4000 })
       clearTimeout(pushRetry)
       if (useSync.getState().syncReady) pushRetry = setTimeout(() => void pushNow(), 15000)
       return false
@@ -512,107 +458,132 @@ async function fetchRemote(userId: string): Promise<{ data: Snap; ms: number } |
   return { data: (data.data ?? {}) as Snap, ms: Date.parse(data.updated_at) }
 }
 
-async function download(): Promise<boolean> {
-  if (!currentUserId) return false
-  const userId = currentUserId
-  const remote = await fetchRemote(userId)
-  if (!remote || currentUserId !== userId) return false
-  applyRemote(remote, userId)
-  return true
-}
-
 function applyRemote(remote: { data: Snap; ms: number }, userId: string) {
   applyingRemote = true
   try {
     hydrate(remote.data)
     lastJson = JSON.stringify(snapshot())
     lastSavedJson = lastJson
-    setMeta({ localUpdatedAt: remote.ms, hasSynced: true, userId })
+    setMeta({ localUpdatedAt: remote.ms, hasSynced: true, userId, dirty: false })
   } finally {
     applyingRemote = false
   }
   useSync.setState({ lastSyncedAt: remote.ms })
 }
 
-// Never infer "no cloud library" from a failed read. Any populated device
-// library needs an explicit choice before it enters an empty cloud account,
-// since its last owner may be somebody else.
+/**
+ * Combine two copies of the library when both changed (e.g. two devices edited
+ * while one was offline). Nothing anyone added is lost: per-title maps are
+ * unioned (this device wins where both set the same key), lists are merged by
+ * id. The only trade-off: something removed on one side while the other side
+ * still had it comes back.
+ */
+function mergeLibraries(remote: Snap, local: Snap): Snap {
+  const out: Snap = {}
+  for (const k of SYNC_KEYS) {
+    const r = remote[k]
+    const l = local[k]
+    if (k === 'lists') {
+      const byId = new Map<string, unknown>()
+      for (const x of (Array.isArray(r) ? r : []) as { id: string }[]) byId.set(x.id, x)
+      for (const x of (Array.isArray(l) ? l : []) as { id: string }[]) byId.set(x.id, x)
+      out[k] = [...byId.values()]
+    } else if (r && l && typeof r === 'object' && typeof l === 'object' && !Array.isArray(r)) {
+      out[k] = { ...(r as object), ...(l as object) }
+    } else {
+      out[k] = l !== undefined ? l : r
+    }
+  }
+  return out
+}
+
+/**
+ * The cloud is the real library; this device keeps a copy so the app opens
+ * instantly and works offline. No questions asked:
+ *  - Cloud has a library → use it, unless this device holds this account's own
+ *    unsaved changes: then save them (merging if the cloud also changed).
+ *  - Cloud is empty → a library made on this device without an account (or by
+ *    this account) becomes the account's library; anything else is dropped.
+ *  - A device copy from a different account is never shown or uploaded.
+ * The server also keeps automatic snapshots of every library (005 SQL).
+ * A failed read never counts as "empty": we just retry.
+ */
 async function reconcile() {
   const userId = currentUserId
   if (!userId) return
   clearTimeout(pushTimer)
   clearTimeout(pushRetry)
-  useSync.setState({ syncReady: false, error: undefined, remoteNewer: false, canKeepDeviceCopy: false, cloudEmpty: false, remoteSummary: undefined })
+  useSync.setState({ syncReady: false, error: undefined })
   try {
     const remote = await fetchRemote(userId)
     if (currentUserId !== userId) return
     const local = snapshot()
     const localHasData = snapHasData(local)
     const remoteHasData = !!remote && snapHasData(remote.data)
-    const ownerId = localOwnerId()
-    const belongsElsewhere = ownerId ? ownerId !== userId : hasTvTimeImportData(local)
+    const meta = getMeta()
+    const mine = localOwnerId() === userId
+    const unsavedHere = mine && !!meta.dirty && localHasData
 
-    if (!localHasData && remoteHasData && remote) {
-      applyRemote(remote, userId)
-      useSync.setState({ syncReady: true, mayShowLocal: true, pendingWrite: false })
-      return
-    }
-    if (!localHasData && !remoteHasData) {
+    const ready = () => useSync.setState({ syncReady: true, mayShowLocal: true, error: undefined })
+    const saveLocal = async (data: Snap) => {
       applyingRemote = true
       try {
-        hydrate(remote?.data ?? {})
+        hydrate(data)
       } finally {
         applyingRemote = false
       }
-      lastJson = JSON.stringify(snapshot())
-      lastSavedJson = lastJson
-      setMeta({ localUpdatedAt: remote?.ms ?? Date.now(), hasSynced: true, userId })
-      useSync.setState({ syncReady: true, mayShowLocal: true, pendingWrite: false })
+      setMeta({ localUpdatedAt: meta.localUpdatedAt, hasSynced: true, userId, dirty: true })
+      ready()
+      await pushNow()
+    }
+
+    if (remoteHasData && remote) {
+      if (!unsavedHere) {
+        applyRemote(remote, userId)
+        ready()
+        useSync.setState({ pendingWrite: false })
+      } else if (remote.ms <= meta.localUpdatedAt) {
+        await saveLocal(local) // cloud unchanged since this device last synced
+      } else {
+        await saveLocal(mergeLibraries(remote.data, local)) // both changed
+      }
       return
     }
-    if (localHasData && !remoteHasData) {
-      useSync.setState({
-        remoteNewer: true,
-        cloudEmpty: true,
-        remoteSummary: summarize({}, remote?.ms),
-        canKeepDeviceCopy: !belongsElsewhere,
-        error: belongsElsewhere ? 'This device has another account’s library. Only the cloud copy can be used here.' : undefined,
-      })
+
+    // Cloud empty: adopt this device's library only if it's this account's
+    // own or was made without any account. Otherwise start clean.
+    const anonymous = !localOwnerId() && !hasTvTimeImportData(local)
+    if (localHasData && (mine || anonymous)) {
+      await saveLocal(local)
       return
     }
-    // Even a locally newer copy can contain changes missing from the cloud.
-    // Ask whenever both non-empty copies differ instead of guessing by time.
-    const comparable = (d: Snap) => JSON.stringify(SYNC_KEYS.map((k) => d[k] ?? EMPTY_DEFAULTS[k]))
-    // A legacy device library with no owner marker that is identical to this
-    // account's cloud copy is provably this account's: adopt it instead of
-    // forcing a "keep cloud copy" choice. Identical content exposes nothing.
-    const sameOwnerOrUnknown = !ownerId || ownerId === userId
-    if (remote && sameOwnerOrUnknown && comparable(local) === comparable(remote.data)) {
-      lastJson = JSON.stringify(local)
-      lastSavedJson = lastJson
-      setMeta({ localUpdatedAt: remote.ms, hasSynced: true, userId })
-      useSync.setState({ syncReady: true, mayShowLocal: true, pendingWrite: false, lastSyncedAt: remote.ms })
-    } else {
-      useSync.setState({
-        remoteNewer: true,
-        remoteSummary: remote ? summarize(remote.data, remote.ms) : undefined,
-        canKeepDeviceCopy: !belongsElsewhere,
-        error: belongsElsewhere ? 'This device has another account’s library. Only the cloud copy can be used here.' : undefined,
-      })
-    }
+    applyRemote({ data: remote?.data ?? {}, ms: remote?.ms ?? Date.now() }, userId)
+    ready()
+    useSync.setState({ pendingWrite: false })
   } catch (e) {
-    if (currentUserId === userId) {
-      useSync.setState({ error: `Could not read your cloud library: ${errorMessage(e)}`, syncReady: false })
-    }
+    if (currentUserId !== userId) return
+    // Offline / unreachable: this account's own device copy stays usable and
+    // syncs later; anything else stays hidden until we can check.
+    useSync.setState({ error: errorMessage(e), syncReady: false })
+    clearTimeout(pushRetry)
+    pushRetry = setTimeout(() => {
+      if (currentUserId === userId && !useSync.getState().syncReady) void reconcile()
+    }, 20000)
   }
 }
 
 function subscribeChanges() {
   useLibrary.subscribe(() => {
-    if (!currentUserId || !useSync.getState().syncReady || applyingRemote) return
+    if (!currentUserId || applyingRemote) return
+    const st = useSync.getState()
+    // Only this account's own (visible) library can be edited.
+    if (!st.syncReady && !st.mayShowLocal) return
     const j = JSON.stringify(snapshot())
     if (j === lastJson) return
     lastJson = j
+    const m = getMeta()
+    if (!m.dirty || m.userId !== currentUserId) setMeta({ ...m, userId: currentUserId, dirty: true })
+    if (!st.syncReady) return // offline: saved on this device, uploaded on reconnect
     clearTimeout(pushTimer)
     pushTimer = setTimeout(() => void pushNow(), 1500)
   })
@@ -627,7 +598,10 @@ export async function initSync() {
 
   // Flush a failed write as soon as connectivity or focus returns.
   const flushPending = () => {
-    if (currentUserId && useSync.getState().syncReady && useSync.getState().pendingWrite) void pushNow()
+    if (!currentUserId) return
+    const st = useSync.getState()
+    if (!st.syncReady) void reconcile()
+    else if (st.pendingWrite) void pushNow()
   }
   window.addEventListener('online', flushPending)
   document.addEventListener('visibilitychange', () => {
@@ -645,23 +619,23 @@ export async function initSync() {
     if (session) {
       const local = snapshot()
       const ownerId = localOwnerId()
-      const mayShowLocal = !snapHasData(local) || ownerId === userId
-      // Remember an account even if its first cloud write has not completed.
-      // This prevents a later signed-out visit from exposing its device copy.
-      if (!ownerId && !hasTvTimeImportData(local)) {
+      // A library made here without an account belongs to whoever signs in.
+      const anonymous = !ownerId && !hasTvTimeImportData(local)
+      if (anonymous) {
         try { localStorage.setItem(LOCAL_OWNER_KEY, session.user.id) } catch { /* ignore */ }
       }
+      const mayShowLocal = !snapHasData(local) || ownerId === userId || anonymous
       useSync.setState({
         status: 'signedIn', email: session.user.email, userId: session.user.id, syncReady: false,
-        remoteNewer: false, pendingWrite: false, mayShowLocal, canKeepDeviceCopy: false, error: undefined,
+        pendingWrite: false, mayShowLocal, error: undefined,
       })
       void claimPendingUsername(session.user.email)
       void reconcile()
     } else {
       useSync.setState({
         status: 'signedOut', email: undefined, userId: undefined, syncReady: false,
-        remoteNewer: false, pendingWrite: false,
-        mayShowLocal: !localOwnerId() && !hasTvTimeImportData(snapshot()), canKeepDeviceCopy: false,
+        pendingWrite: false,
+        mayShowLocal: !localOwnerId() && !hasTvTimeImportData(snapshot()),
       })
     }
   }
