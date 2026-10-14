@@ -109,6 +109,12 @@ function snapHasData(d: Snap): boolean {
   ].some((v) => n(v) > 0) ||
     JSON.stringify(d.profile ?? EMPTY_DEFAULTS.profile) !== JSON.stringify(EMPTY_DEFAULTS.profile)
 }
+
+/** Recognize older TV Time imports that predate account ownership markers. */
+function hasTvTimeImportData(d: Snap): boolean {
+  const hasEntries = (value: unknown) => value !== null && typeof value === 'object' && Object.keys(value).length > 0
+  return hasEntries(d.importedShowIds) || hasEntries(d.importedMovieKeys)
+}
 interface Meta {
   localUpdatedAt: number
   hasSynced?: boolean
@@ -289,7 +295,8 @@ export const useSync = create<SyncState>((set) => ({
   },
 
   backupNow: async () => {
-    if (currentUserId && localOwnerId() && localOwnerId() !== currentUserId) {
+    const ownerId = localOwnerId()
+    if (currentUserId && (ownerId ? ownerId !== currentUserId : hasTvTimeImportData(snapshot()))) {
       set({ error: 'This device library belongs to a different account. Keep your cloud copy instead.' })
       return
     }
@@ -447,7 +454,8 @@ async function reconcile() {
     const local = snapshot()
     const localHasData = snapHasData(local)
     const remoteHasData = !!remote && snapHasData(remote.data)
-    const belongsElsewhere = !!localOwnerId() && localOwnerId() !== userId
+    const ownerId = localOwnerId()
+    const belongsElsewhere = ownerId ? ownerId !== userId : hasTvTimeImportData(local)
 
     if (!localHasData && remoteHasData && remote) {
       applyRemote(remote, userId)
@@ -533,11 +541,12 @@ export async function initSync() {
     currentUserId = userId
     lastSavedJson = null
     if (session) {
+      const local = snapshot()
       const ownerId = localOwnerId()
-      const mayShowLocal = !snapHasData(snapshot()) || ownerId === userId
+      const mayShowLocal = !snapHasData(local) || ownerId === userId
       // Remember an account even if its first cloud write has not completed.
       // This prevents a later signed-out visit from exposing its device copy.
-      if (!ownerId) {
+      if (!ownerId && !hasTvTimeImportData(local)) {
         try { localStorage.setItem(LOCAL_OWNER_KEY, session.user.id) } catch { /* ignore */ }
       }
       useSync.setState({
@@ -550,7 +559,7 @@ export async function initSync() {
       useSync.setState({
         status: 'signedOut', email: undefined, syncReady: false,
         remoteNewer: false, pendingWrite: false,
-        mayShowLocal: !localOwnerId(), canKeepDeviceCopy: false,
+        mayShowLocal: !localOwnerId() && !hasTvTimeImportData(snapshot()), canKeepDeviceCopy: false,
       })
     }
   }
