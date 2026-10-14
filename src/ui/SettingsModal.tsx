@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { ImportPanel } from './ImportPanel'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
+import { useToast } from '../store/useToast'
 import { CheckIcon, CloudIcon, PersonIcon, TvIcon } from '../components/Icons'
 
 function timeAgo(ms?: number): string {
@@ -39,11 +40,61 @@ function fileToAvatar(file: File): Promise<string> {
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const lib = useLibrary()
   const sync = useSync()
+  const toast = useToast((s) => s.show)
   const fileInput = useRef<HTMLInputElement>(null)
+  const restoreInput = useRef<HTMLInputElement>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [pendingRestore, setPendingRestore] = useState<File | null>(null)
+
+  // ---- Local backup / restore (a verifiable, in-hand rollback path) ----
+  // Serialises the entire on-device library (the persisted store + sync meta)
+  // to a JSON file. Reading/writing the raw localStorage blob guarantees a
+  // faithful copy regardless of future schema changes.
+  const exportBackup = () => {
+    try {
+      const payload = {
+        app: 'the-watcher',
+        kind: 'backup',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        library: JSON.parse(localStorage.getItem('the-watcher-library-v1') || 'null'),
+        syncMeta: JSON.parse(localStorage.getItem('tw-sync-meta') || 'null'),
+      }
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `the-watcher-backup-${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      toast('Backup downloaded')
+    } catch {
+      toast("Couldn't create the backup file")
+    }
+  }
+
+  const doRestore = async () => {
+    const file = pendingRestore
+    setPendingRestore(null)
+    if (!file) return
+    try {
+      const payload = JSON.parse(await file.text())
+      if (payload?.app !== 'the-watcher' || !payload.library) {
+        toast("That doesn't look like a Watcher backup file")
+        return
+      }
+      localStorage.setItem('the-watcher-library-v1', JSON.stringify(payload.library))
+      if (payload.syncMeta) localStorage.setItem('tw-sync-meta', JSON.stringify(payload.syncMeta))
+      location.reload()
+    } catch {
+      toast('Could not read that backup file')
+    }
+  }
 
   // Lock the Profile page behind the modal so only the modal scrolls.
   useEffect(() => {
@@ -135,6 +186,32 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <TvIcon size={15} /> Library &amp; Data
           </div>
           <ImportPanel />
+
+          {/* ---- Local backup / restore ---- */}
+          <div className="settings-card">
+            <div className="settings-muted">
+              Download a complete copy of everything on this device — watch history, ratings, lists, favorites and settings — to a file you keep. You can restore it here at any time.
+            </div>
+            <div className="sync-actions">
+              <button className="sync-btn primary pressable" onClick={exportBackup}>
+                <CheckIcon size={15} /> Download backup
+              </button>
+              <button className="sync-btn pressable" onClick={() => restoreInput.current?.click()}>
+                Restore from file
+              </button>
+            </div>
+            <input
+              ref={restoreInput}
+              type="file"
+              accept="application/json,.json"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) setPendingRestore(f)
+                e.target.value = ''
+              }}
+            />
+          </div>
 
           {/* ---- Cloud Backup ---- */}
           <div className="settings-group-label">
@@ -275,6 +352,31 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               </button>
               <button className="sync-btn danger pressable" onClick={doDelete}>
                 Delete Account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {pendingRestore && (
+        <div
+          className="sheet-backdrop"
+          onClick={(e) => {
+            e.stopPropagation()
+            setPendingRestore(null)
+          }}
+        >
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-handle" />
+            <div className="confirm-title">Restore from backup?</div>
+            <div className="confirm-body">
+              This replaces the library currently on this device with the contents of “{pendingRestore.name}”, then reloads. Download a backup first if you’re unsure.
+            </div>
+            <div className="confirm-actions">
+              <button className="sync-btn ghost pressable" onClick={() => setPendingRestore(null)}>
+                Cancel
+              </button>
+              <button className="sync-btn pressable" onClick={doRestore}>
+                Restore
               </button>
             </div>
           </div>
