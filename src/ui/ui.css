@@ -1285,6 +1285,28 @@ body.modal-open .scroll-area { overflow: hidden !important; }
   gap: 8px;
   margin-top: 12px;
 }
+
+/* ---- Auth: visibility choice + mode switch ---- */
+.vis-choice { display: flex; gap: 8px; }
+.vis-choice.sm { flex: 0 0 auto; }
+.vis-opt {
+  flex: 1 1 0;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+}
+.vis-choice.sm .vis-opt { flex: 0 0 auto; padding: 7px 14px; }
+.vis-opt.on { background: color-mix(in srgb, var(--accent) 18%, var(--surface-2)); border-color: var(--accent); color: #fff; }
+.vis-hint { font-size: 12px; color: var(--text-mute); line-height: 1.4; }
+.auth-switch { margin-top: 12px; width: 100%; text-align: center; font-size: 13px; font-weight: 600; color: var(--accent); padding: 4px; }
+.uname-row { display: flex; align-items: center; gap: 8px; }
+.uname-row .uname-at { color: var(--text-mute); font-weight: 700; }
+.uname-row .sync-input { flex: 1; min-width: 0; }
+.uname-row .sync-btn { flex: 0 0 auto; }
 .sync-input {
   background: var(--bg-2);
   border: 1px solid var(--border);
@@ -1848,3 +1870,9 @@ body.modal-open .scroll-area { overflow: hidden !important; }
 .lb-name { font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-handle { font-size: 12px; color: var(--text-mute); }
 .lb-metric { flex: 0 0 auto; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; }
+
+/* ---- Profile header: @handle + social counts ---- */
+.profile-at { font-size: 13px; color: var(--text-mute); margin-top: 1px; }
+.profile-social-row { display: flex; gap: 16px; margin-top: 8px; }
+.profile-social-stat { font-size: 13px; color: var(--text-dim); }
+.profile-social-stat b { color: #fff; font-weight: 800; }

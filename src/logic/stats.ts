@@ -1,7 +1,9 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useLibrary } from '../store/useLibrary'
 import { useShowEntries, useMovieEntries } from './useLibraryData'
 import { effectiveSeen } from './status'
+import { useSync } from './sync'
+import { pushMyStats } from '../data/social'
 
 // Shared watch-time assumptions (kept in one place so Profile, public profiles
 // and the Leaderboard all agree).
@@ -76,4 +78,33 @@ export function countRefs(refs: string[]): { movies: number; shows: number } {
     else if (r.startsWith('show:')) shows++
   }
   return { movies, shows }
+}
+
+/**
+ * While signed in, mirror the user's aggregate stats to Supabase (profile_stats)
+ * so the leaderboard and public profiles read real numbers. Debounced; only
+ * writes when a value actually changed. No-op (and harmless) when Supabase is
+ * off or the write fails. Mount once near the app root.
+ */
+export function useStatsSync() {
+  const status = useSync((s) => s.status)
+  const stats = useMyStats()
+  const last = useRef('')
+  useEffect(() => {
+    if (status !== 'signedIn') return
+    const payload = {
+      episodes_watched: stats.episodesWatched,
+      shows_watched: stats.showsStarted,
+      shows_finished: stats.showsFinished,
+      movies_watched: stats.moviesWatched,
+      minutes_watched: stats.totalMin,
+    }
+    const key = JSON.stringify(payload)
+    if (key === last.current) return
+    const t = setTimeout(() => {
+      last.current = key
+      void pushMyStats(payload)
+    }, 2500)
+    return () => clearTimeout(t)
+  }, [status, stats])
 }

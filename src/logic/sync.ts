@@ -2,6 +2,36 @@ import { create } from 'zustand'
 import { supabase, SUPABASE_ENABLED, LIBRARY_TABLE } from '../data/supabase'
 import { useLibrary } from '../store/useLibrary'
 import { useToast } from '../store/useToast'
+import { claimUsername } from '../data/social'
+
+export interface SignUpOpts {
+  username?: string
+  displayName?: string
+  visibility?: 'public' | 'private'
+}
+
+const PENDING_USERNAME_KEY = 'tw-pending-username'
+
+// Claim a username stored at signup, once a session exists (covers the
+// email-confirmation flow where there's no session until first sign-in).
+async function claimPendingUsername() {
+  let uname: string | null = null
+  try {
+    uname = localStorage.getItem(PENDING_USERNAME_KEY)
+  } catch {
+    /* ignore */
+  }
+  if (!uname) return
+  const r = await claimUsername(uname)
+  if (r.ok || (!r.ok && r.code === 'username_taken')) {
+    // Taken names are resolved by the user in Settings; stop retrying either way.
+    try {
+      localStorage.removeItem(PENDING_USERNAME_KEY)
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Cloud sync engine (optional). Stores each user's whole library as one JSON
@@ -90,7 +120,7 @@ interface SyncState {
   pendingWrite?: boolean
   error?: string
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string, opts?: SignUpOpts) => Promise<void>
   signOut: () => Promise<void>
   backupNow: () => Promise<void>
   restoreNow: () => Promise<void>
@@ -113,14 +143,31 @@ export const useSync = create<SyncState>((set) => ({
     // onAuthStateChange fires and drives reconcile.
   },
 
-  signUp: async (email, password) => {
+  signUp: async (email, password, opts) => {
     if (!supabase) return
     set({ status: 'busy', error: undefined })
-    const { error } = await supabase.auth.signUp({ email, password })
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      // display name + public/private choice are carried as signup metadata and
+      // applied to the profile row by the handle_new_user trigger.
+      options: { data: { display_name: opts?.displayName || '', visibility: opts?.visibility || 'public' } },
+    })
     if (error) return set({ status: 'signedOut', error: error.message })
-    // If email confirmation is off, a session is returned and onAuthStateChange fires.
+    // Remember the chosen username to claim once a session exists.
+    if (opts?.username) {
+      try {
+        localStorage.setItem(PENDING_USERNAME_KEY, opts.username)
+      } catch {
+        /* ignore */
+      }
+    }
     const { data } = await supabase.auth.getSession()
-    if (!data.session) set({ status: 'signedOut', error: 'Check your email to confirm your account, then sign in.' })
+    if (data.session) {
+      await claimPendingUsername()
+    } else {
+      set({ status: 'signedOut', error: 'Check your email to confirm your account, then sign in.' })
+    }
   },
 
   signOut: async () => {
@@ -258,6 +305,7 @@ export async function initSync() {
     currentUserId = session?.user?.id ?? null
     if (session) {
       useSync.setState({ status: 'signedIn', email: session.user.email ?? undefined })
+      void claimPendingUsername()
       void reconcile()
     } else {
       useSync.setState({ status: 'signedOut', email: undefined })

@@ -4,7 +4,10 @@ import { ImportPanel } from './ImportPanel'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
 import { useToast } from '../store/useToast'
+import { claimUsername, updateMyIdentity, getMyProfile, type SocialProfile } from '../data/social'
 import { CheckIcon, CloudIcon, PersonIcon, TvIcon } from '../components/Icons'
+
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
 function timeAgo(ms?: number): string {
   if (!ms) return 'not yet'
@@ -48,6 +51,79 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<File | null>(null)
+
+  // Auth form (signed-out): sign in vs create account.
+  const [authMode, setAuthMode] = useState<'in' | 'up'>('in')
+  const [suUsername, setSuUsername] = useState('')
+  const [suVisibility, setSuVisibility] = useState<'public' | 'private'>('public')
+
+  // Public (Supabase) profile, loaded when signed in.
+  const [social, setSocial] = useState<SocialProfile | null>(null)
+  const [unameEdit, setUnameEdit] = useState('')
+  const [bioEdit, setBioEdit] = useState('')
+  const [savingUname, setSavingUname] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    if (sync.status === 'signedIn') {
+      getMyProfile().then((p) => {
+        if (!alive || !p) return
+        setSocial(p)
+        setUnameEdit(p.username ?? '')
+        setBioEdit(p.bio ?? '')
+        // Carry the local display name/avatar up to the public profile if unset.
+        const patch: Record<string, string> = {}
+        if (!p.display_name && lib.profile.displayName) patch.display_name = lib.profile.displayName
+        if (!p.avatar && lib.profile.avatar) patch.avatar = lib.profile.avatar
+        if (Object.keys(patch).length) void updateMyIdentity(patch)
+      })
+    } else {
+      setSocial(null)
+    }
+    return () => {
+      alive = false
+    }
+  }, [sync.status])
+
+  const doSignUp = () => {
+    const u = suUsername.trim().toLowerCase()
+    if (!USERNAME_RE.test(u)) {
+      toast('Username must be 3–20 letters, numbers or underscores')
+      return
+    }
+    sync.signUp(email, password, { username: u, displayName: lib.profile.displayName || '', visibility: suVisibility })
+  }
+
+  const saveUsername = async () => {
+    const u = unameEdit.trim().toLowerCase()
+    if (!USERNAME_RE.test(u)) {
+      toast('Username must be 3–20 letters, numbers or underscores')
+      return
+    }
+    setSavingUname(true)
+    const r = await claimUsername(u)
+    setSavingUname(false)
+    if (r.ok) {
+      setSocial((s) => (s ? { ...s, username: r.username } : s))
+      toast('Username saved')
+    } else {
+      toast(r.code === 'username_taken' ? 'That username is already taken' : 'Could not save that username')
+    }
+  }
+
+  const setVisibility = async (v: 'public' | 'private') => {
+    setSocial((s) => (s ? { ...s, visibility: v } : s))
+    const ok = await updateMyIdentity({ visibility: v })
+    if (!ok) toast('Could not update visibility')
+  }
+
+  const saveBio = async () => {
+    const ok = await updateMyIdentity({ bio: bioEdit.trim() })
+    if (ok) {
+      setSocial((s) => (s ? { ...s, bio: bioEdit.trim() } : s))
+      toast('Bio saved')
+    }
+  }
 
   // ---- Local backup / restore (a verifiable, in-hand rollback path) ----
   // Serialises the entire on-device library (the persisted store + sync meta)
@@ -258,21 +334,108 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <div className="settings-card">
-              <div className="settings-muted">Sign in to back up your library and sync it across devices.</div>
+              <div className="settings-muted">
+                {authMode === 'up'
+                  ? 'Create your account to sync your library and join the community.'
+                  : 'Sign in to sync your library across devices.'}
+              </div>
               <div className="sync-form">
-                <input className="sync-input" type="email" inputMode="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input className="sync-input" type="email" inputMode="email" autoCapitalize="none" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
                 <input className="sync-input" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                {authMode === 'up' && (
+                  <>
+                    <input
+                      className="sync-input"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      placeholder="Username (your @handle)"
+                      value={suUsername}
+                      onChange={(e) => setSuUsername(e.target.value.toLowerCase())}
+                    />
+                    <div className="vis-choice">
+                      <button
+                        type="button"
+                        className={`vis-opt pressable ${suVisibility === 'public' ? 'on' : ''}`}
+                        onClick={() => setSuVisibility('public')}
+                      >
+                        Public
+                      </button>
+                      <button
+                        type="button"
+                        className={`vis-opt pressable ${suVisibility === 'private' ? 'on' : ''}`}
+                        onClick={() => setSuVisibility('private')}
+                      >
+                        Private
+                      </button>
+                    </div>
+                    <div className="vis-hint">
+                      {suVisibility === 'public'
+                        ? 'Anyone can find your profile and follow you.'
+                        : 'Your profile is discoverable, but followers need your approval to see your activity.'}
+                    </div>
+                  </>
+                )}
               </div>
               {sync.error && <div className="sync-error">{sync.error}</div>}
               <div className="sync-actions">
-                <button className="sync-btn primary pressable" disabled={sync.status === 'busy' || !email || !password} onClick={() => sync.signIn(email, password)}>
-                  {sync.status === 'busy' ? 'Working…' : 'Sign in'}
-                </button>
-                <button className="sync-btn pressable" disabled={sync.status === 'busy' || !email || !password} onClick={() => sync.signUp(email, password)}>
-                  Create account
+                <button
+                  className="sync-btn primary pressable"
+                  disabled={sync.status === 'busy' || !email || !password || (authMode === 'up' && !suUsername)}
+                  onClick={() => (authMode === 'up' ? doSignUp() : sync.signIn(email, password))}
+                >
+                  {sync.status === 'busy' ? 'Working…' : authMode === 'up' ? 'Create account' : 'Sign in'}
                 </button>
               </div>
+              <button className="auth-switch pressable" onClick={() => setAuthMode(authMode === 'up' ? 'in' : 'up')}>
+                {authMode === 'up' ? 'Already have an account? Sign in' : 'New to The Watcher? Create account'}
+              </button>
             </div>
+          )}
+
+          {/* ---- Public profile (social identity) ---- */}
+          {sync.status === 'signedIn' && (
+            <>
+              <div className="settings-group-label">
+                <PersonIcon size={15} /> Public profile
+              </div>
+              <div className="settings-card">
+                <label className="settings-field">
+                  <span>Username</span>
+                  <div className="uname-row">
+                    <span className="uname-at">@</span>
+                    <input
+                      className="sync-input"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      value={unameEdit}
+                      placeholder="username"
+                      onChange={(e) => setUnameEdit(e.target.value.toLowerCase())}
+                    />
+                    <button className="sync-btn pressable" disabled={savingUname || unameEdit === (social?.username ?? '')} onClick={saveUsername}>
+                      {savingUname ? '…' : 'Save'}
+                    </button>
+                  </div>
+                </label>
+                <label className="settings-field">
+                  <span>Bio</span>
+                  <input className="sync-input" value={bioEdit} placeholder="A short line about you" maxLength={160} onChange={(e) => setBioEdit(e.target.value)} onBlur={saveBio} />
+                </label>
+                <div className="settings-row-flat">
+                  <span>Account visibility</span>
+                  <div className="vis-choice sm">
+                    <button type="button" className={`vis-opt pressable ${social?.visibility !== 'private' ? 'on' : ''}`} onClick={() => setVisibility('public')}>
+                      Public
+                    </button>
+                    <button type="button" className={`vis-opt pressable ${social?.visibility === 'private' ? 'on' : ''}`} onClick={() => setVisibility('private')}>
+                      Private
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-muted" style={{ marginTop: 2 }}>
+                  {social?.follower_count ?? 0} followers · {social?.following_count ?? 0} following
+                </div>
+              </div>
+            </>
           )}
 
           {/* ---- Account ---- */}

@@ -9,6 +9,7 @@ import { useLibrary } from './store/useLibrary'
 import { useToast } from './store/useToast'
 import { useSync } from './logic/sync'
 import { useNavTracker } from './logic/nav'
+import { useStatsSync } from './logic/stats'
 import { runFullImport } from './data/importTVTime'
 import { initSync } from './logic/sync'
 import { ensureUpcoming } from './logic/upcoming'
@@ -46,6 +47,7 @@ function readOnboarded(): boolean {
 export default function App() {
   const location = useLocation()
   useNavTracker()
+  useStatsSync()
   const syncStatus = useSync((s) => s.status)
   const [onboarded, setOnboarded] = useState(readOnboarded)
 

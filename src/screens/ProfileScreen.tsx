@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { SettingsModal } from '../ui/SettingsModal'
 import { ChevronRight, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, ListIcon, OrderedListIcon, PlusIcon } from '../components/Icons'
 import { useLibrary } from '../store/useLibrary'
+import { useSync } from '../logic/sync'
+import { getMyProfile, type SocialProfile } from '../data/social'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { effectiveSeen } from '../logic/status'
 import { compositionLabel, countRefs } from '../logic/stats'
@@ -14,10 +16,23 @@ const MOVIE_MIN = 115
 
 export function ProfileScreen() {
   const nav = useNavigate()
+  const signedIn = useSync((s) => s.status === 'signedIn')
   const [settings, setSettings] = useState(false)
+  const [social, setSocial] = useState<SocialProfile | null>(null)
   const [newList, setNewList] = useState(false)
   const [listName, setListName] = useState('')
   const [listRanked, setListRanked] = useState(false)
+
+  // Load my public profile (followers/following) when signed in. Refreshes when
+  // the Settings modal closes (username/visibility may have changed).
+  useEffect(() => {
+    let alive = true
+    if (signedIn && !settings) getMyProfile().then((p) => alive && setSocial(p))
+    if (!signedIn) setSocial(null)
+    return () => {
+      alive = false
+    }
+  }, [signedIn, settings])
   const lib = useLibrary()
   const shows = useShowEntries()
   const movies = useMovieEntries()
@@ -62,7 +77,18 @@ export function ProfileScreen() {
         </div>
         <div className="profile-head-text">
           <div className="profile-name">{name}</div>
+          {social?.username && <div className="profile-at">@{social.username}</div>}
           <div className="profile-handle">{hm(totalWatched)} watched</div>
+          {social && (
+            <div className="profile-social-row">
+              <span className="profile-social-stat">
+                <b>{social.follower_count}</b> followers
+              </span>
+              <span className="profile-social-stat">
+                <b>{social.following_count}</b> following
+              </span>
+            </div>
+          )}
         </div>
         <button className="icon-round pressable" onClick={() => setSettings(true)} aria-label="Settings">
           <SettingsIcon size={20} />
