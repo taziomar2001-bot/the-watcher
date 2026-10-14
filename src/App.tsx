@@ -36,6 +36,8 @@ import { ListScreen } from './screens/ListScreen'
 import { FavoritesScreen } from './screens/FavoritesScreen'
 import { LeaderboardScreen } from './screens/LeaderboardScreen'
 import { PublicProfileScreen } from './screens/PublicProfileScreen'
+import { CommunitiesScreen } from './screens/CommunitiesScreen'
+import { lastContentPath } from './logic/content'
 import { ConnectionsScreen } from './screens/ConnectionsScreen'
 import { PublicLibraryScreen } from './screens/PublicLibraryScreen'
 
@@ -138,7 +140,9 @@ export default function App() {
   return (
     <div className="app-shell">
       <Routes location={location}>
-        <Route path="/" element={<Navigate to="/tv" replace />} />
+        <Route path="/" element={<Navigate to={lastContentPath()} replace />} />
+        <Route path="/content" element={<Navigate to={lastContentPath()} replace />} />
+        <Route path="/communities" element={<CommunitiesScreen />} />
         <Route path="/tv" element={<TVShowsScreen />} />
         <Route path="/tv/category/:key" element={<TVCategoryScreen />} />
         <Route path="/show/:id" element={<ShowScreen />} />
@@ -163,7 +167,7 @@ export default function App() {
         <Route path="/u/:id/favorites" element={<PublicLibraryScreen kind="favorites" />} />
         <Route path="/u/:id/list/:listId" element={<PublicLibraryScreen kind="list" />} />
         <Route path="/people/:id/:tab" element={<ConnectionsScreen />} />
-        <Route path="*" element={<Navigate to="/tv" replace />} />
+        <Route path="*" element={<Navigate to={lastContentPath()} replace />} />
       </Routes>
       <BottomNav />
       <ToastHost />

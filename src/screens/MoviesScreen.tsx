@@ -4,6 +4,7 @@ import { PosterGrid, type GridItem } from '../ui/PosterGrid'
 import { useLibrary } from '../store/useLibrary'
 import { useMovieEntries } from '../logic/useLibraryData'
 import { useScrollMemory } from '../hooks/useScrollMemory'
+import { ContentSwitcher } from '../ui/ContentSwitcher'
 import { movieColor } from '../logic/status'
 
 const releaseKey = (r: { item: { releaseDate?: string; year?: number } }) => r.item.releaseDate ?? String(r.item.year ?? '')
@@ -44,7 +45,7 @@ export function MoviesScreen() {
       <div className="sticky-top">
         <div className="app-header">
           <div>
-            <h1>Movies</h1>
+            <ContentSwitcher current="movies" />
             <div className="sub">{items.length} to watch</div>
           </div>
         </div>

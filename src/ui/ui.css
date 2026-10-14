@@ -2069,3 +2069,15 @@ body.modal-open .scroll-area { overflow: hidden !important; }
 .rating-public { text-align: right; }
 .rating-public-label { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-mute); margin-bottom: 4px; }
 .episode-public { color: var(--text-mute); }
+
+/* ---- Content tab title switcher ---- */
+.content-title { display: inline-flex; align-items: center; gap: 6px; color: #fff; text-align: left; }
+.content-title h1 { margin: 0; }
+.content-caret { color: var(--text-dim); margin-top: 4px; }
+.soon-icon {
+  width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2); color: var(--accent);
+}
+.nav-label { white-space: nowrap; }
+@media (max-width: 350px) { .nav-label { font-size: 9.5px; } }

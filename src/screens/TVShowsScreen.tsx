@@ -4,6 +4,7 @@ import { SectionHeader } from '../ui/primitives'
 import { PosterGrid, type GridItem } from '../ui/PosterGrid'
 import { useShowEntries } from '../logic/useLibraryData'
 import { useScrollMemory } from '../hooks/useScrollMemory'
+import { ContentSwitcher } from '../ui/ContentSwitcher'
 import { categorize, showColor, type TvEntry } from '../logic/status'
 
 const toGrid = (list: TvEntry[]): GridItem[] =>
@@ -81,7 +82,7 @@ export function TVShowsScreen() {
       <div className="sticky-top" ref={topRef}>
         <div className="app-header">
           <div>
-            <h1>TV Shows</h1>
+            <ContentSwitcher current="tv" />
             <div className="sub">{entries.length} in your library</div>
           </div>
         </div>
