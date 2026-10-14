@@ -5,12 +5,9 @@ import { ToastHost } from './components/ToastHost'
 import { Welcome } from './ui/Welcome'
 import { USE_TMDB } from './data/catalog'
 import { SUPABASE_ENABLED } from './data/supabase'
-import { useLibrary } from './store/useLibrary'
-import { useToast } from './store/useToast'
 import { useSync } from './logic/sync'
 import { useNavTracker } from './logic/nav'
 import { useStatsSync } from './logic/stats'
-import { runFullImport } from './data/importTVTime'
 import { initSync } from './logic/sync'
 import { ensureUpcoming } from './logic/upcoming'
 
@@ -75,23 +72,13 @@ export default function App() {
     void initSync()
   }, [])
 
-  // Resumable TV Time migration: resolves everything still outstanding, skips
-  // whatever is already baked in, then warms the Up & Coming cache. Converges to
-  // a complete library and afterwards makes no network calls.
+  // Warm the Up & Coming cache in the background. The TV Time import no longer
+  // runs automatically — it would reconstruct the owner's library into EVERY
+  // browser. It's now an explicit, owner-only action in Settings, so fresh
+  // visitors and new accounts start empty.
   useEffect(() => {
     if (!USE_TMDB) return
-    const toast = useToast.getState().show
-    ;(async () => {
-      const firstRun = !useLibrary.getState().tvTimeImported
-      if (firstRun) toast('Importing your library from TV Time…', { duration: 8000 })
-      await runFullImport().catch(() => {})
-      if (firstRun) {
-        const shows = Object.keys(useLibrary.getState().libraryShows).length
-        const movies = Object.keys(useLibrary.getState().libraryMovies).length
-        if (shows || movies) toast(`Imported ${shows.toLocaleString()} shows & ${movies.toLocaleString()} movies`, { duration: 5000 })
-      }
-      ensureUpcoming() // prefetch releases in the background
-    })()
+    ensureUpcoming()
   }, [])
 
   return (

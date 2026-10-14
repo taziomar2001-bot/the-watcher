@@ -5,7 +5,7 @@ import { AuthScreen } from './AuthScreen'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
 import { useToast } from '../store/useToast'
-import { SUPABASE_ENABLED } from '../data/supabase'
+import { SUPABASE_ENABLED, OWNER_EMAIL } from '../data/supabase'
 import { claimUsername, updateMyIdentity, getMyProfile, type SocialProfile } from '../data/social'
 import { CheckIcon, CloudIcon, PersonIcon, TvIcon, SettingsIcon } from '../components/Icons'
 
@@ -339,7 +339,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           <div className="settings-group-label">
             <TvIcon size={15} /> Library &amp; Data
           </div>
-          <ImportPanel />
+          {/* The baked TV Time import reconstructs the OWNER's personal library,
+              so it's shown only on a local build or to the owner account. */}
+          {(!SUPABASE_ENABLED || (!!OWNER_EMAIL && sync.email?.toLowerCase() === OWNER_EMAIL)) && <ImportPanel />}
           <div className="settings-card">
             <div className="settings-muted">
               Download a complete copy of everything on this device — watch history, ratings, lists, favorites and settings — to a file you keep. You can restore it here at any time.

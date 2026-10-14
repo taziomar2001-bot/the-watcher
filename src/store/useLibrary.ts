@@ -199,7 +199,7 @@ export const useLibrary = create<LibraryState>()(
       addedAt: {},
       stoppedShows: {},
       lists: [],
-      profile: { username: 'omar', following: USE_TMDB ? 0 : 48, followers: USE_TMDB ? 0 : 27, comments: USE_TMDB ? 0 : 132 },
+      profile: { username: USE_TMDB ? '' : 'omar', following: USE_TMDB ? 0 : 48, followers: USE_TMDB ? 0 : 27, comments: USE_TMDB ? 0 : 132 },
       // In mock mode there is nothing to import, so mark it done up-front.
       tvTimeImported: !USE_TMDB,
       tvTimeMoviesImported: !USE_TMDB,

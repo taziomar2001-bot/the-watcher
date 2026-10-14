@@ -70,6 +70,20 @@ const SYNC_KEYS = [
 
 type Snap = Record<string, unknown>
 
+// Empty value for every synced field, so hydrating a remote blob FULLY replaces
+// local state — a missing/empty key resets to empty rather than keeping whatever
+// the previous account left behind. This is what makes a fresh account truly
+// virgin and prevents one user's data leaking into another on a shared browser.
+const EMPTY_DEFAULTS: Snap = {
+  watchlistShows: {}, watchlistMovies: {}, watchedEpisodes: {}, watchedMovies: {},
+  favoriteShows: {}, favoriteMovies: {}, notifyShows: {}, ratings: {},
+  movieRatings: {}, episodeRatings: {}, ratingAt: {}, libraryShows: {}, libraryMovies: {},
+  lastWatched: {}, followedAt: {}, addedAt: {}, stoppedShows: {}, lists: [],
+  profile: { username: '', following: 0, followers: 0, comments: 0 },
+  tvTimeImported: true, tvTimeMoviesImported: true, migrationVersion: 999,
+  importedShowIds: {}, importedMovieKeys: {},
+}
+
 function snapshot(): Snap {
   const s = useLibrary.getState() as unknown as Record<string, unknown>
   const o: Snap = {}
@@ -77,16 +91,17 @@ function snapshot(): Snap {
   return o
 }
 function hydrate(data: Snap) {
-  useLibrary.setState(data as never)
+  const full: Snap = {}
+  for (const k of SYNC_KEYS) full[k] = k in data && data[k] !== undefined ? data[k] : EMPTY_DEFAULTS[k]
+  useLibrary.setState(full as never)
+}
+/** Does a snapshot actually contain a library (vs. an empty/virgin account)? */
+function snapHasData(d: Snap): boolean {
+  const n = (v: unknown) => (v && typeof v === 'object' ? Object.keys(v as object).length : 0)
+  return n(d.watchlistShows) + n(d.watchedEpisodes) + n(d.libraryShows) + n(d.watchlistMovies) + n(d.watchedMovies) > 0
 }
 function isLocalEmpty(): boolean {
-  const s = useLibrary.getState()
-  return (
-    Object.keys(s.watchlistShows).length === 0 &&
-    Object.keys(s.watchedEpisodes).length === 0 &&
-    Object.keys(s.libraryShows).length === 0 &&
-    Object.keys(s.watchlistMovies).length === 0
-  )
+  return !snapHasData(snapshot())
 }
 
 interface Meta {
@@ -172,8 +187,33 @@ export const useSync = create<SyncState>((set) => ({
 
   signOut: async () => {
     if (!supabase) return
+    set({ status: 'busy' })
+    // Flush the latest data to the cloud before wiping local, so nothing is lost.
+    // Only clear local if the data is safely in the cloud (just-pushed or already
+    // synced); otherwise keep it on this device and still sign out.
+    let safe = false
+    try {
+      safe = (await pushNow()) || !!getMeta().hasSynced
+    } catch {
+      safe = !!getMeta().hasSynced
+    }
     await supabase.auth.signOut()
     currentUserId = null
+    if (safe) {
+      // Reset to a clean, signed-out device: the next person (or a new account)
+      // starts virgin and lands on the sign-in screen.
+      try {
+        localStorage.removeItem('the-watcher-library-v1')
+        localStorage.removeItem('tw-sync-meta')
+        localStorage.removeItem('tw-onboarded')
+        localStorage.removeItem('tw-pending-username')
+      } catch {
+        /* ignore */
+      }
+      location.reload()
+      return
+    }
+    useToast.getState().show("Signed out — couldn't reach the cloud, so your data is kept on this device.", { duration: 5000 })
     set({ status: 'signedOut', email: undefined, lastSyncedAt: undefined, remoteNewer: false })
   },
 
@@ -255,20 +295,37 @@ async function download() {
   useSync.setState({ lastSyncedAt: remote.ms })
 }
 
-// Decide direction after auth: fresh device restores, otherwise last-write-wins.
+// Decide direction after auth, account-isolation-safe:
+//   local empty + account has data   → download the account's library
+//   local has data + account empty   → upload (claim) local into this account
+//   both empty                       → virgin: hard-reset to empty, mark synced
+//   both have data                   → conflict → let the user choose
+// Combined with sign-out clearing local, this guarantees a signed-in account
+// only ever shows its OWN data, and a brand-new account starts empty.
 async function reconcile() {
   const remote = await fetchRemote()
+  const remoteHasData = !!remote && snapHasData(remote.data)
+  const localHasData = !isLocalEmpty()
+
+  if (!localHasData && remoteHasData) {
+    await download()
+    return
+  }
+  if (localHasData && !remoteHasData) {
+    await pushNow()
+    return
+  }
+  if (!localHasData && !remoteHasData) {
+    // Virgin account (or empty cloud): make local a clean, synced empty state.
+    hydrate(remote ? remote.data : {})
+    lastJson = JSON.stringify(snapshot())
+    setMeta({ localUpdatedAt: remote ? remote.ms : Date.now(), hasSynced: true })
+    return
+  }
+  // Both have data — don't silently clobber; ask the user which to keep.
   const meta = getMeta()
-  if (!remote) {
-    await pushNow() // first backup for this account
-    return
-  }
-  if (!meta.hasSynced || isLocalEmpty()) {
-    await download() // first time on this device → restore everything
-    return
-  }
-  if (remote.ms > meta.localUpdatedAt) {
-    // Cloud is ahead but this device has local data — let the user choose.
+  if (!remote) return
+  if (!meta.hasSynced || remote.ms > meta.localUpdatedAt) {
     useSync.setState({ remoteNewer: true })
   } else {
     await pushNow()
