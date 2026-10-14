@@ -92,14 +92,21 @@ body {
   position: relative;
   width: 100%;
   max-width: var(--app-max);
-  /* Definite dynamic-viewport height so the bottom nav is pinned to the real
-     visible bottom from first paint (no reflow/jump after the first scroll). */
+  /* Keep the scrolling region within the visible browser viewport. */
   height: 100vh;
   height: 100dvh;
   background: var(--bg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* iOS Home Screen apps can report a shorter dynamic viewport until the first
+   scroll. Use the stable full-screen size for the app's own dock anchor. */
+@media (display-mode: standalone) {
+  .app-shell {
+    height: 100lvh;
+  }
 }
 
 button {

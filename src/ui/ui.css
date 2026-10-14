@@ -592,8 +592,7 @@
 }
 
 /* ---- Bottom nav ----
-   Anchor the dock to the viewport. Safe-area padding keeps controls above the
-   home indicator while the background reaches the physical bottom edge. */
+   Safe-area padding keeps controls above the home indicator. */
 .bottom-nav {
   position: fixed;
   left: 50%;
@@ -608,6 +607,14 @@
   border-top: 1px solid var(--border-soft);
   display: flex;
   z-index: var(--z-nav);
+}
+
+/* In an installed iPhone app, position: fixed can start above the physical
+   bottom and jump on scroll. Anchor to the stable app frame instead. */
+@media (display-mode: standalone) {
+  .bottom-nav {
+    position: absolute;
+  }
 }
 .nav-item {
   flex: 1;
