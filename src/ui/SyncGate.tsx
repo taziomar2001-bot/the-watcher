@@ -7,6 +7,7 @@ export function SyncGate() {
   const sync = useSync()
   const toast = useToast((s) => s.show)
   const [working, setWorking] = useState(false)
+  const [confirmEmpty, setConfirmEmpty] = useState(false)
   const busy = working || sync.status === 'busy'
 
   const run = async (action: () => Promise<void>) => {
@@ -46,9 +47,15 @@ export function SyncGate() {
         </button>
         {sync.remoteNewer ? (
           <div className="sync-gate-actions">
-            <button className="sync-btn full primary pressable" disabled={busy} onClick={() => void run(sync.restoreNow)}>
-              Keep cloud copy
-            </button>
+            {sync.cloudEmpty && !confirmEmpty ? (
+              <button className="sync-btn full primary pressable" disabled={busy} onClick={() => setConfirmEmpty(true)}>
+                Keep cloud copy (empty)
+              </button>
+            ) : (
+              <button className="sync-btn full primary pressable" disabled={busy} onClick={() => void run(sync.restoreNow)}>
+                {sync.cloudEmpty ? 'Yes, clear this device' : 'Keep cloud copy'}
+              </button>
+            )}
             {sync.canKeepDeviceCopy && (
               <button className="sync-btn full pressable" disabled={busy} onClick={() => void run(sync.backupNow)}>
                 Keep device copy
@@ -66,6 +73,10 @@ export function SyncGate() {
           {sync.canKeepDeviceCopy
             ? 'Download a backup first if you may need both copies later.'
             : 'The device copy belongs to another account and cannot be added to this one.'}
+        </div>}
+        {sync.remoteNewer && sync.cloudEmpty && <div className="sync-gate-note" role="alert">
+          This account’s cloud library is empty. Keeping the cloud copy clears the library on this device.
+          {confirmEmpty ? ' Download the backup first — if it is yours, you can bring it back later from Settings → Library & Data → Restore from file.' : ''}
         </div>}
       </div>
     </main>

@@ -157,6 +157,8 @@ interface SyncState {
   syncReady?: boolean
   mayShowLocal?: boolean
   canKeepDeviceCopy?: boolean
+  /** The signed-in account's cloud library is empty, so "keep cloud" clears this device. */
+  cloudEmpty?: boolean
   pendingWrite?: boolean
   error?: string
   signIn: (email: string, password: string) => Promise<void>
@@ -447,7 +449,7 @@ async function reconcile() {
   if (!userId) return
   clearTimeout(pushTimer)
   clearTimeout(pushRetry)
-  useSync.setState({ syncReady: false, error: undefined, remoteNewer: false, canKeepDeviceCopy: false })
+  useSync.setState({ syncReady: false, error: undefined, remoteNewer: false, canKeepDeviceCopy: false, cloudEmpty: false })
   try {
     const remote = await fetchRemote(userId)
     if (currentUserId !== userId) return
@@ -478,6 +480,7 @@ async function reconcile() {
     if (localHasData && !remoteHasData) {
       useSync.setState({
         remoteNewer: true,
+        cloudEmpty: true,
         canKeepDeviceCopy: !belongsElsewhere,
         error: belongsElsewhere ? 'This device has another account’s library. Only the cloud copy can be used here.' : undefined,
       })
@@ -486,7 +489,11 @@ async function reconcile() {
     // Even a locally newer copy can contain changes missing from the cloud.
     // Ask whenever both non-empty copies differ instead of guessing by time.
     const comparable = (d: Snap) => JSON.stringify(SYNC_KEYS.map((k) => d[k] ?? EMPTY_DEFAULTS[k]))
-    if (remote && !belongsElsewhere && comparable(local) === comparable(remote.data)) {
+    // A legacy device library with no owner marker that is identical to this
+    // account's cloud copy is provably this account's: adopt it instead of
+    // forcing a "keep cloud copy" choice. Identical content exposes nothing.
+    const sameOwnerOrUnknown = !ownerId || ownerId === userId
+    if (remote && sameOwnerOrUnknown && comparable(local) === comparable(remote.data)) {
       lastJson = JSON.stringify(local)
       lastSavedJson = lastJson
       setMeta({ localUpdatedAt: remote.ms, hasSynced: true, userId })
