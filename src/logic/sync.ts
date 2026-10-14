@@ -12,6 +12,18 @@ export interface SignUpOpts {
 
 const PENDING_USERNAME_KEY = 'tw-pending-username'
 
+/** True while an email signup's chosen @username is still waiting to be claimed. */
+export function hasPendingUsernameFor(email?: string): boolean {
+  if (!email) return false
+  try {
+    const raw = localStorage.getItem(PENDING_USERNAME_KEY)
+    if (!raw) return false
+    return (JSON.parse(raw) as { email: string }).email === email.trim().toLowerCase()
+  } catch {
+    return false
+  }
+}
+
 // Claim a username stored at signup, once a session exists (covers the
 // email-confirmation flow where there's no session until first sign-in).
 async function claimPendingUsername(email?: string) {
@@ -163,6 +175,7 @@ interface SyncState {
   error?: string
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, opts?: SignUpOpts) => Promise<void>
+  signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
   backupNow: () => Promise<void>
   restoreNow: () => Promise<void>
@@ -191,6 +204,20 @@ export const useSync = create<SyncState>((set) => ({
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return set({ status: 'signedOut', error: error.message })
     // onAuthStateChange fires and drives reconcile.
+  },
+
+  signInWithGoogle: async () => {
+    if (!supabase) return
+    set({ status: 'busy', error: undefined })
+    // Return to the app root without the #/route; HashRouter restores a route
+    // and the auth client exchanges the ?code=… for a session on load.
+    const redirectTo = window.location.origin + window.location.pathname
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo, queryParams: { prompt: 'select_account' } },
+    })
+    if (error) set({ status: 'signedOut', error: error.message })
+    // On success the browser navigates to Google; nothing else runs here.
   },
 
   signUp: async (email, password, opts) => {

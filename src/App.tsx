@@ -5,6 +5,7 @@ import { ToastHost } from './components/ToastHost'
 import { Welcome } from './ui/Welcome'
 import { SyncGate } from './ui/SyncGate'
 import { SignedOutLibraryGate } from './ui/SignedOutLibraryGate'
+import { CompleteProfile, useNeedsProfile } from './ui/CompleteProfile'
 import { USE_TMDB } from './data/catalog'
 import { SUPABASE_ENABLED } from './data/supabase'
 import { useSync } from './logic/sync'
@@ -53,6 +54,13 @@ export default function App() {
   )
   const showSignedOutLibraryGate = useSync((s) => s.status === 'signedOut' && s.mayShowLocal === false)
   const [onboarded, setOnboarded] = useState(readOnboarded)
+  const [needsProfile, profileDone] = useNeedsProfile()
+  // Until the stored session has been checked (status leaves its initial
+  // 'busy'), don't flash the sign-in screen — e.g. while returning from Google.
+  const [booted, setBooted] = useState(false)
+  useEffect(() => {
+    if (syncStatus !== 'busy') setBooted(true)
+  }, [syncStatus])
 
   const dismissWelcome = () => {
     try {
@@ -71,7 +79,7 @@ export default function App() {
 
   // Show the welcome/sign-up screen once, on a fresh device, only when cloud
   // sync is available and nobody is signed in yet.
-  const showWelcome = SUPABASE_ENABLED && !onboarded && syncStatus !== 'signedIn' && syncStatus !== 'disabled'
+  const showWelcome = SUPABASE_ENABLED && booted && !onboarded && syncStatus !== 'signedIn' && syncStatus !== 'disabled'
 
   // Start cloud sync (no-op unless Supabase is configured).
   useEffect(() => {
@@ -90,6 +98,13 @@ export default function App() {
   if (showSyncGate) return (
     <div className="app-shell">
       <SyncGate />
+      <ToastHost />
+    </div>
+  )
+
+  if (needsProfile) return (
+    <div className="app-shell">
+      <CompleteProfile onDone={profileDone} />
       <ToastHost />
     </div>
   )

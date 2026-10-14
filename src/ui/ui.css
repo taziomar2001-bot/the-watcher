@@ -1970,3 +1970,32 @@ body.modal-open .scroll-area { overflow: hidden !important; }
 .sync-gate .sync-error { margin-bottom: 16px; }
 .sync-gate-actions { display: grid; gap: 10px; margin-top: 10px; }
 .sync-gate-progress, .sync-gate-note { color: var(--text-mute); font-size: 13px; line-height: 1.4; margin-top: 16px; }
+
+/* ---- Google sign-in + "finish your profile" ---- */
+.google-btn {
+  height: 52px;
+  border-radius: 14px;
+  background: #fff;
+  color: #1f1f1f;
+  font-size: 15.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.google-btn:disabled { opacity: 0.6; }
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-mute);
+  font-size: 12.5px;
+  margin: 6px 0 2px;
+}
+.auth-or::before,
+.auth-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.finish-profile .sync-gate-card { display: flex; flex-direction: column; gap: 10px; }
+.finish-profile h1 { margin: 8px 0 0; }
+.finish-profile p { margin: 0 0 6px; }
+.finish-label { font-size: 12px; font-weight: 700; color: var(--text-dim); margin-top: 6px; }
