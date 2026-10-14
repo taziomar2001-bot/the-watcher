@@ -409,3 +409,25 @@ export async function getTitleMeta(type: 'show' | 'movie', id: string): Promise<
     return null
   }
 }
+
+// ---- Genre list + discover pages (Random pick, Watch together) ----
+
+export async function genreList(kind: 'movie' | 'show'): Promise<{ id: number; name: string }[]> {
+  const gm = await genreMap(kind === 'show' ? 'tv' : 'movie')
+  return Object.entries(gm)
+    .map(([id, name]) => ({ id: Number(id), name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** One page of well-known titles (≥ 150 votes), most popular first. */
+export async function discoverPage(kind: 'movie' | 'show', page: number, genreId?: number): Promise<{ items: Media[]; totalPages: number }> {
+  const tv = kind === 'show'
+  const params: Record<string, string | number> = { sort_by: 'popularity.desc', 'vote_count.gte': 150, page, include_adult: 'false' }
+  if (genreId) params.with_genres = genreId
+  const [data, gm] = await Promise.all([
+    api<{ results: unknown[]; total_pages: number }>(tv ? '/discover/tv' : '/discover/movie', params),
+    genreMap(tv ? 'tv' : 'movie'),
+  ])
+  const items: Media[] = tv ? await Promise.all(data.results.map((r) => mapShow(r, gm))) : data.results.map((r) => mapMovie(r, gm))
+  return { items, totalPages: Math.min(data.total_pages || 1, 500) }
+}

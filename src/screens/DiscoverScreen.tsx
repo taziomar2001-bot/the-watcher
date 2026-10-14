@@ -79,9 +79,28 @@ export function DiscoverScreen() {
     <div className="scroll-area route-fade" ref={scrollRef}>
       <div className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h1>Discover</h1>
-        <button className="icon-round pressable" onClick={() => nav('/leaderboard')} aria-label="Leaderboard">
-          <TrophyIcon size={20} />
-        </button>
+        <div className="header-icons">
+          <button className="icon-round pressable" onClick={() => nav('/discover/random')} aria-label="Pick something for me">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" aria-hidden="true">
+              <rect x="4" y="4" width="16" height="16" rx="3.5" />
+              <circle cx="9" cy="9" r="1.2" fill="currentColor" stroke="none" />
+              <circle cx="15" cy="15" r="1.2" fill="currentColor" stroke="none" />
+              <circle cx="15" cy="9" r="1.2" fill="currentColor" stroke="none" />
+              <circle cx="9" cy="15" r="1.2" fill="currentColor" stroke="none" />
+            </svg>
+          </button>
+          <button className="icon-round pressable" onClick={() => nav('/discover/match')} aria-label="Watch together">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden="true">
+              <circle cx="8.5" cy="8" r="3" />
+              <circle cx="16" cy="9.5" r="2.5" />
+              <path d="M3 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" />
+              <path d="M14.5 14.3c.5-.2 1-.3 1.5-.3 2.3 0 4.2 1.6 4.7 4.5" />
+            </svg>
+          </button>
+          <button className="icon-round pressable" onClick={() => nav('/leaderboard')} aria-label="Leaderboard">
+            <TrophyIcon size={20} />
+          </button>
+        </div>
       </div>
 
       {/* 1. Search bar (above the toggle) */}

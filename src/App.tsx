@@ -38,6 +38,8 @@ import { FavoritesScreen } from './screens/FavoritesScreen'
 import { LeaderboardScreen } from './screens/LeaderboardScreen'
 import { PublicProfileScreen } from './screens/PublicProfileScreen'
 import { StatsScreen } from './screens/StatsScreen'
+import { RandomScreen } from './screens/RandomScreen'
+import { MatchHomeScreen, MatchSessionScreen } from './screens/MatchScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { CommunitiesScreen } from './screens/CommunitiesScreen'
 import { CommunityScreen } from './screens/CommunityScreen'
@@ -168,6 +170,9 @@ export default function App() {
         <Route path="/movie/:id" element={<MovieScreen />} />
         <Route path="/upcoming" element={<UpComingScreen />} />
         <Route path="/discover" element={<DiscoverScreen />} />
+        <Route path="/discover/random" element={<RandomScreen />} />
+        <Route path="/discover/match" element={<MatchHomeScreen />} />
+        <Route path="/discover/match/:id" element={<MatchSessionScreen />} />
         <Route path="/profile" element={<ProfileScreen />} />
         <Route path="/profile/tv" element={<ProfileTVDashboard />} />
         <Route path="/profile/movies" element={<ProfileMoviesDashboard />} />

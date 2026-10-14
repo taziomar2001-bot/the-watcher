@@ -206,3 +206,18 @@ async function _discoverMovies(): Promise<DiscoverSection<Movie>[]> {
     { key: 'soon', title: 'Coming Soon', items: soon },
   ]
 }
+
+// ---- Genres + discover pages (Random pick, Watch together) ----
+
+export async function genreList(kind: 'movie' | 'show'): Promise<{ id: number; name: string }[]> {
+  if (USE_TMDB) return cached('genres:' + kind, 120 * MIN, () => tmdb.genreList(kind))
+  const names = new Set((kind === 'show' ? SHOWS : MOVIES).flatMap((m) => m.genres))
+  return [...names].sort().map((name, i) => ({ id: i + 1, name }))
+}
+
+export async function discoverPage(kind: 'movie' | 'show', page: number, genre?: { id: number; name: string }): Promise<{ items: Media[]; totalPages: number }> {
+  if (USE_TMDB) return cached(`disc:${kind}:${genre?.id ?? 0}:${page}`, 30 * MIN, () => tmdb.discoverPage(kind, page, genre?.id))
+  const pool: Media[] = (kind === 'show' ? SHOWS : MOVIES).filter((m) => !genre || m.genres.includes(genre.name))
+  const per = 20
+  return wait({ items: pool.slice((page - 1) * per, page * per), totalPages: Math.max(1, Math.ceil(pool.length / per)) })
+}
