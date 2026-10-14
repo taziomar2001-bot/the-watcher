@@ -14,15 +14,17 @@ const PENDING_USERNAME_KEY = 'tw-pending-username'
 
 // Claim a username stored at signup, once a session exists (covers the
 // email-confirmation flow where there's no session until first sign-in).
-async function claimPendingUsername() {
-  let uname: string | null = null
+async function claimPendingUsername(email?: string) {
+  let pending: { email: string; username: string } | null = null
   try {
-    uname = localStorage.getItem(PENDING_USERNAME_KEY)
+    const raw = localStorage.getItem(PENDING_USERNAME_KEY)
+    if (raw) pending = JSON.parse(raw) as { email: string; username: string }
   } catch {
     /* ignore */
   }
-  if (!uname) return
-  const r = await claimUsername(uname)
+  // A pending signup must never claim its handle on a different signed-in account.
+  if (!pending || !email || pending.email !== email.trim().toLowerCase()) return
+  const r = await claimUsername(pending.username)
   if (r.ok || (!r.ok && r.code === 'username_taken')) {
     // Taken names are resolved by the user in Settings; stop retrying either way.
     try {
@@ -95,24 +97,28 @@ function hydrate(data: Snap) {
   for (const k of SYNC_KEYS) full[k] = k in data && data[k] !== undefined ? data[k] : EMPTY_DEFAULTS[k]
   useLibrary.setState(full as never)
 }
-/** Does a snapshot actually contain a library (vs. an empty/virgin account)? */
+/** Does a snapshot contain any user-created library data? */
 function snapHasData(d: Snap): boolean {
   const n = (v: unknown) => (v && typeof v === 'object' ? Object.keys(v as object).length : 0)
-  return n(d.watchlistShows) + n(d.watchedEpisodes) + n(d.libraryShows) + n(d.watchlistMovies) + n(d.watchedMovies) > 0
+  return [
+    d.watchlistShows, d.watchlistMovies, d.watchedEpisodes, d.watchedMovies,
+    d.favoriteShows, d.favoriteMovies, d.notifyShows, d.ratings,
+    d.movieRatings, d.episodeRatings, d.ratingAt, d.libraryShows,
+    d.libraryMovies, d.lastWatched, d.followedAt, d.addedAt,
+    d.stoppedShows, d.lists, d.importedShowIds, d.importedMovieKeys,
+  ].some((v) => n(v) > 0) ||
+    JSON.stringify(d.profile ?? EMPTY_DEFAULTS.profile) !== JSON.stringify(EMPTY_DEFAULTS.profile)
 }
-function isLocalEmpty(): boolean {
-  return !snapHasData(snapshot())
-}
-
 interface Meta {
   localUpdatedAt: number
   hasSynced?: boolean
+  userId?: string
 }
 const META_KEY = 'tw-sync-meta'
 function getMeta(): Meta {
   try {
     const p = JSON.parse(localStorage.getItem(META_KEY) || '{}') as Partial<Meta>
-    return { localUpdatedAt: p.localUpdatedAt ?? 0, hasSynced: p.hasSynced }
+    return { localUpdatedAt: p.localUpdatedAt ?? 0, hasSynced: p.hasSynced, userId: p.userId }
   } catch {
     return { localUpdatedAt: 0 }
   }
@@ -132,6 +138,8 @@ interface SyncState {
   email?: string
   lastSyncedAt?: number
   remoteNewer?: boolean
+  syncReady?: boolean
+  mayShowLocal?: boolean
   pendingWrite?: boolean
   error?: string
   signIn: (email: string, password: string) => Promise<void>
@@ -139,20 +147,27 @@ interface SyncState {
   signOut: () => Promise<void>
   backupNow: () => Promise<void>
   restoreNow: () => Promise<void>
-  deleteCloudData: () => Promise<void>
+  retrySync: () => Promise<void>
+  deleteCloudData: () => Promise<boolean>
 }
 
 let currentUserId: string | null = null
 let applyingRemote = false
 let lastJson = ''
+let lastSavedJson: string | null = null
 let pushTimer: ReturnType<typeof setTimeout> | undefined
+let pushRetry: ReturnType<typeof setTimeout> | undefined
+let pushInFlight: Promise<boolean> | null = null
+let initialized = false
 
 export const useSync = create<SyncState>((set) => ({
   status: SUPABASE_ENABLED ? 'signedOut' : 'disabled',
+  syncReady: false,
+  mayShowLocal: true,
 
   signIn: async (email, password) => {
     if (!supabase) return
-    set({ status: 'busy', error: undefined })
+    set({ status: 'busy', mayShowLocal: !snapHasData(snapshot()), error: undefined })
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return set({ status: 'signedOut', error: error.message })
     // onAuthStateChange fires and drives reconcile.
@@ -160,7 +175,7 @@ export const useSync = create<SyncState>((set) => ({
 
   signUp: async (email, password, opts) => {
     if (!supabase) return
-    set({ status: 'busy', error: undefined })
+    set({ status: 'busy', mayShowLocal: !snapHasData(snapshot()), error: undefined })
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -172,169 +187,300 @@ export const useSync = create<SyncState>((set) => ({
     // Remember the chosen username to claim once a session exists.
     if (opts?.username) {
       try {
-        localStorage.setItem(PENDING_USERNAME_KEY, opts.username)
+        localStorage.setItem(PENDING_USERNAME_KEY, JSON.stringify({
+          email: email.trim().toLowerCase(),
+          username: opts.username,
+        }))
       } catch {
         /* ignore */
       }
     }
     const { data } = await supabase.auth.getSession()
     if (data.session) {
-      await claimPendingUsername()
+      await claimPendingUsername(data.session.user.email)
     } else {
       set({ status: 'signedOut', error: 'Check your email to confirm your account, then sign in.' })
     }
   },
 
   signOut: async () => {
-    if (!supabase) return
-    set({ status: 'busy' })
-    // Flush the latest data to the cloud before wiping local, so nothing is lost.
-    // Only clear local if the data is safely in the cloud (just-pushed or already
-    // synced); otherwise keep it on this device and still sign out.
-    let safe = false
-    try {
-      safe = (await pushNow()) || !!getMeta().hasSynced
-    } catch {
-      safe = !!getMeta().hasSynced
-    }
-    await supabase.auth.signOut()
-    currentUserId = null
-    if (safe) {
-      // Reset to a clean, signed-out device: the next person (or a new account)
-      // starts virgin and lands on the sign-in screen.
-      try {
-        localStorage.removeItem('the-watcher-library-v1')
-        localStorage.removeItem('tw-sync-meta')
-        localStorage.removeItem('tw-onboarded')
-        localStorage.removeItem('tw-pending-username')
-      } catch {
-        /* ignore */
-      }
-      location.reload()
+    if (!supabase || !currentUserId) return
+    if (!useSync.getState().syncReady || useSync.getState().remoteNewer) {
+      set({ error: 'Resolve the cloud sync issue before signing out. Your library is still on this device.' })
       return
     }
-    useToast.getState().show("Signed out — couldn't reach the cloud, so your data is kept on this device.", { duration: 5000 })
-    set({ status: 'signedOut', email: undefined, lastSyncedAt: undefined, remoteNewer: false })
+    set({ status: 'busy', error: undefined })
+    clearTimeout(pushTimer)
+    clearTimeout(pushRetry)
+    // A previous successful backup does not prove that recent edits were saved.
+    let saved = lastSavedJson === JSON.stringify(snapshot()) && !useSync.getState().pendingWrite
+    for (let attempt = 0; !saved && attempt < 3; attempt++) {
+      if (!await pushNow()) break
+      saved = lastSavedJson === JSON.stringify(snapshot()) && !useSync.getState().pendingWrite
+    }
+    if (!saved) {
+      set({ status: 'signedIn' })
+      useToast.getState().show("Sign-out paused: your latest changes are not backed up.", { duration: 5000 })
+      return
+    }
+    clearTimeout(pushTimer)
+    clearTimeout(pushRetry)
+    set({ syncReady: false })
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      set({ status: 'signedIn', syncReady: true, error: error.message })
+      return
+    }
+    currentUserId = null
+    if (lastSavedJson !== JSON.stringify(snapshot())) {
+      useToast.getState().show('Signed out, but a change made during sign-out remains on this device. Download a backup before switching accounts.', { duration: 7000 })
+      return
+    }
+    clearLocalAccount()
+    location.reload()
   },
 
-  // Permanently deletes this account's cloud library row, then signs out. (The
-  // auth user itself can only be removed by an admin, so we clear the data we
-  // control and are honest about it in the UI.)
+  // Deletes the cloud library only. Auth identity and social data remain.
   deleteCloudData: async () => {
-    if (!supabase || !currentUserId) return
+    if (!supabase || !currentUserId) return false
+    const userId = currentUserId
     set({ status: 'busy' })
-    await supabase.from(LIBRARY_TABLE).delete().eq('user_id', currentUserId)
-    await supabase.auth.signOut()
+    clearTimeout(pushTimer)
+    clearTimeout(pushRetry)
+    if (pushInFlight) await pushInFlight
+    if (currentUserId !== userId) return false
+    clearTimeout(pushTimer)
+    const { data: deleted, error } = await supabase.from(LIBRARY_TABLE)
+      .delete().eq('user_id', userId).select('user_id')
+    if (error) {
+      set({ status: 'signedIn', error: error.message })
+      return false
+    }
+    if (!deleted?.length) {
+      try {
+        if (await fetchRemote(userId)) {
+          set({ status: 'signedIn', error: 'The cloud library could not be deleted.' })
+          return false
+        }
+      } catch (e) {
+        set({ status: 'signedIn', error: errorMessage(e) })
+        return false
+      }
+    }
+    const { error: signOutError } = await supabase.auth.signOut()
+    if (signOutError) {
+      set({ status: 'signedIn', syncReady: false, remoteNewer: true, error: signOutError.message })
+      return false
+    }
     currentUserId = null
-    set({ status: 'signedOut', email: undefined, lastSyncedAt: undefined, remoteNewer: false })
+    return true
   },
 
   backupNow: async () => {
+    if (!useSync.getState().syncReady && !useSync.getState().remoteNewer) {
+      set({ error: 'Check the cloud connection before backing up.' })
+      return
+    }
     set({ status: 'busy' })
-    await pushNow()
-    set({ status: 'signedIn', remoteNewer: false })
+    const ok = await pushNow()
+    set({ status: 'signedIn', ...(ok ? { remoteNewer: false, syncReady: true, mayShowLocal: true } : {}) })
   },
 
   restoreNow: async () => {
     set({ status: 'busy' })
-    await download()
-    set({ status: 'signedIn', remoteNewer: false })
+    try {
+      if (!await download()) {
+        if (!useSync.getState().remoteNewer || !currentUserId) {
+          set({ status: 'signedIn', error: 'No cloud library was found for this account.' })
+          return
+        }
+        // Explicitly choosing the empty cloud account discards this device copy.
+        applyingRemote = true
+        try {
+          hydrate({})
+          lastJson = JSON.stringify(snapshot())
+          lastSavedJson = lastJson
+          setMeta({ localUpdatedAt: Date.now(), hasSynced: true, userId: currentUserId })
+        } finally {
+          applyingRemote = false
+        }
+      }
+      set({ status: 'signedIn', remoteNewer: false, syncReady: true, mayShowLocal: true, pendingWrite: false, error: undefined })
+    } catch (e) {
+      set({ status: 'signedIn', error: errorMessage(e) })
+    }
+  },
+
+  retrySync: async () => {
+    if (currentUserId) await reconcile()
   },
 }))
 
-let pushRetry: ReturnType<typeof setTimeout> | undefined
+function clearLocalAccount() {
+  try {
+    localStorage.removeItem('the-watcher-library-v1')
+    localStorage.removeItem(META_KEY)
+    localStorage.removeItem('tw-onboarded')
+    localStorage.removeItem(PENDING_USERNAME_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : 'Cloud sync failed. Try again.'
+}
 
 /**
- * Persist the whole library to the user's cloud row. The server owns the
- * updated_at timestamp (read back after write) so last-write-wins never depends
- * on client clock skew. On failure the local copy is kept, the error is surfaced,
- * and the write is retried — a failed write is never treated as a success.
+ * Serialize writes so a slow older backup cannot land after a newer one.
+ * A failed write leaves the device copy intact and is never marked as saved.
  */
 async function pushNow(): Promise<boolean> {
   if (!supabase || !currentUserId) return false
-  const now = Date.now()
-  const data = snapshot()
-  lastJson = JSON.stringify(data)
-  const { error } = await supabase
-    .from(LIBRARY_TABLE)
-    .upsert({ user_id: currentUserId, data, updated_at: new Date(now).toISOString() }, { onConflict: 'user_id' })
-  if (error) {
-    useSync.setState({ error: error.message, pendingWrite: true })
-    useToast.getState().show("Couldn't back up to the cloud — will retry", { duration: 4000 })
-    clearTimeout(pushRetry)
-    pushRetry = setTimeout(() => void pushNow(), 15000)
-    return false
+  while (pushInFlight) {
+    await pushInFlight
+    if (lastSavedJson === JSON.stringify(snapshot())) return true
   }
-  const meta = getMeta()
-  meta.localUpdatedAt = now
-  meta.hasSynced = true
-  setMeta(meta)
-  useSync.setState({ lastSyncedAt: now, error: undefined, pendingWrite: false })
-  return true
+  if (!currentUserId) return false
+  const userId = currentUserId
+  const data = snapshot()
+  const json = JSON.stringify(data)
+  const task = (async () => {
+    try {
+      const { data: saved, error } = await supabase!
+        .from(LIBRARY_TABLE)
+        .upsert({ user_id: userId, data }, { onConflict: 'user_id' })
+        .select('updated_at')
+        .single()
+      if (currentUserId !== userId) return false
+      if (error) throw error
+      const ms = Date.parse(saved.updated_at)
+      setMeta({ localUpdatedAt: ms, hasSynced: true, userId })
+      lastSavedJson = json
+      lastJson = json
+      clearTimeout(pushRetry)
+      const changedAgain = json !== JSON.stringify(snapshot())
+      useSync.setState({ lastSyncedAt: ms, error: undefined, pendingWrite: changedAgain })
+      if (changedAgain) pushTimer = setTimeout(() => void pushNow(), 1500)
+      return true
+    } catch (e) {
+      if (currentUserId !== userId) return false
+      useSync.setState({ error: errorMessage(e), pendingWrite: true })
+      useToast.getState().show("Couldn't back up to the cloud — will retry", { duration: 4000 })
+      clearTimeout(pushRetry)
+      if (useSync.getState().syncReady) pushRetry = setTimeout(() => void pushNow(), 15000)
+      return false
+    }
+  })()
+  pushInFlight = task
+  try {
+    return await task
+  } finally {
+    if (pushInFlight === task) pushInFlight = null
+  }
 }
 
-async function fetchRemote(): Promise<{ data: Snap; ms: number } | null> {
-  if (!supabase || !currentUserId) return null
+async function fetchRemote(userId: string): Promise<{ data: Snap; ms: number } | null> {
+  if (!supabase) throw new Error('Cloud sync is unavailable.')
   const { data, error } = await supabase
     .from(LIBRARY_TABLE)
     .select('data, updated_at')
-    .eq('user_id', currentUserId)
+    .eq('user_id', userId)
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw error
+  if (!data) return null
   return { data: (data.data ?? {}) as Snap, ms: Date.parse(data.updated_at) }
 }
 
-async function download() {
-  const remote = await fetchRemote()
-  if (!remote) return
+async function download(): Promise<boolean> {
+  if (!currentUserId) return false
+  const userId = currentUserId
+  const remote = await fetchRemote(userId)
+  if (!remote || currentUserId !== userId) return false
+  applyRemote(remote, userId)
+  return true
+}
+
+function applyRemote(remote: { data: Snap; ms: number }, userId: string) {
   applyingRemote = true
-  hydrate(remote.data)
-  lastJson = JSON.stringify(snapshot())
-  setMeta({ localUpdatedAt: remote.ms, hasSynced: true })
-  applyingRemote = false
+  try {
+    hydrate(remote.data)
+    lastJson = JSON.stringify(snapshot())
+    lastSavedJson = lastJson
+    setMeta({ localUpdatedAt: remote.ms, hasSynced: true, userId })
+  } finally {
+    applyingRemote = false
+  }
   useSync.setState({ lastSyncedAt: remote.ms })
 }
 
-// Decide direction after auth, account-isolation-safe:
-//   local empty + account has data   → download the account's library
-//   local has data + account empty   → upload (claim) local into this account
-//   both empty                       → virgin: hard-reset to empty, mark synced
-//   both have data                   → conflict → let the user choose
-// Combined with sign-out clearing local, this guarantees a signed-in account
-// only ever shows its OWN data, and a brand-new account starts empty.
+// Never infer "no cloud library" from a failed read. Any populated device
+// library needs an explicit choice before it enters an empty cloud account,
+// since its last owner may be somebody else.
 async function reconcile() {
-  const remote = await fetchRemote()
-  const remoteHasData = !!remote && snapHasData(remote.data)
-  const localHasData = !isLocalEmpty()
+  const userId = currentUserId
+  if (!userId) return
+  clearTimeout(pushTimer)
+  clearTimeout(pushRetry)
+  useSync.setState({ syncReady: false, error: undefined, remoteNewer: false })
+  try {
+    const remote = await fetchRemote(userId)
+    if (currentUserId !== userId) return
+    const meta = getMeta()
+    const local = snapshot()
+    const localHasData = snapHasData(local)
+    const remoteHasData = !!remote && snapHasData(remote.data)
+    const belongsElsewhere = !!meta.userId && meta.userId !== userId
 
-  if (!localHasData && remoteHasData) {
-    await download()
-    return
-  }
-  if (localHasData && !remoteHasData) {
-    await pushNow()
-    return
-  }
-  if (!localHasData && !remoteHasData) {
-    // Virgin account (or empty cloud): make local a clean, synced empty state.
-    hydrate(remote ? remote.data : {})
-    lastJson = JSON.stringify(snapshot())
-    setMeta({ localUpdatedAt: remote ? remote.ms : Date.now(), hasSynced: true })
-    return
-  }
-  // Both have data — don't silently clobber; ask the user which to keep.
-  const meta = getMeta()
-  if (!remote) return
-  if (!meta.hasSynced || remote.ms > meta.localUpdatedAt) {
-    useSync.setState({ remoteNewer: true })
-  } else {
-    await pushNow()
+    if (!localHasData && remoteHasData && remote) {
+      applyRemote(remote, userId)
+      useSync.setState({ syncReady: true, mayShowLocal: true, pendingWrite: false })
+      return
+    }
+    if (!localHasData && !remoteHasData) {
+      applyingRemote = true
+      try {
+        hydrate(remote?.data ?? {})
+      } finally {
+        applyingRemote = false
+      }
+      lastJson = JSON.stringify(snapshot())
+      lastSavedJson = lastJson
+      setMeta({ localUpdatedAt: remote?.ms ?? Date.now(), hasSynced: true, userId })
+      useSync.setState({ syncReady: true, mayShowLocal: true, pendingWrite: false })
+      return
+    }
+    if (localHasData && !remoteHasData) {
+      useSync.setState({
+        remoteNewer: true,
+        error: belongsElsewhere ? 'This device has another account’s library. Download a backup before choosing which copy to keep.' : undefined,
+      })
+      return
+    }
+    // Even a locally newer copy can contain changes missing from the cloud.
+    // Ask whenever both non-empty copies differ instead of guessing by time.
+    const comparable = (d: Snap) => JSON.stringify(SYNC_KEYS.map((k) => d[k] ?? EMPTY_DEFAULTS[k]))
+    if (remote && !belongsElsewhere && comparable(local) === comparable(remote.data)) {
+      lastJson = JSON.stringify(local)
+      lastSavedJson = lastJson
+      setMeta({ localUpdatedAt: remote.ms, hasSynced: true, userId })
+      useSync.setState({ syncReady: true, mayShowLocal: true, pendingWrite: false })
+    } else {
+      useSync.setState({
+        remoteNewer: true,
+        error: belongsElsewhere ? 'This device has another account’s library. Download a backup before choosing which copy to keep.' : undefined,
+      })
+    }
+  } catch (e) {
+    if (currentUserId === userId) {
+      useSync.setState({ error: `Could not read your cloud library: ${errorMessage(e)}`, syncReady: false })
+    }
   }
 }
 
 function subscribeChanges() {
   useLibrary.subscribe(() => {
-    if (!currentUserId || applyingRemote) return
+    if (!currentUserId || !useSync.getState().syncReady || applyingRemote) return
     const j = JSON.stringify(snapshot())
     if (j === lastJson) return
     lastJson = j
@@ -345,34 +491,45 @@ function subscribeChanges() {
 
 /** Call once on app start. Wires auth state → reconcile, and change → backup. */
 export async function initSync() {
-  if (!supabase) return
+  if (!supabase || initialized) return
+  initialized = true
   lastJson = JSON.stringify(snapshot())
   subscribeChanges()
 
   // Flush a failed write as soon as connectivity or focus returns.
   const flushPending = () => {
-    if (currentUserId && useSync.getState().pendingWrite) void pushNow()
+    if (currentUserId && useSync.getState().syncReady && useSync.getState().pendingWrite) void pushNow()
   }
   window.addEventListener('online', flushPending)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') flushPending()
   })
 
-  supabase.auth.onAuthStateChange((_event, session) => {
-    currentUserId = session?.user?.id ?? null
+  const acceptSession = (session: { user: { id: string; email?: string } } | null) => {
+    const userId = session?.user.id ?? null
+    if (userId === currentUserId) return
+    clearTimeout(pushTimer)
+    clearTimeout(pushRetry)
+    currentUserId = userId
+    lastSavedJson = null
     if (session) {
-      useSync.setState({ status: 'signedIn', email: session.user.email ?? undefined })
-      void claimPendingUsername()
+      const mayShowLocal = !snapHasData(snapshot()) || getMeta().userId === userId
+      useSync.setState({
+        status: 'signedIn', email: session.user.email, syncReady: false,
+        remoteNewer: false, pendingWrite: false, mayShowLocal, error: undefined,
+      })
+      void claimPendingUsername(session.user.email)
       void reconcile()
     } else {
-      useSync.setState({ status: 'signedOut', email: undefined })
+      useSync.setState({
+        status: 'signedOut', email: undefined, syncReady: false,
+        remoteNewer: false, pendingWrite: false, mayShowLocal: true,
+      })
     }
-  })
-
-  const { data } = await supabase.auth.getSession()
-  if (data.session) {
-    currentUserId = data.session.user.id
-    useSync.setState({ status: 'signedIn', email: data.session.user.email ?? undefined })
-    void reconcile()
   }
+  supabase.auth.onAuthStateChange((_event, session) => acceptSession(session))
+
+  const { data, error } = await supabase.auth.getSession()
+  if (error) useSync.setState({ error: error.message })
+  else acceptSession(data.session)
 }

@@ -22,7 +22,7 @@ export function SyncPanel() {
     <div className="sync-card">
       <div className="sync-head">
         <span className="sync-title">Cloud Backup</span>
-        {sync.status === 'signedIn' && <span className="sync-badge">On</span>}
+        {sync.status === 'signedIn' && <span className="sync-badge">{sync.pendingWrite ? 'Pending' : sync.syncReady ? 'On' : sync.error || sync.remoteNewer ? 'Needs attention' : 'Checking'}</span>}
       </div>
 
       {sync.status === 'signedIn' ? (
@@ -32,11 +32,15 @@ export function SyncPanel() {
           </div>
           {sync.remoteNewer && (
             <div className="sync-warn">
-              Your cloud backup has newer data than this device.
-              <button onClick={() => sync.restoreNow()}>Restore it</button>
+              This device and cloud account have different libraries. Download a backup before choosing.
+              <button onClick={() => sync.restoreNow()}>Keep cloud copy</button>
+              <button onClick={() => sync.backupNow()}>Keep device copy</button>
             </div>
           )}
-          <div className="sync-actions">
+          {!sync.syncReady && !sync.remoteNewer && (
+            <button className="sync-btn pressable" onClick={() => sync.retrySync()}>Retry cloud check</button>
+          )}
+          {sync.syncReady && !sync.remoteNewer && <div className="sync-actions">
             <button className="sync-btn primary pressable" onClick={() => sync.backupNow()}>
               <CheckIcon size={15} /> Back up now
             </button>
@@ -46,7 +50,7 @@ export function SyncPanel() {
             <button className="sync-btn ghost pressable" onClick={() => sync.signOut()}>
               Sign out
             </button>
-          </div>
+          </div>}
         </>
       ) : (
         <>

@@ -1,69 +1,47 @@
-# Cloud Backup Setup (Supabase)
+# Supabase setup for The Watcher
 
-This makes your library permanent and syncable across devices. It's free and
-takes about 5 minutes. Do it on a desktop/laptop.
+The private library stays in one owner-only JSON row in `public.library`.
+Social profiles, follows, and aggregate stats live in separate tables.
 
-## 1. Create the project
+## Before changing the database
 
-1. Go to https://supabase.com and sign up (free).
-2. Click **New project**. Give it a name (e.g. `the-watcher`), set a database
-   password (save it somewhere), pick the nearest region, and create it.
-3. Wait ~1 minute for it to finish provisioning.
+1. In the app, open **Settings → Library & Data → Download backup** on the
+   device that has your library. Keep the downloaded file somewhere safe.
+2. Confirm you are using the intended Supabase project.
+3. Run the SQL files in order in Supabase's SQL Editor:
+   - `supabase/migration.sql`
+   - `supabase/002_social_foundation.sql`
+   - `supabase/003_social_permissions.sql`
 
-## 2. Create the database table
+If the first two files have already run, run only the new `003` file. All
+three scripts are designed to be rerun. The third script narrows direct
+profile and follow-row edits; it does not restructure or delete library data.
+Do not use the older single-table SQL snippet from a previous copy of this
+setup guide.
 
-In the left sidebar open **SQL Editor** → **New query**, paste this, and click **Run**:
+## Configure the app
 
-```sql
-create table if not exists public.library (
-  user_id uuid references auth.users on delete cascade primary key,
-  data jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now()
-);
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the app's build
+environment. The anon key is public; row-level security protects each user's
+data. Set `VITE_OWNER_EMAIL` to the owner's lowercase email if the owner
+still needs the manual TV Time import tool. Rebuild or redeploy after changing
+these values.
 
-alter table public.library enable row level security;
+## Verify with two accounts
 
-create policy "Users manage their own library"
-  on public.library for all
-  to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-```
+1. Sign in on the device that holds the owner's library. If the cloud account
+   is empty, choose **Keep device copy** to upload it. Check that cloud sync
+   completes, and keep the downloaded backup until you have verified it.
+2. Sign out, then create a second test account. Its library should be empty.
+3. Check that the second account cannot see or update the owner's library.
+4. Check that a private profile's follow request stays pending until accepted.
+5. Check that a signed-in user cannot directly change username or follower
+   counts through the `profiles` table, or rewrite IDs on a `follows` row.
 
-This creates one secure row per account (row-level security means only you can
-read or write your own data), holding your whole library as JSON.
-
-## 3. (Recommended) Turn off email confirmation
-
-So "Create account" signs you straight in:
-
-- **Authentication** → **Providers** → **Email** → turn **off** "Confirm email" → Save.
-
-(If you leave it on, you'll get a confirmation email to click before signing in.)
-
-## 4. Copy your keys into the app
-
-- **Project Settings** (gear icon) → **API**.
-- Copy the **Project URL** and the **anon public** key.
-- In your project's `.env` file add:
-
-```
-VITE_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-VITE_SUPABASE_ANON_KEY=YOUR-ANON-PUBLIC-KEY
-```
-
-Rebuild (`npm run build`) or restart `npm run dev`.
-
-## 5. Use it
-
-- Open the app → **Profile** tab → **Cloud Backup** card.
-- Tap **Create account** (email + password) once. Your library uploads automatically.
-- From then on every change auto-backs-up.
-- **On a new phone:** install the app, open Profile, **Sign in** with the same
-  email/password → tap **Restore** and everything comes back.
-
-Notes:
-- The `anon` key is safe to ship in a client app — row-level security is what
-  protects your data, and it's tied to your login.
-- Sync is last-write-wins per device. If the app says "cloud has newer data,"
-  tap Restore to pull it. Use **Back up now** / **Restore** for manual control.
+If device and cloud libraries differ, the app asks which one to keep. Download
+a backup before choosing. A failed cloud read or save should leave the device
+library intact and prevent sign-out until the sync issue is resolved.
+When signing into a different account on a device with existing data, the
+library-check screen hides that data until the cloud check succeeds or the
+user chooses a copy. A device library already verified for the same account
+remains visible during a temporary cloud outage, with syncing paused.

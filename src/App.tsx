@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { BottomNav } from './ui/BottomNav'
 import { ToastHost } from './components/ToastHost'
 import { Welcome } from './ui/Welcome'
+import { SyncGate } from './ui/SyncGate'
 import { USE_TMDB } from './data/catalog'
 import { SUPABASE_ENABLED } from './data/supabase'
 import { useSync } from './logic/sync'
@@ -46,6 +47,9 @@ export default function App() {
   useNavTracker()
   useStatsSync()
   const syncStatus = useSync((s) => s.status)
+  const showSyncGate = useSync((s) =>
+    (s.status === 'signedIn' || s.status === 'busy') && (!!s.remoteNewer || s.mayShowLocal === false),
+  )
   const [onboarded, setOnboarded] = useState(readOnboarded)
 
   const dismissWelcome = () => {
@@ -80,6 +84,13 @@ export default function App() {
     if (!USE_TMDB) return
     ensureUpcoming()
   }, [])
+
+  if (showSyncGate) return (
+    <div className="app-shell">
+      <SyncGate />
+      <ToastHost />
+    </div>
+  )
 
   return (
     <div className="app-shell">

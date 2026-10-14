@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Show } from '../types'
 import { SEED_WATCHED_EPISODES } from '../data/mock'
+import { SUPABASE_ENABLED } from '../data/supabase'
 
 export interface CustomList {
   id: string
@@ -183,7 +184,9 @@ const emptySeed = {
   ratings: {} as Record<string, number>,
 }
 
-const seed = USE_TMDB ? emptySeed : sampleSeed
+// Demo content must never become a newly created cloud account's library.
+const demoMode = !USE_TMDB && !SUPABASE_ENABLED
+const seed = demoMode ? sampleSeed : emptySeed
 
 export const useLibrary = create<LibraryState>()(
   persist(
@@ -199,7 +202,7 @@ export const useLibrary = create<LibraryState>()(
       addedAt: {},
       stoppedShows: {},
       lists: [],
-      profile: { username: USE_TMDB ? '' : 'omar', following: USE_TMDB ? 0 : 48, followers: USE_TMDB ? 0 : 27, comments: USE_TMDB ? 0 : 132 },
+      profile: { username: demoMode ? 'omar' : '', following: demoMode ? 48 : 0, followers: demoMode ? 27 : 0, comments: demoMode ? 132 : 0 },
       // In mock mode there is nothing to import, so mark it done up-front.
       tvTimeImported: !USE_TMDB,
       tvTimeMoviesImported: !USE_TMDB,

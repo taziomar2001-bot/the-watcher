@@ -88,10 +88,14 @@ export function countRefs(refs: string[]): { movies: number; shows: number } {
  */
 export function useStatsSync() {
   const status = useSync((s) => s.status)
+  const syncReady = useSync((s) => s.syncReady)
   const stats = useMyStats()
   const last = useRef('')
   useEffect(() => {
-    if (status !== 'signedIn') return
+    if (status !== 'signedIn' || !syncReady) {
+      last.current = ''
+      return
+    }
     const payload = {
       episodes_watched: stats.episodesWatched,
       shows_watched: stats.showsStarted,
@@ -106,5 +110,5 @@ export function useStatsSync() {
       void pushMyStats(payload)
     }, 2500)
     return () => clearTimeout(t)
-  }, [status, stats])
+  }, [status, syncReady, stats])
 }

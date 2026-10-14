@@ -4,6 +4,7 @@ import { ImportPanel } from './ImportPanel'
 import { AuthScreen } from './AuthScreen'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
+import { downloadLocalBackup } from '../logic/backup'
 import { useToast } from '../store/useToast'
 import { SUPABASE_ENABLED, OWNER_EMAIL } from '../data/supabase'
 import { claimUsername, updateMyIdentity, getMyProfile, type SocialProfile } from '../data/social'
@@ -144,23 +145,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   // ---- Local backup / restore (a verifiable, in-hand rollback path) ----
   const exportBackup = () => {
     try {
-      const payload = {
-        app: 'the-watcher',
-        kind: 'backup',
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        library: JSON.parse(localStorage.getItem('the-watcher-library-v1') || 'null'),
-        syncMeta: JSON.parse(localStorage.getItem('tw-sync-meta') || 'null'),
-      }
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `the-watcher-backup-${new Date().toISOString().slice(0, 10)}.json`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      downloadLocalBackup()
       toast('Backup downloaded')
     } catch {
       toast("Couldn't create the backup file")
@@ -178,7 +163,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         return
       }
       localStorage.setItem('the-watcher-library-v1', JSON.stringify(payload.library))
-      if (payload.syncMeta) localStorage.setItem('tw-sync-meta', JSON.stringify(payload.syncMeta))
+      // A file can come from another account or an older device. Reconcile it
+      // explicitly instead of trusting its old sync timestamp or owner.
+      localStorage.setItem('tw-sync-meta', JSON.stringify({ localUpdatedAt: Date.now(), hasSynced: true }))
       location.reload()
     } catch {
       toast('Could not read that backup file')
@@ -186,9 +173,12 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   const doDelete = async () => {
-    await sync.deleteCloudData().catch(() => {})
+    if (!await sync.deleteCloudData()) return
     try {
       localStorage.removeItem('the-watcher-library-v1')
+      localStorage.removeItem('tw-sync-meta')
+      localStorage.removeItem('tw-onboarded')
+      localStorage.removeItem('tw-pending-username')
     } catch {
       /* ignore */
     }
@@ -239,7 +229,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 Sign out
               </button>
               <button className="settings-textlink danger" onClick={() => setConfirmDelete(true)}>
-                Delete account
+                Delete cloud library
               </button>
             </div>
           ) : SUPABASE_ENABLED ? (
@@ -376,7 +366,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <div className="settings-card">
                 <div className="settings-row-flat">
                   <span>Status</span>
-                  <span className="sync-badge">On</span>
+                  <span className="sync-badge">{sync.pendingWrite ? 'Pending' : sync.syncReady ? 'On' : sync.error || sync.remoteNewer ? 'Needs attention' : 'Checking'}</span>
                 </div>
                 <div className="settings-row-flat">
                   <span>Last synced</span>
@@ -390,18 +380,24 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 )}
                 {sync.remoteNewer && (
                   <div className="sync-warn">
-                    Your cloud backup has newer data than this device.
-                    <button onClick={() => sync.restoreNow()}>Restore it</button>
+                    This device and your cloud account have different libraries. Download a backup before choosing which copy to keep.
+                    <button onClick={() => sync.restoreNow()}>Keep cloud copy</button>
+                    <button onClick={() => sync.backupNow()}>Keep device copy</button>
                   </div>
                 )}
-                <div className="sync-actions">
-                  <button className="sync-btn primary pressable" onClick={() => sync.backupNow()}>
-                    <CheckIcon size={15} /> Back up now
-                  </button>
-                  <button className="sync-btn pressable" onClick={() => sync.restoreNow()}>
-                    Restore
-                  </button>
-                </div>
+                {!sync.syncReady && !sync.remoteNewer && (
+                  <button className="sync-btn pressable" onClick={() => sync.retrySync()}>Retry cloud check</button>
+                )}
+                {sync.syncReady && !sync.remoteNewer && (
+                  <div className="sync-actions">
+                    <button className="sync-btn primary pressable" onClick={() => sync.backupNow()}>
+                      <CheckIcon size={15} /> Back up now
+                    </button>
+                    <button className="sync-btn pressable" onClick={() => sync.restoreNow()}>
+                      Restore
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -423,7 +419,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
             <div className="confirm-title">Sign out?</div>
-            <div className="confirm-body">Your library stays on this device and in your private cloud. Sign back in anytime to sync.</div>
+            <div className="confirm-body">Your latest changes will be backed up, then this device's library will be cleared. If the backup fails, you will stay signed in.</div>
             <div className="confirm-actions">
               <button className="sync-btn ghost pressable" onClick={() => setConfirmSignOut(false)}>
                 Cancel
@@ -452,16 +448,16 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         >
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
-            <div className="confirm-title">Delete account?</div>
+            <div className="confirm-title">Delete cloud library?</div>
             <div className="confirm-body">
-              This permanently deletes your Watcher library data from the cloud and clears it from this device. This cannot be undone.
+              This deletes your Watcher library from the cloud and this device, then signs you out. Your login and social profile remain. Download a backup first if you may want this library later.
             </div>
             <div className="confirm-actions">
               <button className="sync-btn ghost pressable" onClick={() => setConfirmDelete(false)}>
                 Cancel
               </button>
               <button className="sync-btn danger pressable" onClick={doDelete}>
-                Delete Account
+                Delete Library
               </button>
             </div>
           </div>
