@@ -10,6 +10,7 @@ import { useToast } from '../store/useToast'
 import { useUpNavigation } from '../logic/nav'
 import { shortDate } from '../utils/dates'
 import { PublicScore } from '../ui/PublicScore'
+import { ErrorState } from '../ui/ErrorState'
 import { seasonAverageLive, seasonRatedCount, seasonSizesOf, fmtStars } from '../logic/ratings'
 
 const isReleased = (airDate?: string) => !airDate || new Date(airDate + 'T00:00:00') <= new Date()
@@ -17,7 +18,7 @@ const isReleased = (airDate?: string) => !airDate || new Date(airDate + 'T00:00:
 export function SeasonScreen() {
   const { id = '', season = '1' } = useParams()
   const nav = useNavigate()
-  const { data: show } = useAsync(() => getShow(id), [id])
+  const { data: show, error: loadError, reload } = useAsync(() => getShow(id), [id])
   const watched = useLibrary((s) => s.watchedEpisodes)
   const epRatings = useLibrary((s) => s.episodeRatings)
   const mark = useLibrary((s) => s.markEpisodeWatched)
@@ -33,6 +34,7 @@ export function SeasonScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show?.id])
 
+  if (!show && loadError) return <ErrorState page onRetry={reload} />
   if (!show)
     return (
       <div className="scroll-area">

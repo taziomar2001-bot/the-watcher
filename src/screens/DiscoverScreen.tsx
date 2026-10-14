@@ -4,7 +4,8 @@ import { SmartImage } from '../components/ui'
 import { Segmented, SearchField, SectionHeader } from '../ui/primitives'
 import { PosterThumb } from '../ui/cards'
 import { HeartIcon, TrophyIcon } from '../components/Icons'
-import { useAsync } from '../hooks/useAsync'
+import { useAsync, useDebounced } from '../hooks/useAsync'
+import { ErrorState } from '../ui/ErrorState'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { discoverShows, discoverMovies, search as searchCatalog } from '../data/catalog'
 import { searchProfiles, type SocialProfile } from '../data/social'
@@ -38,12 +39,15 @@ export function DiscoverScreen() {
   const toast = useToast((s) => s.show)
   const toggleFavorite = useToggleFavorite()
 
-  const { data: showSections } = useAsync(() => discoverShows(), [])
-  const { data: movieSections } = useAsync(() => discoverMovies(), [])
-  const sections = kind === 'show' ? showSections : movieSections
+  const shows = useAsync(() => discoverShows(), [])
+  const moviesA = useAsync(() => discoverMovies(), [])
+  const sections = kind === 'show' ? shows.data : moviesA.data
+  const sectionsError = kind === 'show' ? shows.error : moviesA.error
+  const retrySections = kind === 'show' ? shows.reload : moviesA.reload
 
   // Universal search — both movies AND shows, regardless of the toggle.
-  const { data: results } = useAsync(() => searchCatalog(q), [q])
+  const dq = useDebounced(q, 300)
+  const { data: results, error: searchError, reload: retrySearch } = useAsync(() => searchCatalog(dq), [dq])
   // Real members only (Supabase profiles with a claimed @username), debounced.
   const signedIn = useSync((s) => s.status === 'signedIn')
   const me = useSync((s) => s.userId)
@@ -138,9 +142,16 @@ export function DiscoverScreen() {
           )}
           {(results ?? []).length > 0 && userResults.length > 0 && <SectionHeader title="Movies & TV" />}
           <div className="card-list" style={{ marginTop: 6 }}>
-            {(results ?? []).length === 0 && userResults.length === 0 ? (
+            {searchError && userResults.length === 0 ? (
+              <ErrorState title="Couldn’t search right now" onRetry={retrySearch} />
+            ) : results === undefined || dq !== q ? (
+              <div className="empty">
+                <div className="empty-sub">Searching…</div>
+              </div>
+            ) : results.length === 0 && userResults.length === 0 ? (
               <div className="empty">
                 <div className="empty-title">No results</div>
+                <div className="empty-sub">Try a different spelling or a shorter title.</div>
               </div>
             ) : (
               (results ?? []).map((m) => (
@@ -176,6 +187,8 @@ export function DiscoverScreen() {
             )}
           </div>
         </>
+      ) : !sections && sectionsError ? (
+        <ErrorState onRetry={retrySections} />
       ) : !sections ? (
         [0, 1, 2].map((i) => (
           <div key={i}>

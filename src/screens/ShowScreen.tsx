@@ -14,6 +14,7 @@ import { showAverageLive, seasonSizesOf, fmtStars } from '../logic/ratings'
 import { AddToListButton } from '../ui/AddToList'
 import { useToggleFavorite } from '../logic/favorites'
 import { PublicScore } from '../ui/PublicScore'
+import { ErrorState } from '../ui/ErrorState'
 import type { Season, Show } from '../types'
 
 const isReleased = (airDate?: string) => !airDate || new Date(airDate + 'T00:00:00') <= new Date()
@@ -35,7 +36,7 @@ function enrichedItem(show: Show, existing?: import('../store/useLibrary').Libra
 export function ShowScreen() {
   const { id = '' } = useParams()
   const nav = useNavigate()
-  const { data: show } = useAsync(() => getShow(id), [id])
+  const { data: show, error: loadError, reload } = useAsync(() => getShow(id), [id])
   const lib = useLibrary()
   const toast = useToast((s) => s.show)
   const toggleFavorite = useToggleFavorite()
@@ -64,6 +65,7 @@ export function ShowScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show?.id])
 
+  if (!show && loadError) return <ErrorState page onRetry={reload} />
   if (!show)
     return (
       <div className="scroll-area">

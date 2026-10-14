@@ -16,6 +16,8 @@ are safe to re-run and none restructure or delete library data):
 4. `supabase/004_social_profiles.sql`
 5. `supabase/005_library_history.sql` — automatic cloud backups
 6. `supabase/006_communities.sql` — communities (roles, announcements, chat, moderation)
+7. `supabase/007_community_images.sql` — community picture and banner
+8. `supabase/008_watch_together.sql` — Watch together sessions and swipes
 
 ## Backups
 

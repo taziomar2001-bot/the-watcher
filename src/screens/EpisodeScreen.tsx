@@ -9,6 +9,7 @@ import { useLibrary } from '../store/useLibrary'
 import { useToast } from '../store/useToast'
 import { useUpNavigation } from '../logic/nav'
 import { PublicScore } from '../ui/PublicScore'
+import { ErrorState } from '../ui/ErrorState'
 import { shortDate } from '../utils/dates'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -16,7 +17,7 @@ const pad = (n: number) => String(n).padStart(2, '0')
 export function EpisodeScreen() {
   const { id = '', season = '1', number = '1' } = useParams()
   const nav = useNavigate()
-  const { data: show } = useAsync(() => getShow(id), [id])
+  const { data: show, error: loadError, reload } = useAsync(() => getShow(id), [id])
   const watched = useLibrary((s) => s.watchedEpisodes)
   const mark = useLibrary((s) => s.markEpisodeWatched)
   const epRatings = useLibrary((s) => s.episodeRatings)
@@ -25,6 +26,7 @@ export function EpisodeScreen() {
   const goUp = useUpNavigation()
   const touch = useRef<{ x: number; y: number } | null>(null)
 
+  if (!show && loadError) return <ErrorState page onRetry={reload} />
   if (!show)
     return (
       <div className="scroll-area">

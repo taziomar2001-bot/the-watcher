@@ -14,12 +14,13 @@ import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
 import { movieColor, isUnreleased } from '../logic/status'
 import { PublicScore } from '../ui/PublicScore'
+import { ErrorState } from '../ui/ErrorState'
 import { shortDate } from '../utils/dates'
 
 export function MovieScreen() {
   const { id = '' } = useParams()
   const nav = useNavigate()
-  const { data: movie } = useAsync(() => getMovie(id), [id])
+  const { data: movie, error: loadError, reload } = useAsync(() => getMovie(id), [id])
   const lib = useLibrary()
   const toast = useToast((s) => s.show)
   const toggleFavorite = useToggleFavorite()
@@ -30,6 +31,7 @@ export function MovieScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movie?.id])
 
+  if (!movie && loadError) return <ErrorState page onRetry={reload} />
   if (!movie)
     return (
       <div className="scroll-area">

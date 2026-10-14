@@ -2310,3 +2310,4 @@ body.modal-open .scroll-area { overflow: hidden !important; }
 @keyframes burst { from { opacity: 1; transform: rotate(calc(var(--i) * 25.7deg)) translateY(0); } to { opacity: 0; transform: rotate(calc(var(--i) * 25.7deg)) translateY(-46vh); } }
 @media (prefers-reduced-motion: reduce) { .match-burst { display: none; } }
 .match-bar .follow-btn { width: auto !important; }
+.community-link { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
