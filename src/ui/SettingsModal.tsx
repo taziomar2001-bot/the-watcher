@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ImportPanel } from './ImportPanel'
+import { AuthScreen } from './AuthScreen'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
 import { useToast } from '../store/useToast'
+import { SUPABASE_ENABLED } from '../data/supabase'
 import { claimUsername, updateMyIdentity, getMyProfile, type SocialProfile } from '../data/social'
-import { CheckIcon, CloudIcon, PersonIcon, TvIcon } from '../components/Icons'
+import { CheckIcon, CloudIcon, PersonIcon, TvIcon, SettingsIcon } from '../components/Icons'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -46,16 +48,10 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const toast = useToast((s) => s.show)
   const fileInput = useRef<HTMLInputElement>(null)
   const restoreInput = useRef<HTMLInputElement>(null)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<File | null>(null)
-
-  // Auth form (signed-out): sign in vs create account.
-  const [authMode, setAuthMode] = useState<'in' | 'up'>('in')
-  const [suUsername, setSuUsername] = useState('')
-  const [suVisibility, setSuVisibility] = useState<'public' | 'private'>('public')
+  const [showAuth, setShowAuth] = useState(false)
 
   // Public (Supabase) profile, loaded when signed in.
   const [social, setSocial] = useState<SocialProfile | null>(null)
@@ -63,15 +59,17 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [bioEdit, setBioEdit] = useState('')
   const [savingUname, setSavingUname] = useState(false)
 
+  const signedIn = sync.status === 'signedIn'
+
   useEffect(() => {
     let alive = true
-    if (sync.status === 'signedIn') {
+    if (signedIn) {
       getMyProfile().then((p) => {
         if (!alive || !p) return
         setSocial(p)
         setUnameEdit(p.username ?? '')
         setBioEdit(p.bio ?? '')
-        // Carry the local display name/avatar up to the public profile if unset.
+        // Carry local display name / avatar up to the public profile if unset.
         const patch: Record<string, string> = {}
         if (!p.display_name && lib.profile.displayName) patch.display_name = lib.profile.displayName
         if (!p.avatar && lib.profile.avatar) patch.avatar = lib.profile.avatar
@@ -83,15 +81,33 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     return () => {
       alive = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sync.status])
 
-  const doSignUp = () => {
-    const u = suUsername.trim().toLowerCase()
-    if (!USERNAME_RE.test(u)) {
-      toast('Username must be 3–20 letters, numbers or underscores')
-      return
+  // Lock the Profile page behind the modal so only the modal scrolls.
+  useEffect(() => {
+    document.body.classList.add('modal-open')
+    return () => document.body.classList.remove('modal-open')
+  }, [])
+
+  const name = lib.profile.displayName || lib.profile.username || 'you'
+
+  const pickAvatar = async (f?: File) => {
+    if (!f) return
+    try {
+      const dataUrl = await fileToAvatar(f)
+      lib.updateProfile({ avatar: dataUrl })
+      if (signedIn) void updateMyIdentity({ avatar: dataUrl })
+    } catch {
+      /* ignore */
     }
-    sync.signUp(email, password, { username: u, displayName: lib.profile.displayName || '', visibility: suVisibility })
+  }
+  const removeAvatar = () => {
+    lib.updateProfile({ avatar: '' })
+    if (signedIn) void updateMyIdentity({ avatar: '' })
+  }
+  const syncDisplayName = () => {
+    if (signedIn) void updateMyIdentity({ display_name: lib.profile.displayName || '' })
   }
 
   const saveUsername = async () => {
@@ -126,9 +142,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   // ---- Local backup / restore (a verifiable, in-hand rollback path) ----
-  // Serialises the entire on-device library (the persisted store + sync meta)
-  // to a JSON file. Reading/writing the raw localStorage blob guarantees a
-  // faithful copy regardless of future schema changes.
   const exportBackup = () => {
     try {
       const payload = {
@@ -172,23 +185,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  // Lock the Profile page behind the modal so only the modal scrolls.
-  useEffect(() => {
-    document.body.classList.add('modal-open')
-    return () => document.body.classList.remove('modal-open')
-  }, [])
-
-  const name = lib.profile.displayName || lib.profile.username || 'you'
-
-  const pickAvatar = async (f?: File) => {
-    if (!f) return
-    try {
-      lib.updateProfile({ avatar: await fileToAvatar(f) })
-    } catch {
-      /* ignore */
-    }
-  }
-
   const doDelete = async () => {
     await sync.deleteCloudData().catch(() => {})
     try {
@@ -203,14 +199,65 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="settings-head">
-          <span className="settings-title">Settings</span>
+          <span className="settings-title">
+            <SettingsIcon size={18} /> Settings
+          </span>
           <button className="settings-close pressable" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </div>
 
         <div className="settings-body">
-          {/* ---- Profile ---- */}
+          {/* ---- Account (top: who you are / sign in / sign out) ---- */}
+          <div className="settings-group-label">
+            <PersonIcon size={15} /> Account
+          </div>
+
+          {signedIn ? (
+            <div className="settings-card">
+              <div className="account-head">
+                <div className="account-avatar">
+                  {lib.profile.avatar ? <img src={lib.profile.avatar} alt="" /> : name[0].toUpperCase()}
+                </div>
+                <div className="account-id">
+                  <div className="account-name">{lib.profile.displayName || name}</div>
+                  {social?.username && <div className="account-handle">@{social.username}</div>}
+                  <div className="account-email">{sync.email}</div>
+                </div>
+              </div>
+              {social && (
+                <div className="account-counts">
+                  <span>
+                    <b>{social.follower_count}</b> followers
+                  </span>
+                  <span>
+                    <b>{social.following_count}</b> following
+                  </span>
+                </div>
+              )}
+              <button className="sync-btn full pressable" onClick={() => setConfirmSignOut(true)}>
+                Sign out
+              </button>
+              <button className="settings-textlink danger" onClick={() => setConfirmDelete(true)}>
+                Delete account
+              </button>
+            </div>
+          ) : SUPABASE_ENABLED ? (
+            <div className="settings-card">
+              <div className="settings-muted">
+                Sign in or create a free account to sync your library across devices and connect with other watchers.
+              </div>
+              <button className="sync-btn primary full pressable" onClick={() => setShowAuth(true)}>
+                Sign in or create account
+              </button>
+            </div>
+          ) : (
+            <div className="settings-card">
+              <div className="settings-muted">Accounts aren't configured for this build — your library is saved on this device.</div>
+            </div>
+          )}
+
+          {/* ---- Profile (identity you show others) ---- */}
           <div className="settings-group-label">
             <PersonIcon size={15} /> Profile
           </div>
@@ -224,19 +271,14 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   Change photo
                 </button>
                 {lib.profile.avatar && (
-                  <button className="sync-btn ghost pressable" onClick={() => lib.updateProfile({ avatar: '' })}>
+                  <button className="sync-btn ghost pressable" onClick={removeAvatar}>
                     Remove
                   </button>
                 )}
               </div>
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={(e) => pickAvatar(e.target.files?.[0])}
-              />
+              <input ref={fileInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => pickAvatar(e.target.files?.[0])} />
             </div>
+
             <label className="settings-field">
               <span>Display name</span>
               <input
@@ -244,17 +286,53 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 value={lib.profile.displayName ?? ''}
                 placeholder="Your name"
                 onChange={(e) => lib.updateProfile({ displayName: e.target.value })}
+                onBlur={syncDisplayName}
               />
             </label>
-            <label className="settings-field">
-              <span>Username</span>
-              <input
-                className="sync-input"
-                value={lib.profile.username ?? ''}
-                placeholder="username"
-                onChange={(e) => lib.updateProfile({ username: e.target.value })}
-              />
-            </label>
+
+            {signedIn ? (
+              <>
+                <label className="settings-field">
+                  <span>Username</span>
+                  <div className="uname-row">
+                    <span className="uname-at">@</span>
+                    <input
+                      className="sync-input"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      value={unameEdit}
+                      placeholder="username"
+                      onChange={(e) => setUnameEdit(e.target.value.toLowerCase())}
+                    />
+                    <button className="sync-btn pressable" disabled={savingUname || unameEdit === (social?.username ?? '')} onClick={saveUsername}>
+                      {savingUname ? '…' : 'Save'}
+                    </button>
+                  </div>
+                </label>
+                <label className="settings-field">
+                  <span>Bio</span>
+                  <input className="sync-input" value={bioEdit} placeholder="A short line about you" maxLength={160} onChange={(e) => setBioEdit(e.target.value)} onBlur={saveBio} />
+                </label>
+                <div className="settings-field">
+                  <span>Account visibility</span>
+                  <div className="vis-choice">
+                    <button type="button" className={`vis-opt pressable ${social?.visibility !== 'private' ? 'on' : ''}`} onClick={() => setVisibility('public')}>
+                      Public
+                    </button>
+                    <button type="button" className={`vis-opt pressable ${social?.visibility === 'private' ? 'on' : ''}`} onClick={() => setVisibility('private')}>
+                      Private
+                    </button>
+                  </div>
+                  <div className="vis-hint">
+                    {social?.visibility === 'private'
+                      ? 'You approve who can follow you and see your activity.'
+                      : 'Anyone can find your profile and follow you.'}
+                  </div>
+                </div>
+              </>
+            ) : (
+              SUPABASE_ENABLED && <div className="settings-muted">Sign in to claim an @username, add a bio, and make your profile public.</div>
+            )}
           </div>
 
           {/* ---- Library & Data ---- */}
@@ -262,8 +340,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <TvIcon size={15} /> Library &amp; Data
           </div>
           <ImportPanel />
-
-          {/* ---- Local backup / restore ---- */}
           <div className="settings-card">
             <div className="settings-muted">
               Download a complete copy of everything on this device — watch history, ratings, lists, favorites and settings — to a file you keep. You can restore it here at any time.
@@ -289,181 +365,50 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             />
           </div>
 
-          {/* ---- Cloud Backup ---- */}
-          <div className="settings-group-label">
-            <CloudIcon size={15} /> Cloud Backup
-          </div>
-          {sync.status === 'disabled' ? (
-            <div className="settings-card">
-              <div className="settings-muted">Cloud backup isn't configured for this build. Your library is saved on this device.</div>
-            </div>
-          ) : sync.status === 'signedIn' ? (
-            <div className="settings-card">
-              <div className="settings-row-flat">
-                <span>Backup</span>
-                <span className="sync-badge">On</span>
+          {/* ---- Cloud sync (signed in) ---- */}
+          {signedIn && (
+            <>
+              <div className="settings-group-label">
+                <CloudIcon size={15} /> Cloud sync
               </div>
-              <div className="settings-row-flat">
-                <span>Account</span>
-                <b>{sync.email}</b>
-              </div>
-              <div className="settings-row-flat">
-                <span>Last backed up</span>
-                <b>{timeAgo(sync.lastSyncedAt)}</b>
-              </div>
-              {sync.pendingWrite && !sync.error && <div className="sync-warn">Backup pending — will retry automatically.</div>}
-              {sync.error && (
-                <div className="sync-error" style={{ userSelect: 'text' }}>
-                  Backup error: {sync.error}
+              <div className="settings-card">
+                <div className="settings-row-flat">
+                  <span>Status</span>
+                  <span className="sync-badge">On</span>
                 </div>
-              )}
-              {sync.remoteNewer && (
-                <div className="sync-warn">
-                  Your cloud backup has newer data than this device.
-                  <button onClick={() => sync.restoreNow()}>Restore it</button>
+                <div className="settings-row-flat">
+                  <span>Last synced</span>
+                  <b>{timeAgo(sync.lastSyncedAt)}</b>
                 </div>
-              )}
-              <div className="sync-actions">
-                <button className="sync-btn primary pressable" onClick={() => sync.backupNow()}>
-                  <CheckIcon size={15} /> Back up now
-                </button>
-                <button className="sync-btn pressable" onClick={() => sync.restoreNow()}>
-                  Restore
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="settings-card">
-              <div className="settings-muted">
-                {authMode === 'up'
-                  ? 'Create your account to sync your library and join the community.'
-                  : 'Sign in to sync your library across devices.'}
-              </div>
-              <div className="sync-form">
-                <input className="sync-input" type="email" inputMode="email" autoCapitalize="none" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <input className="sync-input" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-                {authMode === 'up' && (
-                  <>
-                    <input
-                      className="sync-input"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      placeholder="Username (your @handle)"
-                      value={suUsername}
-                      onChange={(e) => setSuUsername(e.target.value.toLowerCase())}
-                    />
-                    <div className="vis-choice">
-                      <button
-                        type="button"
-                        className={`vis-opt pressable ${suVisibility === 'public' ? 'on' : ''}`}
-                        onClick={() => setSuVisibility('public')}
-                      >
-                        Public
-                      </button>
-                      <button
-                        type="button"
-                        className={`vis-opt pressable ${suVisibility === 'private' ? 'on' : ''}`}
-                        onClick={() => setSuVisibility('private')}
-                      >
-                        Private
-                      </button>
-                    </div>
-                    <div className="vis-hint">
-                      {suVisibility === 'public'
-                        ? 'Anyone can find your profile and follow you.'
-                        : 'Your profile is discoverable, but followers need your approval to see your activity.'}
-                    </div>
-                  </>
+                {sync.pendingWrite && !sync.error && <div className="sync-warn">Sync pending — will retry automatically.</div>}
+                {sync.error && (
+                  <div className="sync-error" style={{ userSelect: 'text' }}>
+                    Sync error: {sync.error}
+                  </div>
                 )}
-              </div>
-              {sync.error && <div className="sync-error">{sync.error}</div>}
-              <div className="sync-actions">
-                <button
-                  className="sync-btn primary pressable"
-                  disabled={sync.status === 'busy' || !email || !password || (authMode === 'up' && !suUsername)}
-                  onClick={() => (authMode === 'up' ? doSignUp() : sync.signIn(email, password))}
-                >
-                  {sync.status === 'busy' ? 'Working…' : authMode === 'up' ? 'Create account' : 'Sign in'}
-                </button>
-              </div>
-              <button className="auth-switch pressable" onClick={() => setAuthMode(authMode === 'up' ? 'in' : 'up')}>
-                {authMode === 'up' ? 'Already have an account? Sign in' : 'New to The Watcher? Create account'}
-              </button>
-            </div>
-          )}
-
-          {/* ---- Public profile (social identity) ---- */}
-          {sync.status === 'signedIn' && (
-            <>
-              <div className="settings-group-label">
-                <PersonIcon size={15} /> Public profile
-              </div>
-              <div className="settings-card">
-                <label className="settings-field">
-                  <span>Username</span>
-                  <div className="uname-row">
-                    <span className="uname-at">@</span>
-                    <input
-                      className="sync-input"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      value={unameEdit}
-                      placeholder="username"
-                      onChange={(e) => setUnameEdit(e.target.value.toLowerCase())}
-                    />
-                    <button className="sync-btn pressable" disabled={savingUname || unameEdit === (social?.username ?? '')} onClick={saveUsername}>
-                      {savingUname ? '…' : 'Save'}
-                    </button>
+                {sync.remoteNewer && (
+                  <div className="sync-warn">
+                    Your cloud backup has newer data than this device.
+                    <button onClick={() => sync.restoreNow()}>Restore it</button>
                   </div>
-                </label>
-                <label className="settings-field">
-                  <span>Bio</span>
-                  <input className="sync-input" value={bioEdit} placeholder="A short line about you" maxLength={160} onChange={(e) => setBioEdit(e.target.value)} onBlur={saveBio} />
-                </label>
-                <div className="settings-row-flat">
-                  <span>Account visibility</span>
-                  <div className="vis-choice sm">
-                    <button type="button" className={`vis-opt pressable ${social?.visibility !== 'private' ? 'on' : ''}`} onClick={() => setVisibility('public')}>
-                      Public
-                    </button>
-                    <button type="button" className={`vis-opt pressable ${social?.visibility === 'private' ? 'on' : ''}`} onClick={() => setVisibility('private')}>
-                      Private
-                    </button>
-                  </div>
-                </div>
-                <div className="settings-muted" style={{ marginTop: 2 }}>
-                  {social?.follower_count ?? 0} followers · {social?.following_count ?? 0} following
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* ---- Account ---- */}
-          {sync.status === 'signedIn' && (
-            <>
-              <div className="settings-group-label">
-                <PersonIcon size={15} /> Account
-              </div>
-              <div className="settings-card">
-                <div className="settings-row-flat">
-                  <span>Signed in as</span>
-                  <b>{sync.email}</b>
-                </div>
-                <div className="sync-actions" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                  <button className="sync-btn pressable" onClick={() => setConfirmSignOut(true)}>
-                    Sign out
+                )}
+                <div className="sync-actions">
+                  <button className="sync-btn primary pressable" onClick={() => sync.backupNow()}>
+                    <CheckIcon size={15} /> Back up now
                   </button>
-                  <button className="sync-btn danger pressable" onClick={() => setConfirmDelete(true)}>
-                    Delete account
+                  <button className="sync-btn pressable" onClick={() => sync.restoreNow()}>
+                    Restore
                   </button>
                 </div>
               </div>
             </>
           )}
 
-          <div className="settings-note">The Watcher · your library is stored on this device and, when signed in, backed up to your private cloud.</div>
+          <div className="settings-note">The Watcher · your library lives on this device and, when signed in, syncs to your private cloud.</div>
         </div>
       </div>
+
+      {showAuth && <AuthScreen onClose={() => setShowAuth(false)} />}
 
       {confirmSignOut && (
         <div
@@ -475,8 +420,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         >
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
-            <div className="confirm-title">Sign out of Watcher?</div>
-            <div className="confirm-body">Your library stays backed up in the cloud and on this device.</div>
+            <div className="confirm-title">Sign out?</div>
+            <div className="confirm-body">Your library stays on this device and in your private cloud. Sign back in anytime to sync.</div>
             <div className="confirm-actions">
               <button className="sync-btn ghost pressable" onClick={() => setConfirmSignOut(false)}>
                 Cancel
@@ -520,6 +465,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       )}
+
       {pendingRestore && (
         <div
           className="sheet-backdrop"
