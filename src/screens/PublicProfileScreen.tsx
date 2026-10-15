@@ -151,6 +151,57 @@ export function PublicProfileScreen() {
         <>
           {stats && (
             <>
+              {([
+                ['book', 'Books', stats.books_followed, stats.books_finished],
+              ] as const)
+                .filter(([k, , followed]) => KINDS_ON.includes(k) && !!followed)
+                .map(([k, label, followed, finished]) => (
+                  <div className="dash-card" key={k}>
+                    <div className="dash-card-head">
+                      <span className={`dash-icon ${k}`}>
+                        <KindIcon kind={k} size={18} />
+                      </span>
+                      {label}
+                    </div>
+                    <div className="dash-metrics">
+                      <div className="dash-metric">
+                        <b>{(followed ?? 0).toLocaleString()}</b>
+                        <span>in library</span>
+                      </div>
+                      <div className="dash-metric">
+                        <b>{(finished ?? 0).toLocaleString()}</b>
+                        <span>finished</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              <div className="dash-card">
+                <div className="dash-card-head">
+                  <span className="dash-icon movie">
+                    <MovieCameraIcon size={18} />
+                  </span>
+                  Movies
+                </div>
+                <div className="dash-metrics">
+                  {stats.movies_followed !== undefined && (
+                    <div className="dash-metric">
+                      <b>{stats.movies_followed.toLocaleString()}</b>
+                      <span>followed</span>
+                    </div>
+                  )}
+                  <div className="dash-metric">
+                    <b>{stats.movies_watched.toLocaleString()}</b>
+                    <span>watched</span>
+                  </div>
+                  {stats.movie_minutes !== undefined && (
+                    <div className="dash-metric">
+                      <b>{hm(movieMin)}</b>
+                      <span>time watched</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="dash-card">
                 <div className="dash-card-head">
                   <span className="dash-icon tv">
@@ -186,35 +237,7 @@ export function PublicProfileScreen() {
                 </div>
               </div>
 
-              <div className="dash-card">
-                <div className="dash-card-head">
-                  <span className="dash-icon movie">
-                    <MovieCameraIcon size={18} />
-                  </span>
-                  Movies
-                </div>
-                <div className="dash-metrics">
-                  {stats.movies_followed !== undefined && (
-                    <div className="dash-metric">
-                      <b>{stats.movies_followed.toLocaleString()}</b>
-                      <span>followed</span>
-                    </div>
-                  )}
-                  <div className="dash-metric">
-                    <b>{stats.movies_watched.toLocaleString()}</b>
-                    <span>watched</span>
-                  </div>
-                  {stats.movie_minutes !== undefined && (
-                    <div className="dash-metric">
-                      <b>{hm(movieMin)}</b>
-                      <span>time watched</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {([
-                ['book', 'Books', stats.books_followed, stats.books_finished],
                 ['game', 'Video Games', stats.games_followed, stats.games_finished],
               ] as const)
                 .filter(([k, , followed]) => KINDS_ON.includes(k) && !!followed)

@@ -69,9 +69,9 @@ export function useMyStats(): UserTotals {
  */
 export function compositionLabel(movies: number, shows: number, books = 0, games = 0): string {
   const parts: string[] = []
+  if (books > 0) parts.push(`${books} ${books === 1 ? 'Book' : 'Books'}`)
   if (movies > 0) parts.push(`${movies} ${movies === 1 ? 'Movie' : 'Movies'}`)
   if (shows > 0) parts.push(`${shows} ${shows === 1 ? 'TV Show' : 'TV Shows'}`)
-  if (books > 0) parts.push(`${books} ${books === 1 ? 'Book' : 'Books'}`)
   if (games > 0) parts.push(`${games} ${games === 1 ? 'Game' : 'Games'}`)
   if (parts.length === 0) return 'No titles'
   return parts.join(' · ')

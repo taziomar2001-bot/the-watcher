@@ -44,7 +44,7 @@ export function TitlePicker({
         wantBooks ? searchBooks(dq).catch(() => [] as Book[]) : Promise.resolve([] as Book[]),
         wantGames ? searchGames(dq).catch(() => [] as Game[]) : Promise.resolve([] as Game[]),
       ])
-      return [...tm, ...bk.slice(0, 10), ...gm.slice(0, 10)]
+      return [...bk.slice(0, 10), ...tm, ...gm.slice(0, 10)]
     },
     [dq, kind],
   )

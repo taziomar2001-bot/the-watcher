@@ -1,4 +1,4 @@
-import { KINDS_ON } from '../logic/content'
+import { KINDS_ON, KIND_ORDER } from '../logic/content'
 import { getGame } from '../data/games'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -105,12 +105,12 @@ function Page({ title, onBack, right, children }: { title: string; onBack: () =>
 }
 
 const CONTENT_OPTIONS: { key: CommunityContentType; label: string; hint: string }[] = [
-  { key: 'show' as const, label: 'TV Shows', hint: 'Series, seasons and episodes' },
-  { key: 'movie' as const, label: 'Movies', hint: 'Films' },
   { key: 'book' as const, label: 'Books', hint: 'Novels, non-fiction, comics' },
+  { key: 'movie' as const, label: 'Movies', hint: 'Films' },
+  { key: 'show' as const, label: 'TV Shows', hint: 'Series, seasons and episodes' },
   { key: 'game' as const, label: 'Video Games', hint: 'Any platform' },
 ].filter((o) => KINDS_ON.includes(o.key))
-const ORDER: CommunityContentType[] = ['show', 'movie', 'book', 'game']
+const ORDER: CommunityContentType[] = [...KIND_ORDER]
 const PRIVACY_OPTIONS: { key: 'public' | 'private'; label: string; hint: string }[] = [
   { key: 'public', label: 'Public', hint: 'Anyone can read the news and join. Chat is for members.' },
   { key: 'private', label: 'Private', hint: 'Anyone can find it; you approve who joins and only members see inside.' },
@@ -269,7 +269,7 @@ function CommunityForm({
         {name.trim().length > 0 && name.trim().length < 3 && <div className="fg-foot warn">Names need at least 3 characters.</div>}
 
         <FormGroup title="Details">
-          <FormRow label="Content" value={contentTypes.length >= CONTENT_OPTIONS.length ? 'Everything' : contentTypes.length === 2 && contentTypes.includes('show') && contentTypes.includes('movie') ? 'TV Shows & Movies' : contentTypesLabel(contentTypes)} onClick={() => setDrawer('content')} />
+          <FormRow label="Content" value={contentTypes.length >= CONTENT_OPTIONS.length ? 'Everything' : contentTypes.length === 2 && contentTypes.includes('show') && contentTypes.includes('movie') ? 'Movies & TV Shows' : contentTypesLabel(contentTypes)} onClick={() => setDrawer('content')} />
           <CommunityLocationField value={place} onChange={(v) => setPlace(v ?? { kind: 'global' })} />
           <FormRow label="Privacy" value={visibility === 'public' ? 'Public' : 'Private'} onClick={() => setDrawer('privacy')} />
         </FormGroup>

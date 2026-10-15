@@ -34,13 +34,11 @@ export function PickFilterBar({
   return (
     <div className="pf-bar">
       <Segmented
-        options={(['movie', 'show', 'book', 'game'] as Kind[])
-          .filter((k) => KINDS_ON.includes(k))
-          .map((k) =>
+        options={(KINDS_ON as Kind[]).map((k) =>
             KINDS_ON.length > 2
               ? { key: k, label: <span className="seg-icon"><KindIcon kind={k} size={21} /></span>, aria: KIND[k].label }
               : { key: k, label: k === 'movie' ? 'Movies' : 'TV shows' },
-          )}
+        )}
         value={value.kind}
         onChange={setKind}
       />

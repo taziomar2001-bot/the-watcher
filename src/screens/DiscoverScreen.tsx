@@ -115,6 +115,40 @@ export function DiscoverScreen() {
   }
   const toggleFav = (m: Media) => toggleFavorite(m.type, m.id, toLibraryItem(m))
 
+  const trackResults = (tk: 'book' | 'game') => {
+    const list = (tk === 'book' ? bookResults.data : gameResults.data) as TrackMedia[] | undefined
+    if (!list?.length || dq !== q) return null
+    return (
+      <div key={tk}>
+        <SectionHeader title={KIND[tk].label} />
+        <div className="card-list" style={{ marginTop: 2 }}>
+          {list.slice(0, 12).map((m) => (
+            <div key={`${m.type}_${m.id}`} className="search-row">
+              <button className="search-row-main pressable" onClick={() => nav(`/${m.type}/${m.id}`)}>
+                <SmartImage src={m.poster} alt={m.title} className="result-poster" />
+                <div className="result-info">
+                  <div className="result-title">{m.title}</div>
+                  <div className="result-sub">
+                    <span className={`type-badge ${m.type}`}>{KIND[m.type].badge}</span>
+                    {[m.year, m.type === 'book' ? (m as Book).authors[0] : (m as Game).platforms.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+              </button>
+              <div className="search-row-actions">
+                <button className={`mini-pill ${followingTrack(m) ? 'active' : ''}`} onClick={() => toggleFollowTrack(m)}>
+                  {followingTrack(m) ? 'Following' : 'Follow'}
+                </button>
+                <button className={`mini-icon ${isFavTrack(m) ? 'fav' : ''}`} onClick={() => toggleFavTrack(m)} aria-label="Favorite">
+                  <HeartIcon size={16} fill={isFavTrack(m) ? '#ff5964' : 'none'} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
       <div className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -177,6 +211,7 @@ export function DiscoverScreen() {
               </div>
             </>
           )}
+          {trackResults('book')}
           {(results ?? []).length > 0 && (userResults.length > 0 || !!bookResults.data?.length || !!gameResults.data?.length) && <SectionHeader title="Movies & TV" />}
           <div className="card-list" style={{ marginTop: 6 }}>
             {searchError && userResults.length === 0 ? (
@@ -223,42 +258,21 @@ export function DiscoverScreen() {
             ))
             )}
           </div>
-          {(['book', 'game'] as const).map((tk) => {
-            const list = (tk === 'book' ? bookResults.data : gameResults.data) as TrackMedia[] | undefined
-            if (!list?.length || dq !== q) return null
-            return (
-              <div key={tk}>
-                <SectionHeader title={KIND[tk].label} />
-                <div className="card-list" style={{ marginTop: 2 }}>
-                  {list.slice(0, 12).map((m) => (
-                    <div key={`${m.type}_${m.id}`} className="search-row">
-                      <button className="search-row-main pressable" onClick={() => nav(`/${m.type}/${m.id}`)}>
-                        <SmartImage src={m.poster} alt={m.title} className="result-poster" />
-                        <div className="result-info">
-                          <div className="result-title">{m.title}</div>
-                          <div className="result-sub">
-                            <span className={`type-badge ${m.type}`}>{KIND[m.type].badge}</span>
-                            {[m.year, m.type === 'book' ? (m as Book).authors[0] : (m as Game).platforms.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}
-                          </div>
-                        </div>
-                      </button>
-                      <div className="search-row-actions">
-                        <button className={`mini-pill ${followingTrack(m) ? 'active' : ''}`} onClick={() => toggleFollowTrack(m)}>
-                          {followingTrack(m) ? 'Following' : 'Follow'}
-                        </button>
-                        <button className={`mini-icon ${isFavTrack(m) ? 'fav' : ''}`} onClick={() => toggleFavTrack(m)} aria-label="Favorite">
-                          <HeartIcon size={16} fill={isFavTrack(m) ? '#ff5964' : 'none'} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
+          {trackResults('game')}
         </>
       ) : !sections && sectionsError ? (
-        <ErrorState onRetry={retrySections} />
+        <ErrorState
+          title={kind === 'book' ? 'Couldn’t load books' : kind === 'game' ? 'Couldn’t load games' : undefined}
+          sub={kind === 'book' || kind === 'game' ? `${sectionsError.message} — try again in a moment.` : undefined}
+          onRetry={retrySections}
+        />
+      ) : sections && sections.length === 0 ? (
+        <div className="empty">
+          <div className="empty-title">Nothing to show right now</div>
+          <button className="auth-link" onClick={retrySections}>
+            Try again
+          </button>
+        </div>
       ) : !sections ? (
         [0, 1, 2].map((i) => (
           <div key={i}>

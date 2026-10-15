@@ -3,9 +3,9 @@ import type { Community, CommunityContentType, CommunityDiscoveryFilters, Commun
 import { KINDS_ON } from './content'
 
 const ALL_CONTENT_TYPES: { key: CommunityContentType; label: string }[] = [
-  { key: 'show', label: 'TV Shows' },
-  { key: 'movie', label: 'Movies' },
   { key: 'book', label: 'Books' },
+  { key: 'movie', label: 'Movies' },
+  { key: 'show', label: 'TV Shows' },
   { key: 'game', label: 'Video Games' },
 ]
 /** The categories offered in this build (books/games once connected). */

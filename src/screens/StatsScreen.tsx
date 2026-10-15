@@ -5,12 +5,18 @@ import { Segmented } from '../ui/primitives'
 import { useLibrary } from '../store/useLibrary'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { effectiveSeen } from '../logic/status'
-import { computeInsights, type Share, type WatchedTitle } from '../logic/insights'
+import { computeInsights, computeTrackInsights, type Insights, type Share, type WatchedTitle } from '../logic/insights'
 import { enrichTitles, useTitleMeta } from '../store/useTitleMeta'
 import { USE_TMDB } from '../data/catalog'
+import { KINDS_ON } from '../logic/content'
+import { KIND, KindIcon } from '../ui/kinds'
+import { useTrackEntries } from '../logic/tracks'
+import type { ContentKind } from '../types'
 
-type Kind = 'movie' | 'show'
+type Kind = ContentKind
 const mem = { kind: 'movie' as Kind }
+const NOUN: Record<Kind, string> = { movie: 'movies', show: 'shows', book: 'books', game: 'games' }
+const VERB: Record<Kind, string> = { movie: 'watched', show: 'watched', book: 'started', game: 'started' }
 
 /**
  * Your stats: genres, decades, languages, when you watch and how you rate —
@@ -53,9 +59,15 @@ export function StatsScreen() {
     void enrichTitles([...watchedMovies, ...watchedShows].map((t) => t.key))
   }, [watchedMovies, watchedShows])
 
-  const titles = kind === 'movie' ? watchedMovies : watchedShows
-  const ins = useMemo(() => computeInsights(kind, titles, meta), [kind, titles, meta])
-  const noun = kind === 'movie' ? 'movies' : 'shows'
+  const bookEntries = useTrackEntries('book')
+  const gameEntries = useTrackEntries('game')
+  const isTrack = kind === 'book' || kind === 'game'
+  const ins: Insights & { makers?: Share[]; finished?: number } = useMemo(() => {
+    if (kind === 'book') return computeTrackInsights('book', bookEntries)
+    if (kind === 'game') return computeTrackInsights('game', gameEntries)
+    return computeInsights(kind, kind === 'movie' ? watchedMovies : watchedShows, meta)
+  }, [kind, watchedMovies, watchedShows, meta, bookEntries, gameEntries])
+  const noun = NOUN[kind]
 
   return (
     <div className="scroll-area route-fade">
@@ -67,7 +79,8 @@ export function StatsScreen() {
           <div>
             <h1 style={{ fontSize: 24 }}>Your stats</h1>
             <div className="sub">
-              {ins.total.toLocaleString()} {noun} watched
+              {ins.total.toLocaleString()} {noun} {VERB[kind]}
+              {isTrack ? ` · ${(ins.finished ?? 0).toLocaleString()} finished` : ''}
             </div>
           </div>
         </div>
@@ -75,16 +88,15 @@ export function StatsScreen() {
 
       <div className="page-pad" style={{ paddingBottom: 12 }}>
         <Segmented
-          options={[
-            { key: 'movie', label: 'Movies' },
-            { key: 'show', label: 'TV Shows' },
-          ]}
+          options={KINDS_ON.map((k) =>
+            KINDS_ON.length > 2 ? { key: k, label: <span className="seg-icon"><KindIcon kind={k} size={21} /></span>, aria: KIND[k].label } : { key: k, label: KIND[k].label },
+          )}
           value={kind}
           onChange={setKind}
         />
       </div>
 
-      {running && total > 0 && (
+      {!isTrack && running && total > 0 && (
         <div className="page-pad" style={{ paddingBottom: 12 }}>
           <div className="learn-meter" role="status">
             <span>Learning about your library…</span>
@@ -100,8 +112,10 @@ export function StatsScreen() {
 
       {ins.total === 0 ? (
         <div className="empty">
-          <div className="empty-title">No {noun} watched yet</div>
-          <div className="empty-sub">Your stats appear here as you mark {noun} watched.</div>
+          <div className="empty-title">No {noun} {VERB[kind]} yet</div>
+          <div className="empty-sub">
+            {isTrack ? `Your stats appear here as you mark ${noun} as ${kind === 'book' ? 'reading' : 'playing'} or finished.` : `Your stats appear here as you mark ${noun} watched.`}
+          </div>
         </div>
       ) : (
         <>
@@ -118,9 +132,24 @@ export function StatsScreen() {
           )}
 
           <ShareBars title="Genres" note={`Share of your ${noun} in each genre (a title can have several)`} rows={ins.genres} noun={noun} />
+          {isTrack && (
+            <ShareBars
+              title={kind === 'book' ? 'Authors' : 'Platforms'}
+              note={kind === 'book' ? 'The authors you read most' : 'Where your games are available'}
+              rows={ins.makers ?? []}
+              noun={noun}
+            />
+          )}
+          {isTrack && ins.byYear.length > 1 && (
+            <Columns
+              title={kind === 'book' ? 'Books finished per year' : 'Games finished per year'}
+              note="Based on the date you marked each one finished"
+              data={ins.byYear.map((y) => ({ label: `'${String(y.year).slice(2)}`, value: y.count, detail: `${y.year} · ${y.count.toLocaleString()} ${noun}` }))}
+            />
+          )}
           <Columns
             title="Decades"
-            note={`When the ${noun} you watched came out`}
+            note={`When the ${noun} you ${isTrack ? 'picked up' : 'watched'} came out`}
             data={ins.decades.map((d) => ({ label: d.name.replace(/^(\d\d)(\d\d)s$/, "'$2s"), value: d.count, detail: `${d.name} · ${d.count.toLocaleString()} ${noun} · ${d.pct}%` }))}
           />
           {kind === 'movie' && ins.byYear.length > 1 && (
@@ -130,11 +159,11 @@ export function StatsScreen() {
               data={ins.byYear.map((y) => ({ label: `'${String(y.year).slice(2)}`, value: y.count, detail: `${y.year} · ${y.count.toLocaleString()} movies` }))}
             />
           )}
-          <ShareBars title="Languages" note="Original language" rows={ins.languages} noun={noun} />
+          {!isTrack && <ShareBars title="Languages" note="Original language" rows={ins.languages} noun={noun} />}
           {kind === 'movie' && <ShareBars title="Countries" note="Main production country" rows={ins.countries} noun={noun} />}
           <RatingsCard ratings={ins.ratings} avgMine={ins.avgMine} mine10={ins.avgMineOfRated10} pub={ins.avgPublicOfRated} kind={kind} />
 
-          {USE_TMDB && ins.known < ins.total && !running && (
+          {!isTrack && USE_TMDB && ins.known < ins.total && !running && (
             <div className="vis-hint page-pad">
               Facts are missing for {(ins.total - ins.known).toLocaleString()} {noun}; they’ll be added next time you open this page.
             </div>
@@ -219,7 +248,7 @@ function RatingsCard({ ratings, avgMine, mine10, pub, kind }: { ratings: number[
     <section className="chart-card" aria-label="Your ratings">
       <div className="chart-title">Your ratings</div>
       <div className="chart-note">
-        {total.toLocaleString()} {kind === 'movie' ? 'movies' : 'shows'} rated{kind === 'show' ? ' (average of your episode ratings)' : ''}
+        {total.toLocaleString()} {NOUN[kind]} rated{kind === 'show' ? ' (average of your episode ratings)' : ''}
       </div>
       <div className="rating-compare">
         <div>
@@ -229,7 +258,7 @@ function RatingsCard({ ratings, avgMine, mine10, pub, kind }: { ratings: number[
         </div>
         {pub != null && (
           <div>
-            <div className="kpi-label">Everyone (TMDB)</div>
+            <div className="kpi-label">Everyone ({KIND[kind].source})</div>
             <div className="kpi-value">{pub.toFixed(1)}/10</div>
             <div className="kpi-sub">same titles</div>
           </div>

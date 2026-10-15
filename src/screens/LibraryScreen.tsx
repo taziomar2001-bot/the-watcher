@@ -107,8 +107,8 @@ export function LibraryScreen({ favoritesOnly = false }: { favoritesOnly?: boole
       <div className="page-pad" style={{ paddingBottom: 10 }}>
         <Segmented
           options={[
-            { key: 'show', label: 'TV Shows' },
             { key: 'movie', label: 'Movies' },
+            { key: 'show', label: 'TV Shows' },
           ]}
           value={kind}
           onChange={setKind}

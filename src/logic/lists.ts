@@ -36,11 +36,11 @@ export const episodeRef = (showId: string, season: number, episode: number) => `
 
 export const LIST_KINDS: { key: ListKind; label: string; hint: string }[] = [
   { key: 'mixed', label: 'Mixed', hint: 'Any titles together' },
+  { key: 'books', label: 'Books', hint: 'Books only' },
+  { key: 'movies', label: 'Movies', hint: 'Films only' },
   { key: 'shows', label: 'Shows', hint: 'Whole TV shows' },
   { key: 'seasons', label: 'Seasons', hint: 'Individual seasons' },
   { key: 'episodes', label: 'Episodes', hint: 'Individual episodes' },
-  { key: 'movies', label: 'Movies', hint: 'Films only' },
-  { key: 'books', label: 'Books', hint: 'Books only' },
   { key: 'games', label: 'Games', hint: 'Video games only' },
 ]
 
@@ -152,12 +152,12 @@ export function listSummary(list: Pick<CustomList, 'items'>): string {
     else if (t === 'game') games++
   }
   const parts: string[] = []
+  if (books) parts.push(plural(books, 'Book'))
   if (movies) parts.push(plural(movies, 'Movie'))
   if (shows) parts.push(plural(shows, 'TV Show'))
-  if (books) parts.push(plural(books, 'Book'))
-  if (games) parts.push(plural(games, 'Game'))
   if (seasons) parts.push(plural(seasons, 'Season'))
   if (episodes) parts.push(plural(episodes, 'Episode'))
+  if (games) parts.push(plural(games, 'Game'))
   return parts.length ? parts.join(' · ') : 'No titles'
 }
 

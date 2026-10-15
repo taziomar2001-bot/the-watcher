@@ -3027,3 +3027,8 @@ textarea.sync-input { font-family: inherit; }
 .cat-nav.scroll-x .cat-chip { flex: 0 0 auto; padding: 8px 12px; overflow: visible; }
 .cat-chip .chip-n { opacity: .6; margin-left: 4px; font-variant-numeric: tabular-nums; }
 .cat-nav.scroll-x { margin-bottom: 10px; }
+.profile-tab .pf-left { padding: 9px 12px; gap: 11px; border-radius: 16px; }
+.profile-tab .pf-left .pf-ring { width: 40px; height: 40px; }
+.profile-tab .pf-left .pf-ring span { width: 33px; height: 33px; font-size: 10.5px; }
+.profile-tab .pf-left-title { font-size: 14px; }
+.profile-tab .pf-left-sub { font-size: 12px; margin-top: 1px; }

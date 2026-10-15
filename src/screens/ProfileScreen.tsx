@@ -99,50 +99,52 @@ export function ProfileScreen() {
       {social?.bio && <p className="profile-bio2">{social.bio}</p>}
 
       <div className="page-pad pf">
-        {/* Time watched, with what's left and how far through it you are */}
+        {/* Time watched: one number, split Movies / TV */}
         <div className="pf-hero">
-          <div className="pf-hero-top">
-            <div>
-              <div className="pf-label">Time watched</div>
-              <div className="pf-big">{hm(totalWatched)}</div>
-            </div>
-            <button className="pf-left2 pressable" onClick={() => nav('/upcoming')} aria-label={`${hm(remainingTotal)} left in your watchlist, ${Math.round(through * 100)}% through`}>
-              <span className="pf-left2-text">
-                <b>{hm(remainingTotal)}</b> left
-                <span>
-                  {remainingEps.toLocaleString()} ep · {moviesToWatch.toLocaleString()} movie{moviesToWatch === 1 ? '' : 's'}
-                </span>
-              </span>
-              <span className="pf-ring" style={{ ['--p' as string]: `${Math.round(through * 100)}` }}>
-                <span>{Math.round(through * 100)}%</span>
-              </span>
-            </button>
-          </div>
+          <div className="pf-label">Time watched</div>
+          <div className="pf-big">{hm(totalWatched)}</div>
           <div className="pf-split" aria-hidden="true">
-            <span className="tv" style={{ flexGrow: Math.max(tvShare, 0.02) }} />
             <span className="mv" style={{ flexGrow: Math.max(1 - tvShare, 0.02) }} />
+            <span className="tv" style={{ flexGrow: Math.max(tvShare, 0.02) }} />
           </div>
           <div className="pf-legend">
-            <span><i className="tv" /> TV {hm(tvMin)}</span>
             <span><i className="mv" /> Movies {hm(movieMin)}</span>
+            <span><i className="tv" /> TV {hm(tvMin)}</span>
           </div>
         </div>
 
-        {/* One card per kind */}
+        {/* Movies and TV, then what's left of them, then Books and Games */}
         <div className="pf-grid">
-          <KindCard kind="show" title="TV Shows" to="/profile/tv" num={showsFollowed} cap="followed"
-            facts={[[tvInProgress, 'in progress'], [showsFinished, 'finished']]} />
           <KindCard kind="movie" title="Movies" to="/profile/movies" num={moviesWatched} cap="watched"
             facts={[[moviesToWatch, 'to watch'], [moviesFollowed, 'followed']]} />
-          {BOOKS_ON && (
-            <KindCard kind="book" title="Books" to="/profile/books" num={bookT.done} cap="finished"
-              facts={[[bookT.active, 'reading'], [bookT.backlog, 'want to read']]} />
-          )}
-          {GAMES_ON && (
-            <KindCard kind="game" title="Video Games" to="/profile/games" num={gameT.done} cap="finished"
-              facts={[[gameT.active, 'playing'], [gameT.backlog, 'in backlog']]} />
-          )}
+          <KindCard kind="show" title="TV Shows" to="/profile/tv" num={showsFollowed} cap="followed"
+            facts={[[tvInProgress, 'in progress'], [showsFinished, 'finished']]} />
         </div>
+
+        <button className="pf-left pressable" onClick={() => nav('/upcoming')} aria-label="What's left in your watchlist">
+          <span className="pf-ring" style={{ ['--p' as string]: `${Math.round(through * 100)}` }}>
+            <span>{Math.round(through * 100)}%</span>
+          </span>
+          <span className="pf-left-text">
+            <span className="pf-left-title">{hm(remainingTotal)} left in your watchlist</span>
+            <span className="pf-left-sub">
+              {moviesToWatch.toLocaleString()} movie{moviesToWatch === 1 ? '' : 's'} · {remainingEps.toLocaleString()} episode{remainingEps === 1 ? '' : 's'} to go
+            </span>
+          </span>
+        </button>
+
+        {(BOOKS_ON || GAMES_ON) && (
+          <div className="pf-grid">
+            {BOOKS_ON && (
+              <KindCard kind="book" title="Books" to="/profile/books" num={bookT.done} cap="finished"
+                facts={[[bookT.active, 'reading'], [bookT.backlog, 'want to read']]} />
+            )}
+            {GAMES_ON && (
+              <KindCard kind="game" title="Video Games" to="/profile/games" num={gameT.done} cap="finished"
+                facts={[[gameT.active, 'playing'], [gameT.backlog, 'in backlog']]} />
+            )}
+          </div>
+        )}
 
         {/* Stats and Lists */}
         <div className="pf-pair">

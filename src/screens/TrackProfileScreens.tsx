@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, GridIcon } from '../components/Icons'
 import { PosterGrid, type GridItem } from '../ui/PosterGrid'
-import { StatGrid, GenreBars } from '../ui/Dashboard'
+import { StatGrid } from '../ui/Dashboard'
 import { useScrollMemory } from '../hooks/useScrollMemory'
 import { fmtAvg } from '../logic/ratings'
 import { WORDS, sectionsOf, trackTotals, useTrackEntries, type TrackEntry } from '../logic/tracks'
@@ -25,21 +25,6 @@ function Header({ title }: { title: string }) {
       </div>
     </div>
   )
-}
-
-/** Share of each value across entries, top N, as whole percentages. */
-function topShares(entries: TrackEntry[], pick: (e: TrackEntry) => string[] | undefined, n = 6) {
-  const counts = new Map<string, number>()
-  let total = 0
-  for (const e of entries) {
-    const vals = pick(e) ?? []
-    for (const v of vals) counts.set(v, (counts.get(v) ?? 0) + 1)
-    if (vals.length) total++
-  }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, n)
-    .map(([name, c]) => ({ name, pct: Math.round((c / Math.max(total, 1)) * 100) }))
 }
 
 /** Profile → Books / Games: the numbers that matter for that kind, then the full library. */
@@ -80,9 +65,6 @@ function TrackDashboard({ kind }: { kind: TrackKind }) {
           ...(avg != null ? [{ label: 'Avg game rating', value: `${fmtAvg(avg)} ★` }] : []),
         ]
 
-  const genres = topShares(inLib, (e) => e.t.item.genres)
-  const second = kind === 'book' ? topShares(inLib, (e) => e.t.item.authors?.slice(0, 1), 5) : topShares(inLib, (e) => e.t.item.platforms, 5)
-
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
       <Header title={w.Many} />
@@ -92,10 +74,6 @@ function TrackDashboard({ kind }: { kind: TrackKind }) {
         <span>Complete {kind === 'book' ? 'Book' : 'Game'} Library</span>
         <ChevronRight size={20} />
       </button>
-      <div className="page-pad" style={{ display: 'grid', gap: 12, marginTop: 4 }}>
-        <GenreBars title="Top genres" genres={genres} accent={`var(--kind-${kind})`} />
-        <GenreBars title={kind === 'book' ? 'Most-read authors' : 'Platforms'} genres={second} accent={`var(--kind-${kind})`} />
-      </div>
       <div style={{ height: 24 }} />
     </div>
   )
