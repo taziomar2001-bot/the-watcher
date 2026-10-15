@@ -2933,3 +2933,18 @@ textarea.sync-input { font-family: inherit; }
 .confirm-type .sync-input { margin: 0; }
 .confirm-actions .sync-btn:disabled { opacity: .45; pointer-events: none; }
 .confirm-actions .sync-btn { white-space: nowrap; }
+
+/* ---- Drawer pill: a full-width grab strip that stays at the top while the
+   drawer scrolls; drag it down to put the drawer away. ---- */
+.sheet { padding-top: 0; }
+.sheet-handle {
+  position: sticky; top: 0; z-index: 3;
+  width: auto; height: 28px; margin: 0 -12px 6px; border-radius: 0;
+  background: var(--sheet-bg, var(--surface));
+  display: flex; align-items: center; justify-content: center;
+  touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none;
+}
+.sheet-handle::before { content: ''; width: 40px; height: 5px; border-radius: 3px; background: var(--border); transition: background .15s ease, width .15s ease; }
+.sheet-handle:active { cursor: grabbing; }
+.sheet-handle:active::before { width: 48px; background: var(--text-mute); }
+.edge-swiping { box-shadow: -10px 0 28px rgba(0, 0, 0, .35); will-change: transform; }

@@ -1,3 +1,4 @@
+import { whenDrawersSettled } from '../ui/gestures'
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -393,8 +394,9 @@ export function ListScreen() {
                 className="sync-btn danger pressable"
                 onClick={() => {
                   void unlinkEverywhere(list)
+                  setConfirmDel(false)
                   lib.deleteList(list.id)
-                  nav(-1)
+                  whenDrawersSettled(() => nav(-1))
                 }}
               >
                 Delete list

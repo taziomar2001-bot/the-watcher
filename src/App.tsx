@@ -1,3 +1,4 @@
+import { useAppGestures } from './ui/gestures'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { BottomNav } from './ui/BottomNav'
@@ -108,6 +109,7 @@ export default function App() {
   const location = useLocation()
   useNavTracker()
   useEscapeClosesSheets()
+  useAppGestures()
   const syncStatus = useSync((s) => s.status)
   const showSyncGate = useSync((s) =>
     (s.status === 'signedIn' || s.status === 'busy') && s.mayShowLocal === false,

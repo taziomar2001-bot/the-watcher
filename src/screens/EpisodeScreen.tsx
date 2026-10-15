@@ -81,7 +81,8 @@ export function EpisodeScreen() {
   // Horizontal swipe → previous / next episode (vertical scrolls are ignored).
   const onTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0]
-    touch.current = { x: t.clientX, y: t.clientY }
+    // From the very edge it's the back swipe, not "previous episode".
+    touch.current = t.clientX < 24 ? null : { x: t.clientX, y: t.clientY }
   }
   const onTouchEnd = (e: React.TouchEvent) => {
     const start = touch.current

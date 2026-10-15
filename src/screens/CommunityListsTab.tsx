@@ -1,3 +1,4 @@
+import { whenDrawersSettled } from '../ui/gestures'
 import { useState } from 'react'
 import { ConfirmSheet } from '../ui/Sheet'
 import { createPortal } from 'react-dom'
@@ -309,7 +310,7 @@ export function CommunityListScreen() {
             const r = await unlinkList(id, l.list_id, l.owner_id)
             if (!r.ok) return toast('Only owners and admins can remove lists')
             toast('Removed from the community')
-            nav(-1)
+            whenDrawersSettled(() => nav(-1))
           }}
         />
       )}
