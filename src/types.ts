@@ -90,7 +90,7 @@ export type ContentKind = 'show' | 'movie' | 'book' | 'game'
 export type TrackKind = 'book' | 'game'
 
 export interface Book {
-  id: string // Google Books volume id
+  id: string // Open Library work ("ol-OL…W"); older entries: a Google Books volume id
   type: 'book'
   title: string
   subtitle?: string

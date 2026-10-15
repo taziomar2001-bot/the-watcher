@@ -50,7 +50,7 @@ export default defineConfig({
             },
           },
           {
-            // Book covers (Open Library, Google Books) and game art (IGDB).
+            // Book covers (Open Library; older entries Google Books) and game art (IGDB).
             urlPattern: /^https:\/\/(covers\.openlibrary\.org\/|books\.google\.com\/books\/(content|publisher)|images\.igdb\.com\/)/i,
             handler: 'CacheFirst',
             options: {
@@ -61,7 +61,7 @@ export default defineConfig({
           },
           {
             // Book APIs and the IGDB proxy: instant answers, refreshed in the background.
-            urlPattern: /^https:\/\/(www\.googleapis\.com\/books\/|openlibrary\.org\/(search|trending|works)|[^/]+\/functions\/v1\/igdb)/i,
+            urlPattern: /^https:\/\/(openlibrary\.org\/(search|trending|works)|[^/]+\/functions\/v1\/igdb)/i,
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'books-games-api',

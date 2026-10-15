@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { getShow } from '../data/catalog'
-import { getBook } from '../data/books'
 import { gamesByIds } from '../data/games'
 import { useLibrary } from '../store/useLibrary'
 import { toTrackItem } from './tracks'
@@ -93,8 +92,8 @@ let inFlight: Promise<void> | null = null
 
 const TRACK_TTL = 24 * 60 * 60 * 1000
 /**
- * Followed books and games that aren't out yet (or have no date) get their
- * release date re-checked at most once a day — dates move, especially games.
+ * Followed games that aren't out yet (or have no date) get their release
+ * date re-checked at most once a day — dates move.
  */
 async function refreshTrackDates(force: boolean) {
   const lib = useLibrary.getState()
@@ -112,14 +111,7 @@ async function refreshTrackDates(force: boolean) {
       /* retried next time */
     }
   }
-  await pool(stale('books').slice(0, 40), 3, async (id) => {
-    try {
-      const b = await getBook(id)
-      if (b) useLibrary.getState().trackPatchItem('book', id, toTrackItem(b))
-    } catch {
-      /* retried next time */
-    }
-  })
+  // Books: Open Library has no future release dates, so there's nothing to re-check.
 }
 
 /**

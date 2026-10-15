@@ -58,13 +58,9 @@ Devices pick up the restored library the next time the app opens.
 
 ## Books and video games
 
-Both kinds stay hidden in the live app until their catalogue is connected.
+Books are always on: they come from [Open Library](https://openlibrary.org/developers/api) — free, no key, no daily quota, nothing to set up. (The old `VITE_GOOGLE_BOOKS_KEY` Netlify variable is no longer used and can be deleted.)
 
-**Books — Open Library + Google Books**
-Browsing (Discover rows, Pick for me, Watch together) uses [Open Library](https://openlibrary.org/developers/api): free, no key, no daily quota. Search uses Google Books and falls back to Open Library when Google refuses (its free quota is 1,000 requests a day per key).
-1. In [Google Cloud Console](https://console.cloud.google.com/) create (or pick) a project → APIs & Services → Library → enable **Books API**.
-2. APIs & Services → Credentials → Create credentials → **API key**. Restrict it: *Application restrictions* → Websites → your site (e.g. `https://your-site.netlify.app/*`); *API restrictions* → Books API.
-3. In Netlify → Site configuration → Environment variables, add `VITE_GOOGLE_BOOKS_KEY` = that key, and redeploy.
+Video games stay hidden in the live app until their catalogue is connected:
 
 **Video games — IGDB (through a Supabase Edge Function)**
 1. At [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps) register an application (any name; OAuth redirect `http://localhost`; category *Application Integration*). Copy its **Client ID** and create a **Client Secret**. Twitch requires two-factor authentication on the account.
@@ -73,7 +69,7 @@ Browsing (Discover rows, Pick for me, Watch together) uses [Open Library](https:
 4. Supabase → Edge Functions → **Secrets**: add `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (never in the app, never in chat). Optional: `ALLOWED_ORIGINS` = your site's origin, e.g. `https://your-site.netlify.app`.
 5. In Netlify, add `VITE_IGDB` = `on`, and redeploy.
 
-Game data comes from IGDB.com and book data from Open Library and Google Books; each is credited on title pages.
+Game data comes from IGDB.com and book data from Open Library; both are credited on title pages.
 
 ## Configure the app
 

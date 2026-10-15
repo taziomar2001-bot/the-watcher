@@ -1,8 +1,8 @@
 import type { Book } from '../types'
 import { makePoster } from './poster'
 
-// Sample catalogue used only when no Google Books key is configured (local
-// development and tests). Real titles with their published facts; the two
+// Sample catalogue used only in sample mode (no TMDB key: local development
+// and tests). Real titles with their published facts; the two
 // "sample" entries exist so upcoming releases can be shown and tested.
 
 function daysFromNow(n: number): string {

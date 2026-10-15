@@ -2,22 +2,17 @@ import type { Book } from '../types'
 import { BOOKS_MOCK, BOOKS_MOCK_BY_ID } from './mockBooks'
 
 // ---------------------------------------------------------------------------
-// Books come from two free catalogues:
-//  · Open Library (openlibrary.org — no key, no daily quota) for everything
-//    that browses: the Discover rows, Pick for me and Watch together. It knows
-//    what people are actually reading (trending, reading-log counts), which
-//    Google Books doesn't, and covers are reliable. Its ids look like "ol-OL…W".
-//  · Google Books (browser key) for search, falling back to Open Library when
-//    Google refuses (its free quota is 1,000 requests a day per key).
-// Books already in your library keep the id they were added with; each id is
-// looked up in the catalogue it came from.
-// Without a Google Books key the app uses a small sample catalogue, the same
-// way TV and movies fall back to mock data without a TMDB key.
+// Books — Open Library (openlibrary.org): free, no key, no daily quota, and it
+// knows what people are actually reading (trending, reading-log counts).
+// Ids look like "ol-OL82563W" (a work). Books added before the switch keep
+// their old Google Books id; their page is found on Open Library by title.
+// Without a TMDB key the app runs in sample mode with a small sample
+// catalogue. VITE_BOOKS=live / sample overrides that (used by tests).
 // ---------------------------------------------------------------------------
 
-const KEY = import.meta.env.VITE_GOOGLE_BOOKS_KEY as string | undefined
-export const USE_GOOGLE_BOOKS = Boolean(KEY)
-const API = 'https://www.googleapis.com/books/v1/volumes'
+const MODE = import.meta.env.VITE_BOOKS as string | undefined
+const TMDB_ON = Boolean(import.meta.env.VITE_TMDB_KEY || import.meta.env.VITE_TMDB_TOKEN)
+export const USE_OPEN_LIBRARY = MODE === 'live' || (MODE !== 'sample' && TMDB_ON)
 
 const MIN = 60_000
 const memo = new Map<string, { at: number; p: Promise<unknown> }>()
@@ -32,150 +27,40 @@ function cached<T>(key: string, ttl: number, run: () => Promise<T>): Promise<T> 
   return p
 }
 
-interface GVolume {
-  id: string
-  volumeInfo: {
-    title?: string
-    subtitle?: string
-    authors?: string[]
-    publisher?: string
-    publishedDate?: string
-    description?: string
-    pageCount?: number
-    printedPageCount?: number
-    categories?: string[]
-    averageRating?: number
-    ratingsCount?: number
-    language?: string
-    imageLinks?: Record<string, string>
-    industryIdentifiers?: { type: string; identifier: string }[]
-  }
-}
-
-async function get<T>(params: Record<string, string | number | undefined>): Promise<T> {
-  const u = new URL(API)
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') u.searchParams.set(k, String(v))
-  u.searchParams.set('key', KEY!)
-  const r = await fetch(u.toString())
-  if (!r.ok) {
-    let why = ''
-    try {
-      why = ((await r.json()) as { error?: { message?: string } }).error?.message ?? ''
-    } catch {
-      /* not JSON */
-    }
-    throw new Error(`Google Books ${r.status}${why ? `: ${why}` : ''}`)
-  }
-  return r.json() as Promise<T>
-}
-
-/** "Fiction / Fantasy / Epic" → ["Fantasy"]; keeps the useful, specific parts. */
-export function bookGenres(categories?: string[]): string[] {
-  const out = new Set<string>()
-  for (const c of categories ?? []) {
-    const parts = c.split('/').map((p) => p.trim()).filter(Boolean)
-    const specific = parts.length > 1 ? parts.slice(1, 2) : parts
-    for (const p of specific) if (!/^general$/i.test(p)) out.add(p)
-    if (out.size === 0 && parts[0]) out.add(parts[0])
-  }
-  return [...out].slice(0, 4)
-}
-
-const strip = (html?: string) =>
-  (html ?? '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-
-/** Google's cover links are http and tiny by default: ask for a sharper https copy. */
-function cover(links?: Record<string, string>): string | undefined {
-  const src = links?.thumbnail ?? links?.smallThumbnail
-  if (!src) return undefined
-  return src.replace(/^http:/, 'https:').replace(/&edge=curl/, '').replace(/zoom=\d/, 'zoom=1') + '&fife=w400'
-}
-
-const isoDate = (d?: string) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : undefined)
-
-export function toBook(v: GVolume): Book {
-  const i = v.volumeInfo
-  const isbn = i.industryIdentifiers?.find((x) => x.type === 'ISBN_13')?.identifier ?? i.industryIdentifiers?.find((x) => x.type === 'ISBN_10')?.identifier
-  const year = i.publishedDate ? Number(i.publishedDate.slice(0, 4)) || undefined : undefined
-  return {
-    id: v.id,
-    type: 'book',
-    title: i.title ?? 'Untitled',
-    subtitle: i.subtitle,
-    authors: i.authors ?? [],
-    poster: cover(i.imageLinks),
-    overview: strip(i.description),
-    genres: bookGenres(i.categories),
-    pageCount: i.pageCount || i.printedPageCount || undefined,
-    releaseDate: isoDate(i.publishedDate),
-    year,
-    publisher: i.publisher,
-    language: i.language,
-    isbn,
-    communityRating: i.averageRating ? i.averageRating * 2 : undefined,
-    communityVotes: i.ratingsCount,
-  }
-}
-
-const FIELDS = 'items(id,volumeInfo(title,subtitle,authors,publisher,publishedDate,description,pageCount,printedPageCount,categories,averageRating,ratingsCount,language,imageLinks,industryIdentifiers)),totalItems'
-
-async function volumes(q: string, extra: Record<string, string | number> = {}): Promise<{ items: Book[]; total: number }> {
-  const r = await get<{ items?: GVolume[]; totalItems?: number }>({ q, printType: 'books', maxResults: 40, fields: FIELDS, ...extra })
-  const seen = new Set<string>()
-  const items = (r.items ?? [])
-    .map(toBook)
-    // One entry per work: Google lists many editions of the same book.
-    .filter((b) => {
-      const k = `${b.title.toLowerCase()}|${(b.authors[0] ?? '').toLowerCase()}`
-      if (seen.has(k)) return false
-      seen.add(k)
-      return true
-    })
-  return { items, total: r.totalItems ?? items.length }
-}
-
 // ---- Public API (mirrors the TV/movie catalog) ----
 
 export async function searchBooks(query: string): Promise<Book[]> {
   const q = query.trim()
   if (!q) return []
-  if (!USE_GOOGLE_BOOKS) {
+  if (!USE_OPEN_LIBRARY) {
     const t = q.toLowerCase()
     return BOOKS_MOCK.filter((b) => b.title.toLowerCase().includes(t) || b.authors.some((a) => a.toLowerCase().includes(t)))
   }
-  return cached('bs:' + q.toLowerCase(), 10 * MIN, async () => {
-    try {
-      const items = (await volumes(q, { maxResults: 20, orderBy: 'relevance' })).items
-      if (items.length) return items
-    } catch (e) {
-      console.warn('[books] Google search failed, using Open Library', e)
-    }
-    return (await olSearch(olEscape(q), { limit: 20 })).items
-  })
+  return cached('bs:' + q.toLowerCase(), 10 * MIN, async () => (await olSearch(olEscape(q), { limit: 20 })).items)
 }
 
 export const isOpenLibraryId = (id: string) => id.startsWith(OL_PREFIX)
-/** Who the details for this book came from (shown as the data credit). */
-export const bookSource = (id: string) => (isOpenLibraryId(id) ? 'Open Library' : 'Google Books')
 
-export async function getBook(id: string): Promise<Book | undefined> {
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+/**
+ * A book's full details. `saved` is the summary kept in your library — for a
+ * book added before the switch to Open Library, it's how the book is found
+ * there (same title, same author). The result keeps the id you saved it under.
+ */
+export async function getBook(id: string, saved?: { title: string; authors?: string[] }): Promise<Book | undefined> {
+  if (!USE_OPEN_LIBRARY) return BOOKS_MOCK_BY_ID[id]
   if (isOpenLibraryId(id)) return getOlBook(id)
-  if (!USE_GOOGLE_BOOKS) return BOOKS_MOCK_BY_ID[id]
-  return cached('b:' + id, 60 * MIN, async () => {
-    const u = new URL(`${API}/${encodeURIComponent(id)}`)
-    u.searchParams.set('key', KEY!)
-    const r = await fetch(u.toString())
-    if (r.status === 404) return undefined
-    if (!r.ok) throw new Error(`book ${r.status}`)
-    return toBook((await r.json()) as GVolume)
+  if (!saved?.title) return undefined
+  return cached('bl:' + id, 60 * MIN, async () => {
+    const author = saved.authors?.[0]
+    const q = `title:(${olEscape(saved.title)})${author ? ` author:(${olEscape(author)})` : ''}`
+    const { items } = await olSearch(q, { limit: 5 })
+    const want = norm(saved.title)
+    const match = items.find((b) => norm(b.title) === want || norm(b.title).startsWith(want) || want.startsWith(norm(b.title)))
+    if (!match) return undefined
+    const full = await getOlBook(match.id)
+    return full ? { ...full, id } : undefined
   })
 }
 
@@ -230,9 +115,19 @@ function fromOl(d: OlDoc): Book {
 }
 
 async function olGet<T>(path: string): Promise<T> {
-  const r = await fetch(OL + path)
-  if (!r.ok) throw new Error(`Open Library ${r.status}`)
-  return r.json() as Promise<T>
+  // Never leave a screen waiting forever on a slow answer.
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), 15_000)
+  try {
+    const r = await fetch(OL + path, { signal: ctl.signal })
+    if (!r.ok) throw new Error(`Open Library ${r.status}`)
+    return (await r.json()) as T
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') throw new Error('Open Library took too long')
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** Open Library search, English editions, most read first by default. */
@@ -391,7 +286,7 @@ export function loadBookRows(onUpdate: (s: BookRowsState) => void, force = false
     const sections = BOOK_ROWS.map((r) => ({ key: r.key, title: r.title, items: cache.rows[r.key] ?? [] })).filter((x) => x.items.length > 0)
     onUpdate({ sections, loading, errors })
   }
-  if (!USE_GOOGLE_BOOKS) {
+  if (!USE_OPEN_LIBRARY) {
     const now = new Date().toISOString().slice(0, 10)
     for (const r of BOOK_ROWS) {
       cache.rows[r.key] =
@@ -439,6 +334,9 @@ export function loadBookRows(onUpdate: (s: BookRowsState) => void, force = false
   }
 }
 
+/** Pages of books Pick for me / Watch together draw from (the most-read 240). */
+export const BOOK_PAGES = 6
+
 /**
  * A page of books for "Pick for me" / "Watch together": the most-read books
  * (in a genre, if one is chosen) on Open Library. Length = page count.
@@ -449,17 +347,19 @@ export async function discoverBookPage(
   len?: { min?: number; max?: number },
 ): Promise<{ items: Book[]; totalPages: number }> {
   const fits = (b: Book) => !len || (b.pageCount != null && (len.min == null || b.pageCount >= len.min) && (len.max == null || b.pageCount <= len.max))
-  if (!USE_GOOGLE_BOOKS) {
+  if (!USE_OPEN_LIBRARY) {
     const pool = BOOKS_MOCK.filter((b) => !genre || bookInGenre(b.genres, genre.name)).filter(fits)
     const per = 20
     return { items: pool.slice((page - 1) * per, page * per), totalPages: Math.max(1, Math.ceil(pool.length / per)) }
   }
   return cached(`bp:${genre?.name ?? ''}:${len?.min ?? 0}-${len?.max ?? 0}:${page}`, 30 * MIN, async () => {
-    const base = genre ? GENRE_RULES[genre.name]?.q ?? `subject:"${genre.name}"` : '-subject:"juvenile fiction"'
+    // No genre: fiction or non-fiction (a search over the whole catalogue takes
+    // Open Library ~8 s; this one answers in ~2 s).
+    const base = genre ? GENRE_RULES[genre.name]?.q ?? `subject:"${genre.name}"` : '(subject:fiction OR subject:nonfiction)'
     // Page-count limits go to Open Library itself, so every page is a full one.
     const pages = len ? ` number_of_pages_median:[${len.min ?? 1} TO ${len.max ?? 99999}]` : ''
     const r = await olSearch(`${base}${pages} language:eng`, { sort: 'readinglog', limit: 40, page })
     // Past the first few hundred, "most read" drifts into obscure titles.
-    return { items: r.items.filter((b) => b.poster).filter(fits), totalPages: Math.max(1, Math.min(6, Math.ceil(r.total / 40))) }
+    return { items: r.items.filter((b) => b.poster).filter(fits), totalPages: Math.max(1, Math.min(BOOK_PAGES, Math.ceil(r.total / 40))) }
   })
 }

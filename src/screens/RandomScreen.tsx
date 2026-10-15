@@ -5,7 +5,7 @@ import { SmartImage } from '../components/ui'
 import { PublicScore } from '../ui/PublicScore'
 import { PickFilterBar } from '../ui/PickFilters'
 import { discoverPage, genreList } from '../data/catalog'
-import { bookSource } from '../data/books'
+import { BOOK_PAGES } from '../data/books'
 import { useLibrary } from '../store/useLibrary'
 import { useTitleMeta, enrichTitles } from '../store/useTitleMeta'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
@@ -85,7 +85,14 @@ export function RandomScreen() {
     if (lib_) return lib_.items
     const len = lengthOf(f.kind, f.length)
     const range = len.key === 'any' ? undefined : { min: len.min, max: len.max }
-    const first = await discoverPage(f.kind, 1, f.genre ?? undefined, range)
+    // Books: Open Library is slower than TMDB, so start on a random page
+    // right away instead of loading page 1 first.
+    const startPage = f.kind === 'book' ? 1 + Math.floor(Math.random() * BOOK_PAGES) : 1
+    const first = await discoverPage(f.kind, startPage, f.genre ?? undefined, range)
+    if (startPage > 1 && first.items.length) {
+      const fresh = first.items.map((m) => ({ ...fromAny(m), media: m })).filter((c) => !seen(c))
+      if (fresh.length) return fresh
+    }
     const pages = Math.min(first.totalPages, 15)
     for (let attempt = 0; attempt < 4; attempt++) {
       const page = attempt === 3 ? 1 : 1 + Math.floor(Math.random() * pages)
@@ -195,7 +202,7 @@ export function RandomScreen() {
                   .filter(Boolean)
                   .join(' · ')}
               </div>
-              <PublicScore value={pick.score} votes={pick.votes} source={pick.type === 'book' ? bookSource(pick.id) : pick.type === 'game' ? 'IGDB' : 'TMDB'} />
+              <PublicScore value={pick.score} votes={pick.votes} source={pick.type === 'book' ? 'Open Library' : pick.type === 'game' ? 'IGDB' : 'TMDB'} />
               {pick.overview && <p className="rp-overview">{pick.overview}</p>}
               <div className="rp-actions">
                 <button className="follow-btn primary pressable" onClick={() => nav(`/${pick.type}/${pick.id}`)}>

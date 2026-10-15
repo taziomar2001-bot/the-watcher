@@ -1,7 +1,6 @@
 import type { ComponentType } from 'react'
 import { TvIcon, MovieCameraIcon, BookIcon, GamepadIcon } from '../components/Icons'
 import { USE_TMDB } from '../data/catalog'
-import { USE_GOOGLE_BOOKS } from '../data/books'
 import { USE_IGDB } from '../data/games'
 
 /**
@@ -18,10 +17,11 @@ export interface ContentCategory {
   matches: (pathname: string) => boolean
 }
 
-// Books and games appear once their catalogue is connected (Google Books key /
-// IGDB proxy); without TMDB either, the app is in sample mode and shows all four.
+// Games appear once the IGDB proxy is connected; without TMDB the app is in
+// sample mode and shows all four kinds.
 const SAMPLE_MODE = !USE_TMDB
-export const BOOKS_ON = USE_GOOGLE_BOOKS || SAMPLE_MODE
+// Books need no key (Open Library live, the sample catalogue otherwise).
+export const BOOKS_ON = true
 export const GAMES_ON = USE_IGDB || SAMPLE_MODE
 
 /**
