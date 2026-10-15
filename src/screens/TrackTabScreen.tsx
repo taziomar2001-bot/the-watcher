@@ -29,8 +29,14 @@ function TrackTabScreen({ kind }: { kind: TrackKind }) {
 
   const sections = useMemo(() => {
     const s = sectionsOf(entries)
+    if (kind === 'game')
+      return [
+        { key: 'active', chip: 'On Shelf', title: 'On Your Shelf', items: toGrid(s.backlog) },
+        { key: 'soon', chip: 'Upcoming', title: 'Upcoming', items: toGrid(s.soon) },
+        { key: 'played', chip: 'Played', title: 'Recently Played', items: toGrid(s.done.slice(0, 30)) },
+      ]
     return [
-      { key: 'active', chip: w.active, title: kind === 'book' ? 'Currently Reading' : 'Currently Playing', items: toGrid(s.active) },
+      { key: 'active', chip: w.active, title: 'Currently Reading', items: toGrid(s.active) },
       { key: 'backlog', chip: w.backlog, title: w.backlog, items: toGrid(s.backlog) },
       { key: 'soon', chip: 'Coming Soon', title: 'Coming Soon', items: toGrid(s.soon) },
     ]

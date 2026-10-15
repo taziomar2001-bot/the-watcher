@@ -197,7 +197,8 @@ export function computeTrackInsights(kind: TrackKind, all: { id: string; t: Trac
       const d = `${Math.floor(t.item.year / 10) * 10}s`
       decade.set(d, (decade.get(d) ?? 0) + 1)
     }
-    const m = kind === 'book' ? (t.item.authors ?? []).slice(0, 1) : t.item.platforms ?? []
+    // Games: only the console you said you played on (optional, so some have none).
+    const m = kind === 'book' ? (t.item.authors ?? []).slice(0, 1) : t.platform ? [t.platform] : []
     if (m.length) {
       withMaker++
       for (const x of new Set(m)) maker.set(x, (maker.get(x) ?? 0) + 1)
@@ -210,11 +211,11 @@ export function computeTrackInsights(kind: TrackKind, all: { id: string; t: Trac
       const count = decade.get(`${d}s`) ?? 0
       decadeList.push({ name: `${d}s`, count, pct: withYear ? Math.round((count / withYear) * 100) : 0 })
     }
-  const finished = started.filter((e) => e.t.state === 'done')
+  const finished = kind === 'game' ? started : started.filter((e) => e.t.state === 'done')
   const yearCount = new Map<number, number>()
   for (const { t } of finished)
-    if (t.finishedAt) {
-      const y = new Date(t.finishedAt).getFullYear()
+    if (t.finishedAt ?? t.stateAt) {
+      const y = new Date((t.finishedAt ?? t.stateAt)!).getFullYear()
       yearCount.set(y, (yearCount.get(y) ?? 0) + 1)
     }
   const years = [...yearCount.keys()].sort((a, b) => a - b)
@@ -231,7 +232,7 @@ export function computeTrackInsights(kind: TrackKind, all: { id: string; t: Trac
   const topGenre = shares(genre, withGenre, 1)[0]
   if (topGenre) highlights.push({ label: 'Top genre', value: topGenre.name, sub: `${topGenre.pct}% of your ${word}` })
   const topMaker = shares(maker, withMaker, 1)[0]
-  if (topMaker) highlights.push({ label: kind === 'book' ? 'Most-read author' : 'Top platform', value: topMaker.name, sub: `${topMaker.count} ${topMaker.count === 1 ? word.slice(0, -1) : word}` })
+  if (topMaker) highlights.push({ label: kind === 'book' ? 'Most-read author' : 'Top console', value: topMaker.name, sub: `${topMaker.count} ${topMaker.count === 1 ? word.slice(0, -1) : word}` })
   const topDecade = [...decadeList].sort((a, b) => b.count - a.count)[0]
   if (topDecade?.count) highlights.push({ label: 'Favourite decade', value: topDecade.name, sub: `${topDecade.pct}% of your ${word}` })
   const oldest = started.filter((e) => e.t.item.year).sort((a, b) => a.t.item.year! - b.t.item.year!)[0]

@@ -78,7 +78,7 @@ export function UpComingScreen() {
     for (const [kind, map] of [['book', books], ['game', games]] as const) {
       for (const [id, t] of Object.entries(map)) {
         const d = t.item.releaseDate
-        if (t.followed && t.state !== 'done' && d && d >= todayIso)
+        if (t.followed && t.state !== 'done' && !(kind === 'game' && t.state) && d && d >= todayIso)
           out.push({ id: `${kind}:${id}`, showId: id, date: d, kind, poster: t.item.poster, title: t.item.title, epTitle: kind === 'book' ? t.item.authors?.[0] : t.item.platforms?.slice(0, 3).join(', ') })
       }
     }

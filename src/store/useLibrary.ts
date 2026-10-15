@@ -98,6 +98,8 @@ export interface Tracked {
   state?: TrackState
   favorite?: boolean
   rating?: number // personal 1–5 stars
+  /** Games: the console/platform you played it on (optional). */
+  platform?: string
   addedAt: number
   stateAt?: number
   startedAt?: number
@@ -193,6 +195,8 @@ interface LibraryState {
   trackFavorite: (kind: TrackKind, id: string, item: TrackItem, on: boolean) => void
   /** 1–5 stars; the same value again clears it. */
   trackRate: (kind: TrackKind, id: string, rating: number, item?: TrackItem) => void
+  /** Games: which platform you played on (null clears it). */
+  trackSetPlatform: (kind: TrackKind, id: string, platform: string | null) => void
   /** Refresh the cached summary (only for titles already in the library). */
   trackPatchItem: (kind: TrackKind, id: string, patch: Partial<TrackItem>) => void
 }
@@ -643,6 +647,16 @@ export const useLibrary = create<LibraryState>()(
           if (rec.rating === rating) delete rec.rating
           else rec.rating = rating
           return { [key]: keep(map, id, rec) } as Partial<LibraryState>
+        }),
+      trackSetPlatform: (kind, id, platform) =>
+        set((s) => {
+          const key = kind === 'book' ? 'books' : 'games'
+          const cur = s[key][id]
+          if (!cur) return {}
+          const rec: Tracked = { ...cur }
+          if (platform) rec.platform = platform
+          else delete rec.platform
+          return { [key]: { ...s[key], [id]: rec } } as Partial<LibraryState>
         }),
       trackPatchItem: (kind, id, patch) =>
         set((s) => {

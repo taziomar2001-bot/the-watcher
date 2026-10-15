@@ -16,7 +16,7 @@ import type { ContentKind } from '../types'
 type Kind = ContentKind
 const mem = { kind: 'movie' as Kind }
 const NOUN: Record<Kind, string> = { movie: 'movies', show: 'shows', book: 'books', game: 'games' }
-const VERB: Record<Kind, string> = { movie: 'watched', show: 'watched', book: 'started', game: 'started' }
+const VERB: Record<Kind, string> = { movie: 'watched', show: 'watched', book: 'started', game: 'played' }
 
 /**
  * Your stats: genres, decades, languages, when you watch and how you rate —
@@ -80,7 +80,7 @@ export function StatsScreen() {
             <h1 style={{ fontSize: 24 }}>Your stats</h1>
             <div className="sub">
               {ins.total.toLocaleString()} {noun} {VERB[kind]}
-              {isTrack ? ` · ${(ins.finished ?? 0).toLocaleString()} finished` : ''}
+              {kind === 'book' ? ` · ${(ins.finished ?? 0).toLocaleString()} finished` : ''}
             </div>
           </div>
         </div>
@@ -114,7 +114,7 @@ export function StatsScreen() {
         <div className="empty">
           <div className="empty-title">No {noun} {VERB[kind]} yet</div>
           <div className="empty-sub">
-            {isTrack ? `Your stats appear here as you mark ${noun} as ${kind === 'book' ? 'reading' : 'playing'} or finished.` : `Your stats appear here as you mark ${noun} watched.`}
+            {kind === 'book' ? 'Your stats appear here as you mark books as reading or finished.' : kind === 'game' ? 'Your stats appear here as you mark games played.' : `Your stats appear here as you mark ${noun} watched.`}
           </div>
         </div>
       ) : (
@@ -134,16 +134,16 @@ export function StatsScreen() {
           <ShareBars title="Genres" note={`Share of your ${noun} in each genre (a title can have several)`} rows={ins.genres} noun={noun} />
           {isTrack && (
             <ShareBars
-              title={kind === 'book' ? 'Authors' : 'Platforms'}
-              note={kind === 'book' ? 'The authors you read most' : 'Where your games are available'}
+              title={kind === 'book' ? 'Authors' : 'Played on'}
+              note={kind === 'book' ? 'The authors you read most' : 'The consoles you chose when marking games played'}
               rows={ins.makers ?? []}
               noun={noun}
             />
           )}
           {isTrack && ins.byYear.length > 1 && (
             <Columns
-              title={kind === 'book' ? 'Books finished per year' : 'Games finished per year'}
-              note="Based on the date you marked each one finished"
+              title={kind === 'book' ? 'Books finished per year' : 'Games played per year'}
+              note={kind === 'book' ? 'Based on the date you marked each one finished' : 'Based on the date you marked each one played'}
               data={ins.byYear.map((y) => ({ label: `'${String(y.year).slice(2)}`, value: y.count, detail: `${y.year} · ${y.count.toLocaleString()} ${noun}` }))}
             />
           )}

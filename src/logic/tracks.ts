@@ -4,11 +4,17 @@ import type { Book, Game, TrackMedia } from '../types'
 import type { DotColor } from './status'
 
 // ---------------------------------------------------------------------------
-// Books & video games: status-only tracking, same colour language as TV and
-// movies — nothing (not in your library) · white (following, not started) ·
-// blue (not out yet) · orange (reading / playing) · green (finished) ·
-// red (stopped midway).
+// Books: status-only tracking, same colour language as TV and movies —
+// nothing (not in your library) · white (following, not started) · blue (not
+// out yet) · orange (reading) · green (finished) · red (stopped midway).
+//
+// Video games are simpler: Played (green) · On shelf (orange) · Upcoming
+// (white). Any status a game had before (playing, finished, stopped) counts as
+// Played; the stored value is left as it was.
 // ---------------------------------------------------------------------------
+
+/** Has this game been played (any status counts)? */
+export const isPlayed = (t?: Tracked) => !!t?.state
 
 export const TRACK_KINDS: TrackKind[] = ['book', 'game']
 
@@ -31,8 +37,8 @@ export const WORDS: Record<TrackKind, {
     stopped: 'Stopped reading', stop: 'Stopped reading', notStarted: 'Not started', backlog: 'Want to read',
   },
   game: {
-    one: 'game', many: 'games', Many: 'Games', active: 'Playing', doing: 'playing', start: 'Start playing', done: 'Finished',
-    stopped: 'Stopped playing', stop: 'Stopped playing', notStarted: 'Not started', backlog: 'Backlog',
+    one: 'game', many: 'games', Many: 'Games', active: 'Played', doing: 'playing', start: 'Played', done: 'Played',
+    stopped: 'Played', stop: 'Played', notStarted: 'On shelf', backlog: 'On shelf',
   },
 }
 
@@ -44,6 +50,11 @@ export const notOutYet = (releaseDate?: string) => !!releaseDate && releaseDate 
 /** Status colour, or undefined when the title isn't in your library. */
 export function trackColor(t?: Tracked): DotColor | undefined {
   if (!t) return undefined
+  if (t.item.type === 'game') {
+    if (isPlayed(t)) return 'green'
+    if (!t.followed) return undefined
+    return notOutYet(t.item.releaseDate) ? 'orange' /* white */ : 'yellow' /* orange */
+  }
   if (t.state === 'done') return 'green'
   if (t.state === 'stopped') return 'red'
   if (t.state === 'active') return 'yellow'
@@ -55,6 +66,11 @@ export function trackColor(t?: Tracked): DotColor | undefined {
 export function trackStatusText(kind: TrackKind, t?: Tracked): string | null {
   if (!t) return null
   const w = WORDS[kind]
+  if (kind === 'game') {
+    if (isPlayed(t)) return t.platform ? `Played on ${t.platform}` : 'Played'
+    if (!t.followed) return null
+    return notOutYet(t.item.releaseDate) ? 'Upcoming' : 'On shelf'
+  }
   if (t.state === 'done') return w.done
   if (t.state === 'stopped') return w.stopped
   if (t.state === 'active') return w.active
@@ -101,7 +117,9 @@ export function sectionsOf(entries: TrackEntry[]): TrackSections {
   const out: TrackSections = { active: [], backlog: [], soon: [], done: [], stopped: [] }
   for (const e of entries) {
     const s: TrackState | undefined = e.t.state
-    if (s === 'active') out.active.push(e)
+    // Games: any status is "Played".
+    if (e.kind === 'game' && s) out.done.push(e)
+    else if (s === 'active') out.active.push(e)
     else if (s === 'done') out.done.push(e)
     else if (s === 'stopped') out.stopped.push(e)
     else if (e.t.followed) (notOutYet(e.t.item.releaseDate) ? out.soon : out.backlog).push(e)
@@ -122,14 +140,19 @@ export function trackTotals(entries: TrackEntry[]) {
   let done = 0
   let stopped = 0
   let backlog = 0
+  let upcoming = 0
   for (const e of entries) {
     if (e.t.followed || e.t.state) followed++
-    if (e.t.state === 'active') active++
+    if (e.kind === 'game' && e.t.state) done++
+    else if (e.t.state === 'active') active++
     else if (e.t.state === 'done') done++
     else if (e.t.state === 'stopped') stopped++
-    else if (e.t.followed) backlog++
+    else if (e.t.followed) {
+      if (notOutYet(e.t.item.releaseDate)) upcoming++
+      else backlog++
+    }
   }
-  return { followed, active, done, stopped, backlog }
+  return { followed, active, done, stopped, backlog, upcoming }
 }
 
 /** "34 books" / "1 game". */

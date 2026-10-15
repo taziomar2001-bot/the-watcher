@@ -399,7 +399,7 @@ export function MatchSessionScreen() {
   const next = remaining[1]
   const doneLabel = session.kind === 'book' ? 'Read' : session.kind === 'game' ? 'Played' : 'Watched'
   const watched = (cid: string) =>
-    session.kind === 'movie' ? !!watchedMovies[cid] : session.kind === 'show' ? !!lastWatched[cid] : (session.kind === 'book' ? books : games)[cid]?.state === 'done'
+    session.kind === 'movie' ? !!watchedMovies[cid] : session.kind === 'show' ? !!lastWatched[cid] : (session.kind === 'book' ? books[cid]?.state === 'done' : !!games[cid]?.state)
 
   return (
     <div className="scroll-area route-fade">

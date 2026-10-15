@@ -71,8 +71,7 @@ export const SOURCES: Record<Kind, { key: Source; label: string; hint: string }[
   ],
   game: [
     { key: 'anything', label: 'Anything', hint: 'Well-known games you haven’t played' },
-    { key: 'watchlist', label: 'My games', hint: 'Games you follow and haven’t finished' },
-    { key: 'not_started', label: 'Backlog', hint: 'Games you follow but haven’t started' },
+    { key: 'watchlist', label: 'My shelf', hint: 'Games on your shelf you haven’t played' },
   ],
 }
 
@@ -153,6 +152,7 @@ export function libraryCandidates(
     const items: Candidate[] = []
     for (const [id, t] of Object.entries(tracks?.[f.kind] ?? {})) {
       if (!t.followed || t.state === 'done' || t.state === 'stopped') continue
+      if (f.kind === 'game' && t.state) continue // any status = played
       if (f.source === 'not_started' && t.state) continue
       if (t.item.releaseDate && t.item.releaseDate > new Date().toISOString().slice(0, 10)) continue
       const genres = t.item.genres ?? []

@@ -140,8 +140,8 @@ export function ProfileScreen() {
                 facts={[[bookT.active, 'reading'], [bookT.backlog, 'want to read']]} />
             )}
             {GAMES_ON && (
-              <KindCard kind="game" title="Video Games" to="/profile/games" num={gameT.done} cap="finished"
-                facts={[[gameT.active, 'playing'], [gameT.backlog, 'in backlog']]} />
+              <KindCard kind="game" title="Video Games" to="/profile/games" num={gameT.done} cap="played"
+                facts={[[gameT.backlog, 'on shelf'], [gameT.upcoming, 'upcoming']]} />
             )}
           </div>
         )}

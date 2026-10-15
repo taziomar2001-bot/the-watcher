@@ -17,7 +17,7 @@ import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
 import { classifyShow, showColor, movieColor, isUnreleased } from '../logic/status'
 import type { Media, Show, Movie, ContentKind, TrackMedia, Book, Game } from '../types'
-import { discoverBooks, searchBooks } from '../data/books'
+import { loadBookRows, searchBooks, type BookRowsState } from '../data/books'
 import { discoverGames, searchGames } from '../data/games'
 import { KINDS_ON } from '../logic/content'
 import { KIND, KindIcon } from '../ui/kinds'
@@ -58,7 +58,15 @@ export function DiscoverScreen() {
     if (kind === 'book') setWantBooks(true)
     if (kind === 'game') setWantGames(true)
   }, [kind])
-  const booksA = useAsync(() => (wantBooks ? discoverBooks() : Promise.resolve(undefined)), [wantBooks])
+  // Books arrive row by row (and instantly from the last visit).
+  const [bookRows, setBookRows] = useState<BookRowsState | null>(null)
+  const [bookNonce, setBookNonce] = useState(0)
+  useEffect(() => (wantBooks ? loadBookRows(setBookRows, bookNonce > 0) : undefined), [wantBooks, bookNonce])
+  const booksA = {
+    data: bookRows && (bookRows.sections.length || !bookRows.loading) ? bookRows.sections : undefined,
+    error: bookRows && !bookRows.loading && !bookRows.sections.length && bookRows.errors.length ? new Error(bookRows.errors[0]) : undefined,
+    reload: () => setBookNonce((n) => n + 1),
+  }
   const gamesA = useAsync(() => (wantGames ? discoverGames() : Promise.resolve(undefined)), [wantGames])
   const current = kind === 'show' ? shows : kind === 'movie' ? moviesA : kind === 'book' ? booksA : gamesA
   const sections = current.data as { key: string; title: string; items: (Media | TrackMedia)[] }[] | undefined
@@ -334,6 +342,15 @@ export function DiscoverScreen() {
               </div>
             </div>
           ))}
+          {kind === 'book' && bookRows?.loading && <div className="vis-hint page-pad" role="status">Loading more books…</div>}
+          {kind === 'book' && !bookRows?.loading && !!bookRows?.errors.length && (
+            <div className="vis-hint page-pad">
+              {bookRows.errors.length} row{bookRows.errors.length === 1 ? '' : 's'} couldn’t load ({bookRows.errors[0]}).{' '}
+              <button className="auth-link" onClick={booksA.reload}>
+                Try again
+              </button>
+            </div>
+          )}
           <div style={{ height: 16 }} />
         </>
       )}

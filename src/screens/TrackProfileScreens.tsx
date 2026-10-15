@@ -37,9 +37,12 @@ function TrackDashboard({ kind }: { kind: TrackKind }) {
   const t = trackTotals(inLib)
   const rated = entries.filter((e) => e.t.rating != null)
   const avg = rated.length ? rated.reduce((a, e) => a + (e.t.rating ?? 0), 0) / rated.length : null
-  const finished = inLib.filter((e) => e.t.state === 'done')
+  const finished = inLib.filter((e) => (kind === 'game' ? !!e.t.state : e.t.state === 'done'))
   const year = new Date().getFullYear()
-  const thisYear = finished.filter((e) => e.t.finishedAt && new Date(e.t.finishedAt).getFullYear() === year).length
+  const thisYear = finished.filter((e) => {
+    const at = e.t.finishedAt ?? e.t.stateAt
+    return at && new Date(at).getFullYear() === year
+  }).length
 
   const stats =
     kind === 'book'
@@ -56,11 +59,10 @@ function TrackDashboard({ kind }: { kind: TrackKind }) {
         ]
       : [
           { label: 'In your library', value: t.followed },
-          { label: 'Playing', value: t.active },
-          { label: 'Finished', value: t.done },
-          { label: `Finished in ${year}`, value: thisYear },
-          { label: 'Backlog', value: t.backlog },
-          { label: 'Stopped playing', value: t.stopped },
+          { label: 'Played', value: t.done },
+          { label: `Played in ${year}`, value: thisYear },
+          { label: 'On shelf', value: t.backlog },
+          { label: 'Upcoming', value: t.upcoming },
           { label: 'Rated', value: rated.length },
           ...(avg != null ? [{ label: 'Avg game rating', value: `${fmtAvg(avg)} ★` }] : []),
         ]
@@ -79,7 +81,7 @@ function TrackDashboard({ kind }: { kind: TrackKind }) {
   )
 }
 
-type Filter = 'all' | 'active' | 'done' | 'backlog' | 'stopped'
+type Filter = 'all' | 'active' | 'done' | 'backlog' | 'stopped' | 'soon'
 const filterMem: Record<TrackKind, Filter> = { book: 'all', game: 'all' }
 
 /** Every book / game you follow or have a status for, filterable by status. */
@@ -91,21 +93,30 @@ function TrackLibrary({ kind }: { kind: TrackKind }) {
   const [filter, setFilterState] = useState<Filter>(filterMem[kind])
   const setFilter = (f: Filter) => ((filterMem[kind] = f), setFilterState(f))
   const s = useMemo(() => sectionsOf(entries), [entries])
+  const isGame = kind === 'game'
   const lists: Record<Filter, TrackEntry[]> = {
     all: [...s.active, ...s.backlog, ...s.soon, ...s.done, ...s.stopped],
     active: s.active,
     done: s.done,
-    backlog: [...s.backlog, ...s.soon],
+    backlog: isGame ? s.backlog : [...s.backlog, ...s.soon],
+    soon: s.soon,
     stopped: s.stopped,
   }
   const items: GridItem[] = lists[filter].map((e) => ({ id: e.id, poster: e.t.item.poster, title: e.t.item.title, color: e.color ?? 'orange' }))
-  const chips: { key: Filter; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'active', label: w.active },
-    { key: 'done', label: w.done },
-    { key: 'backlog', label: w.backlog },
-    { key: 'stopped', label: 'Stopped' },
-  ]
+  const chips: { key: Filter; label: string }[] = isGame
+    ? [
+        { key: 'all', label: 'All' },
+        { key: 'done', label: 'Played' },
+        { key: 'backlog', label: 'On shelf' },
+        { key: 'soon', label: 'Upcoming' },
+      ]
+    : [
+        { key: 'all', label: 'All' },
+        { key: 'active', label: w.active },
+        { key: 'done', label: w.done },
+        { key: 'backlog', label: w.backlog },
+        { key: 'stopped', label: 'Stopped' },
+      ]
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
       <Header title={w.Many} />

@@ -44,6 +44,8 @@ function TrackScreen({ kind }: { kind: TrackKind }) {
   const setFav = useLibrary((s) => s.trackFavorite)
   const rate = useLibrary((s) => s.trackRate)
   const patch = useLibrary((s) => s.trackPatchItem)
+  const setPlatform = useLibrary((s) => s.trackSetPlatform)
+  const [platformSheet, setPlatformSheet] = useState(false)
   const favCount = useLibrary((s) => Object.values(s[mapKey(kind)]).filter((x) => x.favorite).length)
   const toast = useToast((s) => s.show)
   const [tab, setTab] = useDetailTab<'about' | 'comments'>(`${kind}:${id}`, 'about')
@@ -76,6 +78,7 @@ function TrackScreen({ kind }: { kind: TrackKind }) {
   const days = notOutYet(media.releaseDate) ? daysTo(media.releaseDate) : 0
   const statusText = days > 0 ? `Out in ${days} day${days === 1 ? '' : 's'}` : trackStatusText(kind, t)
   const state = t?.state
+  const played = kind === 'game' && !!state
 
   const toggleFav = () => {
     if (!fav && favCount >= FAV_LIMIT) return toast(`You can have up to ${FAV_LIMIT} favorite ${w.many} — remove one first.`, { duration: 4200 })
@@ -111,23 +114,54 @@ function TrackScreen({ kind }: { kind: TrackKind }) {
       </DetailHero>
 
       <ActionBar>
-        <ActionBtn
-          icon={following ? <CheckIcon size={22} /> : <PlusIcon size={22} />}
-          label={following ? 'Following' : 'Follow'}
-          on={following}
-          tone="gold"
-          onClick={() => {
-            follow(kind, id, item, !following)
-            toast(following ? `Unfollowed ${media.title}` : `Following ${media.title}`)
-          }}
-        />
-        <ActionBtn
-          icon={<StatusIcon size={22} />}
-          label={statusLabel}
-          on={!!state}
-          tone={state === 'done' ? 'green' : state === 'stopped' ? 'red' : state === 'active' ? 'orange' : undefined}
-          onClick={() => setStatusSheet(true)}
-        />
+        {kind === 'game' ? (
+          <>
+            <ActionBtn
+              icon={following || played ? <CheckIcon size={22} /> : <PlusIcon size={22} />}
+              label={played ? 'In library' : following ? (notOutYet(media.releaseDate) ? 'Following' : 'On shelf') : 'Shelf'}
+              on={following || played}
+              tone="gold"
+              onClick={() => {
+                follow(kind, id, item, !following)
+                toast(following ? `Removed from your shelf` : notOutYet(media.releaseDate) ? `Following ${media.title}` : `On your shelf`)
+              }}
+            />
+            <ActionBtn
+              icon={<GamepadIcon size={22} />}
+              label="Played"
+              on={played}
+              tone="green"
+              onClick={() => {
+                if (played) return setPlatformSheet(true)
+                if (notOutYet(media.releaseDate)) return toast('Not out yet — mark it played once it’s released')
+                setState(kind, id, 'done', item)
+                if (game!.platforms.length === 1) setPlatform(kind, id, game!.platforms[0])
+                if (game!.platforms.length > 1) setPlatformSheet(true)
+                else toast('Marked played')
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <ActionBtn
+              icon={following ? <CheckIcon size={22} /> : <PlusIcon size={22} />}
+              label={following ? 'Following' : 'Follow'}
+              on={following}
+              tone="gold"
+              onClick={() => {
+                follow(kind, id, item, !following)
+                toast(following ? `Unfollowed ${media.title}` : `Following ${media.title}`)
+              }}
+            />
+            <ActionBtn
+              icon={<StatusIcon size={22} />}
+              label={statusLabel}
+              on={!!state}
+              tone={state === 'done' ? 'green' : state === 'stopped' ? 'red' : state === 'active' ? 'orange' : undefined}
+              onClick={() => setStatusSheet(true)}
+            />
+          </>
+        )}
         <ActionBtn icon={<HeartIcon size={22} fill={fav ? 'currentColor' : 'none'} />} label="Favorite" on={fav} tone="red" onClick={toggleFav} />
         <ActionBtn icon={<ListIcon size={22} />} label={membership ? `${membership} list${membership > 1 ? 's' : ''}` : 'Add to list'} on={membership > 0} onClick={() => setListSheet(true)} />
         <ActionBtn
@@ -203,6 +237,49 @@ function TrackScreen({ kind }: { kind: TrackKind }) {
 
       <div style={{ height: 20 }} />
       {listSheet && <AddToListSheet itemRef={ref} meta={{ t: media.title, p: media.poster, y: media.year }} onClose={() => setListSheet(false)} />}
+      {platformSheet && game && (
+        <Sheet onClose={() => setPlatformSheet(false)} label="Where did you play it?">
+          <div className="sheet-title">Where did you play it?</div>
+          <div className="vis-hint" style={{ padding: '0 6px 6px' }}>Optional — it feeds your “Played on” stats.</div>
+          {game.platforms.map((p) => (
+            <button
+              key={p}
+              className={`status-row pressable ${t?.platform === p ? 'on' : ''}`}
+              role="radio"
+              aria-checked={t?.platform === p}
+              onClick={() => {
+                setPlatform(kind, id, t?.platform === p ? null : p)
+                setPlatformSheet(false)
+                toast(t?.platform === p ? 'Marked played' : `Played on ${p}`)
+              }}
+            >
+              <span className="status-row-text">
+                <span className="status-row-label">{p}</span>
+              </span>
+              {t?.platform === p && <CheckIcon size={18} />}
+            </button>
+          ))}
+          <button className="status-row pressable" onClick={() => setPlatformSheet(false)}>
+            <span className="status-row-text">
+              <span className="status-row-label">{t?.platform ? 'Done' : 'Skip'}</span>
+            </span>
+          </button>
+          <button
+            className="status-row pressable"
+            onClick={() => {
+              setPlatformSheet(false)
+              setState(kind, id, null, item)
+              toast(following ? 'Back on your shelf' : 'Marked not played')
+            }}
+          >
+            <span className="status-row-dot" style={{ background: DOT_COLOR.yellow }} />
+            <span className="status-row-text">
+              <span className="status-row-label">Not played yet</span>
+              <span className="status-row-hint">Put it back on your shelf</span>
+            </span>
+          </button>
+        </Sheet>
+      )}
       {statusSheet && (
         <Sheet onClose={() => setStatusSheet(false)} label={`${media.title} status`}>
           <div className="sheet-title">{media.title}</div>

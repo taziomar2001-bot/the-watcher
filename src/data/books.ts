@@ -174,71 +174,117 @@ export interface Section<T> {
   items: T[]
 }
 
-export function discoverBooks(): Promise<Section<Book>[]> {
-  return cached('discoverBooks', 30 * MIN, async () => {
-    if (!USE_GOOGLE_BOOKS) {
-      const now = new Date().toISOString().slice(0, 10)
-      const rated = [...BOOKS_MOCK].sort((a, b) => (b.communityRating ?? 0) - (a.communityRating ?? 0))
-      return [
-        { key: 'new', title: 'New Releases', items: [...BOOKS_MOCK].filter((b) => !b.releaseDate || b.releaseDate <= now).sort((a, b) => (b.year ?? 0) - (a.year ?? 0)) },
-        { key: 'fantasy', title: 'Fantasy & Sci-Fi', items: BOOKS_MOCK.filter((b) => b.genres.some((g) => /fantasy|science/i.test(g))) },
-        { key: 'thriller', title: 'Mystery & Thriller', items: BOOKS_MOCK.filter((b) => b.genres.some((g) => /thriller|mystery/i.test(g))) },
-        { key: 'nonfiction', title: 'Non-fiction', items: BOOKS_MOCK.filter((b) => b.genres.some((g) => /history|self|biography|science$/i.test(g))) },
-        { key: 'rated', title: 'Loved by Readers', items: rated },
-        { key: 'soon', title: 'Coming Soon', items: BOOKS_MOCK.filter((b) => b.releaseDate && b.releaseDate > now) },
-      ]
+/** The Discover → Books rows: most popular overall, new releases, then by category. */
+export const BOOK_ROWS: { key: string; title: string; q: string; newest?: boolean; match?: RegExp }[] = [
+  { key: 'popular', title: 'Most Popular', q: 'subject:fiction' },
+  { key: 'new', title: 'New Releases', q: `subject:fiction ${new Date().getFullYear()}`, newest: true },
+  { key: 'biography', title: 'Biography', q: 'subject:"biography & autobiography"', match: /biograph|memoir/i },
+  { key: 'history', title: 'History', q: 'subject:history', match: /histor/i },
+  { key: 'romance', title: 'Romance', q: 'subject:romance', match: /romance/i },
+  { key: 'scifi', title: 'Science Fiction', q: 'subject:"science fiction"', match: /science fiction/i },
+  { key: 'ya', title: 'Young Adult', q: 'subject:"young adult fiction"', match: /young adult/i },
+  { key: 'business', title: 'Business & Economics', q: 'subject:"business & economics"', match: /business|econom/i },
+  { key: 'truecrime', title: 'True Crime', q: 'subject:"true crime"', match: /true crime/i },
+  { key: 'fantasy', title: 'Fantasy', q: 'subject:fantasy', match: /fantasy/i },
+  { key: 'thriller', title: 'Mystery & Thriller', q: 'subject:thriller', match: /thriller|mystery/i },
+  { key: 'selfhelp', title: 'Self-Help', q: 'subject:"self-help"', match: /self-help/i },
+]
+
+/** Most-rated first (Google's closest thing to "popular"), covers first, max 20. */
+function byPopularity(xs: Book[]): Book[] {
+  const covered = xs.filter((b) => b.poster)
+  const pool = covered.length >= 6 ? covered : xs
+  return [...pool].sort((a, b) => (b.communityVotes ?? 0) - (a.communityVotes ?? 0) || (b.communityRating ?? 0) - (a.communityRating ?? 0)).slice(0, 20)
+}
+
+const ROWS_KEY = 'tw-book-rows-v1'
+const ROWS_TTL = 24 * 60 * 60 * 1000
+type RowCache = { at: Record<string, number>; rows: Record<string, Book[]> }
+function readRows(): RowCache {
+  try {
+    const c = JSON.parse(localStorage.getItem(ROWS_KEY) ?? '') as RowCache
+    if (c && c.rows && c.at) return c
+  } catch {
+    /* none yet */
+  }
+  return { at: {}, rows: {} }
+}
+function writeRows(c: RowCache) {
+  try {
+    localStorage.setItem(ROWS_KEY, JSON.stringify(c))
+  } catch {
+    /* full or blocked: rows just reload next time */
+  }
+}
+const slim = (b: Book): Book => ({ ...b, overview: b.overview.slice(0, 280) })
+
+export interface BookRowsState {
+  sections: Section<Book>[]
+  loading: boolean
+  /** Rows Google refused, with its reason (shown so a problem is visible). */
+  errors: string[]
+}
+
+/**
+ * Discover → Books. Rows appear as soon as they arrive (and instantly from the
+ * last visit — each row is kept for a day), fetched one at a time with a short
+ * gap and retries so Google's per-second limit is never hit.
+ */
+export function loadBookRows(onUpdate: (s: BookRowsState) => void, force = false): () => void {
+  let alive = true
+  const cache = readRows()
+  const emit = (loading: boolean, errors: string[]) => {
+    if (!alive) return
+    const sections = BOOK_ROWS.map((r) => ({ key: r.key, title: r.title, items: cache.rows[r.key] ?? [] })).filter((x) => x.items.length > 0)
+    onUpdate({ sections, loading, errors })
+  }
+  if (!USE_GOOGLE_BOOKS) {
+    const now = new Date().toISOString().slice(0, 10)
+    for (const r of BOOK_ROWS) {
+      cache.rows[r.key] =
+        r.key === 'popular'
+          ? [...BOOKS_MOCK].sort((a, b) => (b.communityRating ?? 0) - (a.communityRating ?? 0))
+          : r.key === 'new'
+            ? [...BOOKS_MOCK].filter((b) => !b.releaseDate || b.releaseDate <= now).sort((a, b) => (b.year ?? 0) - (a.year ?? 0))
+            : BOOKS_MOCK.filter((b) => b.genres.some((g) => r.match?.test(g)))
     }
-    // Gentle on Google's per-second limit: two queries at a time, each retried
-    // once. A failed or empty row is skipped; if every row fails we throw, so
-    // nothing empty is cached and the screen offers "Try again".
-    const year = new Date().getFullYear()
+    emit(false, [])
+    return () => {
+      alive = false
+    }
+  }
+  emit(true, [])
+  void (async () => {
     const errors: string[] = []
-    const run = async (q: string, extra: Record<string, string | number> = {}): Promise<Book[]> => {
-      for (let attempt = 0; attempt < 2; attempt++) {
+    const due = BOOK_ROWS.filter((r) => force || !cache.rows[r.key]?.length || Date.now() - (cache.at[r.key] ?? 0) > ROWS_TTL)
+    for (const r of due) {
+      if (!alive) return
+      let ok = false
+      for (let attempt = 0; attempt < 3 && !ok && alive; attempt++) {
         try {
-          return (await volumes(q, extra)).items
+          if (attempt) await new Promise((res) => setTimeout(res, attempt * 1200))
+          const res = await volumes(r.q, { orderBy: r.newest ? 'newest' : 'relevance', langRestrict: 'en' })
+          const today = new Date().toISOString().slice(0, 10)
+          const items = r.newest ? res.items.filter((b) => !b.releaseDate || b.releaseDate <= today).filter((b) => b.poster) : byPopularity(res.items)
+          if (items.length) {
+            cache.rows[r.key] = items.slice(0, 20).map(slim)
+            cache.at[r.key] = Date.now()
+            writeRows(cache)
+          }
+          ok = true
         } catch (e) {
-          if (attempt === 1) errors.push(String((e as Error)?.message ?? e))
-          else await new Promise((r) => setTimeout(r, 700))
+          if (attempt === 2) errors.push(`${r.title}: ${(e as Error)?.message ?? e}`)
         }
       }
-      return []
+      emit(true, errors)
+      await new Promise((res) => setTimeout(res, 300))
     }
-    const plan: [string, Record<string, string | number>][] = [
-      [`subject:fiction ${year}`, { orderBy: 'newest' }],
-      ['subject:fiction', { orderBy: 'relevance' }],
-      ['subject:fantasy', { orderBy: 'relevance' }],
-      ['subject:thriller', { orderBy: 'relevance' }],
-      ['subject:romance', { orderBy: 'relevance' }],
-      ['subject:history', { orderBy: 'relevance' }],
-    ]
-    const results: Book[][] = []
-    for (let i = 0; i < plan.length; i += 2) {
-      const pair = await Promise.all(plan.slice(i, i + 2).map(([q, extra]) => run(q, { ...extra, langRestrict: 'en' })))
-      results.push(...pair)
-    }
-    const [fresh, fiction, fantasy, thriller, romance, history] = results
-    const today = new Date().toISOString().slice(0, 10)
-    // Prefer titles with a cover; fall back to all of them rather than an empty row.
-    const covered = (xs: Book[]) => {
-      const c = xs.filter((b) => b.poster)
-      return c.length >= 4 ? c : xs
-    }
-    const sections = [
-      { key: 'new', title: 'New Releases', items: covered(fresh.filter((b) => !b.releaseDate || b.releaseDate <= today)) },
-      { key: 'soon', title: 'Coming Soon', items: covered(fresh.filter((b) => b.releaseDate && b.releaseDate > today)) },
-      { key: 'fiction', title: 'Popular Fiction', items: covered(fiction) },
-      { key: 'fantasy', title: 'Fantasy', items: covered(fantasy) },
-      { key: 'thriller', title: 'Mystery & Thriller', items: covered(thriller) },
-      { key: 'romance', title: 'Romance', items: covered(romance) },
-      { key: 'history', title: 'History', items: covered(history) },
-    ].filter((x) => x.items.length > 0)
-    if (!sections.length) {
-      console.warn('[books] discover failed', errors)
-      throw new Error(errors[0] ?? 'No books came back')
-    }
-    return sections
-  })
+    if (errors.length) console.warn('[books] some rows failed', errors)
+    emit(false, errors)
+  })()
+  return () => {
+    alive = false
+  }
 }
 
 /**
