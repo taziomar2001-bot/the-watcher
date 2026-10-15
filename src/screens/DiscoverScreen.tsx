@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { Segmented, SearchField, SectionHeader } from '../ui/primitives'
 import { PosterThumb } from '../ui/cards'
@@ -16,18 +16,28 @@ import { useToggleFavorite } from '../logic/favorites'
 import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
 import { classifyShow, showColor, movieColor, isUnreleased } from '../logic/status'
-import type { Media, Show, Movie } from '../types'
+import type { Media, Show, Movie, ContentKind, TrackMedia, Book, Game } from '../types'
+import { discoverBooks, searchBooks } from '../data/books'
+import { discoverGames, searchGames } from '../data/games'
+import { KINDS_ON } from '../logic/content'
+import { KIND, KindIcon } from '../ui/kinds'
+import { toTrackItem, trackColor, WORDS } from '../logic/tracks'
+import { FAV_LIMIT } from '../logic/stats'
+import type { TrackKind } from '../store/useLibrary'
 
 // Module-scoped so Discover's mode + query survive navigating to a detail page
 // and back (scroll position is preserved separately by useScrollMemory).
-const discoverMem = { kind: 'show' as 'show' | 'movie', q: '' }
+const discoverMem = { kind: 'show' as ContentKind, q: '' }
 
 export function DiscoverScreen() {
   const nav = useNavigate()
+  const location = useLocation()
   const scrollRef = useScrollMemory<HTMLDivElement>('discover')
-  const [kind, setKindState] = useState<'show' | 'movie'>(discoverMem.kind)
+  const asked = (location.state as { kind?: ContentKind } | null)?.kind
+  if (asked && KINDS_ON.includes(asked) && discoverMem.kind !== asked) discoverMem.kind = asked
+  const [kind, setKindState] = useState<ContentKind>(discoverMem.kind)
   const [q, setQState] = useState(discoverMem.q)
-  const setKind = (k: 'show' | 'movie') => {
+  const setKind = (k: ContentKind) => {
     discoverMem.kind = k
     setKindState(k)
   }
@@ -41,13 +51,39 @@ export function DiscoverScreen() {
 
   const shows = useAsync(() => discoverShows(), [])
   const moviesA = useAsync(() => discoverMovies(), [])
-  const sections = kind === 'show' ? shows.data : moviesA.data
-  const sectionsError = kind === 'show' ? shows.error : moviesA.error
-  const retrySections = kind === 'show' ? shows.reload : moviesA.reload
+  // Books and games load only once their toggle is chosen.
+  const [wantBooks, setWantBooks] = useState(kind === 'book')
+  const [wantGames, setWantGames] = useState(kind === 'game')
+  useEffect(() => {
+    if (kind === 'book') setWantBooks(true)
+    if (kind === 'game') setWantGames(true)
+  }, [kind])
+  const booksA = useAsync(() => (wantBooks ? discoverBooks() : Promise.resolve(undefined)), [wantBooks])
+  const gamesA = useAsync(() => (wantGames ? discoverGames() : Promise.resolve(undefined)), [wantGames])
+  const current = kind === 'show' ? shows : kind === 'movie' ? moviesA : kind === 'book' ? booksA : gamesA
+  const sections = current.data as { key: string; title: string; items: (Media | TrackMedia)[] }[] | undefined
+  const sectionsError = current.error
+  const retrySections = current.reload
 
-  // Universal search — both movies AND shows, regardless of the toggle.
+  // Universal search — every kind, regardless of the toggle.
   const dq = useDebounced(q, 300)
   const { data: results, error: searchError, reload: retrySearch } = useAsync(() => searchCatalog(dq), [dq])
+  const bookResults = useAsync(() => (KINDS_ON.includes('book') && dq.trim() ? searchBooks(dq).catch(() => [] as Book[]) : Promise.resolve([] as Book[])), [dq])
+  const gameResults = useAsync(() => (KINDS_ON.includes('game') && dq.trim() ? searchGames(dq).catch(() => [] as Game[]) : Promise.resolve([] as Game[])), [dq])
+  const tracks = { book: lib.books, game: lib.games }
+  const followingTrack = (m: TrackMedia) => !!tracks[m.type][m.id]?.followed
+  const toggleFollowTrack = (m: TrackMedia) => {
+    const was = followingTrack(m)
+    lib.trackFollow(m.type, m.id, toTrackItem(m), !was)
+    if (!was) toast(`Following ${m.title}`)
+  }
+  const isFavTrack = (m: TrackMedia) => !!tracks[m.type][m.id]?.favorite
+  const toggleFavTrack = (m: TrackMedia) => {
+    const on = !isFavTrack(m)
+    if (on && Object.values(tracks[m.type]).filter((t) => t.favorite).length >= FAV_LIMIT)
+      return toast(`You can have up to ${FAV_LIMIT} favorite ${WORDS[m.type as TrackKind].many} — remove one first.`, { duration: 4200 })
+    lib.trackFavorite(m.type, m.id, toTrackItem(m), on)
+  }
   // Real members only (Supabase profiles with a claimed @username), debounced.
   const signedIn = useSync((s) => s.status === 'signedIn')
   const me = useSync((s) => s.userId)
@@ -109,7 +145,7 @@ export function DiscoverScreen() {
 
       {/* 1. Search bar (above the toggle) */}
       <div className="page-pad" style={{ paddingBottom: 10 }}>
-        <SearchField value={q} onChange={setQ} placeholder="Search movies, TV shows & people" />
+        <SearchField value={q} onChange={setQ} placeholder={KINDS_ON.length > 2 ? 'Search titles & people' : 'Search movies, TV shows & people'} />
       </div>
 
       {/* 2. TV/Movies toggle — only relevant to the discovery sections, so it
@@ -117,10 +153,11 @@ export function DiscoverScreen() {
       {!searching && (
         <div className="page-pad" style={{ paddingBottom: 8 }}>
           <Segmented
-            options={[
-              { key: 'show', label: 'TV Shows' },
-              { key: 'movie', label: 'Movies' },
-            ]}
+            options={KINDS_ON.map((k) =>
+              KINDS_ON.length > 2
+                ? { key: k, label: <span className="seg-icon"><KindIcon kind={k} size={21} /></span>, aria: KIND[k].label }
+                : { key: k, label: KIND[k].label },
+            )}
             value={kind}
             onChange={setKind}
           />
@@ -140,7 +177,7 @@ export function DiscoverScreen() {
               </div>
             </>
           )}
-          {(results ?? []).length > 0 && userResults.length > 0 && <SectionHeader title="Movies & TV" />}
+          {(results ?? []).length > 0 && (userResults.length > 0 || !!bookResults.data?.length || !!gameResults.data?.length) && <SectionHeader title="Movies & TV" />}
           <div className="card-list" style={{ marginTop: 6 }}>
             {searchError && userResults.length === 0 ? (
               <ErrorState title="Couldn’t search right now" onRetry={retrySearch} />
@@ -148,7 +185,7 @@ export function DiscoverScreen() {
               <div className="empty">
                 <div className="empty-sub">Searching…</div>
               </div>
-            ) : results.length === 0 && userResults.length === 0 ? (
+            ) : results.length === 0 && userResults.length === 0 && !(bookResults.data?.length || gameResults.data?.length) ? (
               <div className="empty">
                 <div className="empty-title">No results</div>
                 <div className="empty-sub">Try a different spelling or a shorter title.</div>
@@ -186,6 +223,39 @@ export function DiscoverScreen() {
             ))
             )}
           </div>
+          {(['book', 'game'] as const).map((tk) => {
+            const list = (tk === 'book' ? bookResults.data : gameResults.data) as TrackMedia[] | undefined
+            if (!list?.length || dq !== q) return null
+            return (
+              <div key={tk}>
+                <SectionHeader title={KIND[tk].label} />
+                <div className="card-list" style={{ marginTop: 2 }}>
+                  {list.slice(0, 12).map((m) => (
+                    <div key={`${m.type}_${m.id}`} className="search-row">
+                      <button className="search-row-main pressable" onClick={() => nav(`/${m.type}/${m.id}`)}>
+                        <SmartImage src={m.poster} alt={m.title} className="result-poster" />
+                        <div className="result-info">
+                          <div className="result-title">{m.title}</div>
+                          <div className="result-sub">
+                            <span className={`type-badge ${m.type}`}>{KIND[m.type].badge}</span>
+                            {[m.year, m.type === 'book' ? (m as Book).authors[0] : (m as Game).platforms.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                      </button>
+                      <div className="search-row-actions">
+                        <button className={`mini-pill ${followingTrack(m) ? 'active' : ''}`} onClick={() => toggleFollowTrack(m)}>
+                          {followingTrack(m) ? 'Following' : 'Follow'}
+                        </button>
+                        <button className={`mini-icon ${isFavTrack(m) ? 'fav' : ''}`} onClick={() => toggleFavTrack(m)} aria-label="Favorite">
+                          <HeartIcon size={16} fill={isFavTrack(m) ? '#ff5964' : 'none'} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </>
       ) : !sections && sectionsError ? (
         <ErrorState onRetry={retrySections} />
@@ -211,6 +281,20 @@ export function DiscoverScreen() {
               <SectionHeader title={sec.title} />
               <div className="hscroll">
                 {sec.items.slice(0, 16).map((m) => {
+                  if (m.type === 'book' || m.type === 'game') {
+                    const tm = m as TrackMedia
+                    return (
+                      <PosterThumb
+                        key={tm.id}
+                        poster={tm.poster}
+                        title={tm.title}
+                        color={trackColor(tracks[tm.type][tm.id])}
+                        following={followingTrack(tm)}
+                        onAdd={() => toggleFollowTrack(tm)}
+                        onClick={() => nav(`/${tm.type}/${tm.id}`)}
+                      />
+                    )
+                  }
                   const media = m as Media
                   const isFollow = following(media)
                   const color =

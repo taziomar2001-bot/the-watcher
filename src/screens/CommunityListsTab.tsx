@@ -28,12 +28,17 @@ import {
 
 /** Kinds a community ranking can take, from what its titles are. */
 function kindsFor(titles: CommunityTitle[]): ListKind[] {
-  const shows = titles.some((t) => t.ref.startsWith('show:'))
-  const movies = titles.some((t) => t.ref.startsWith('movie:'))
+  const has = (t: string) => titles.some((x) => x.ref.startsWith(t + ':'))
+  const shows = has('show')
+  const movies = has('movie')
+  const books = has('book')
+  const games = has('game')
   const out: ListKind[] = []
-  if (shows && movies) out.push('mixed')
+  if ([shows, movies, books, games].filter(Boolean).length > 1) out.push('mixed')
   if (shows) out.push('shows', 'seasons', 'episodes')
   if (movies) out.push('movies')
+  if (books) out.push('books')
+  if (games) out.push('games')
   return out
 }
 
@@ -49,7 +54,7 @@ async function itemsFor(kind: ListKind, titles: CommunityTitle[]): Promise<{ ite
   for (const t of titles) {
     const [type, id] = t.ref.split(':')
     const base: RefMeta = { t: t.title, p: t.poster ?? undefined, y: t.year ?? undefined }
-    if (kind === 'mixed' || (kind === 'shows' && type === 'show') || (kind === 'movies' && type === 'movie')) add(t.ref, base)
+    if (kind === 'mixed' || (kind === 'shows' && type === 'show') || (kind === 'movies' && type === 'movie') || (kind === 'books' && type === 'book') || (kind === 'games' && type === 'game')) add(t.ref, base)
     if ((kind === 'seasons' || kind === 'episodes') && type === 'show') {
       const show = await getShow(id)
       if (!show) continue

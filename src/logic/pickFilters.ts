@@ -2,11 +2,12 @@ import { effectiveSeen } from './status'
 import type { TvEntry } from './status'
 import type { MovieEntry } from './useLibraryData'
 import type { TitleMeta } from '../data/tmdb'
-import type { Media, Movie, Show } from '../types'
+import type { Media, Movie, Show, ContentKind, TrackMedia, Book, Game } from '../types'
+import type { TrackMap } from '../store/useLibrary'
 
 // Shared filters for "Pick for me" and "Watch together".
 
-export type Kind = 'movie' | 'show'
+export type Kind = ContentKind
 export type Source = 'anything' | 'watchlist' | 'not_started'
 export interface Genre {
   id: number
@@ -35,6 +36,22 @@ export const LENGTHS: Record<Kind, LengthOpt[]> = {
     { key: '45-60', label: '45 min – 1h', short: '45–60 min', min: 46, max: 60 },
     { key: 'gt60', label: 'Over 1h', short: '> 1h', min: 61 },
   ],
+  // Books: page count.
+  book: [
+    { key: 'any', label: 'Any length', short: 'Any length' },
+    { key: 'lt250', label: 'Under 250 pages', short: '< 250 p', max: 249 },
+    { key: '250-400', label: '250 – 400 pages', short: '250–400 p', min: 250, max: 400 },
+    { key: '400-600', label: '400 – 600 pages', short: '400–600 p', min: 401, max: 600 },
+    { key: 'gt600', label: 'Over 600 pages', short: '> 600 p', min: 601 },
+  ],
+  // Games: hours to beat the main story (IGDB).
+  game: [
+    { key: 'any', label: 'Any length', short: 'Any length' },
+    { key: 'lt10', label: 'Under 10 hours', short: '< 10 h', max: 9 },
+    { key: '10-25', label: '10 – 25 hours', short: '10–25 h', min: 10, max: 25 },
+    { key: '25-50', label: '25 – 50 hours', short: '25–50 h', min: 26, max: 50 },
+    { key: 'gt50', label: 'Over 50 hours', short: '> 50 h', min: 51 },
+  ],
 }
 
 export const SOURCES: Record<Kind, { key: Source; label: string; hint: string }[]> = {
@@ -47,7 +64,21 @@ export const SOURCES: Record<Kind, { key: Source; label: string; hint: string }[
     { key: 'watchlist', label: 'My watchlist', hint: 'Shows you follow and haven’t finished' },
     { key: 'not_started', label: 'Not started yet', hint: 'Shows you follow but never started' },
   ],
+  book: [
+    { key: 'anything', label: 'Anything', hint: 'Well-known books you haven’t read' },
+    { key: 'watchlist', label: 'My books', hint: 'Books you follow and haven’t finished' },
+    { key: 'not_started', label: 'Want to read', hint: 'Books you follow but haven’t started' },
+  ],
+  game: [
+    { key: 'anything', label: 'Anything', hint: 'Well-known games you haven’t played' },
+    { key: 'watchlist', label: 'My games', hint: 'Games you follow and haven’t finished' },
+    { key: 'not_started', label: 'Backlog', hint: 'Games you follow but haven’t started' },
+  ],
 }
+
+/** "Movie length", "Book length", "Time to beat"… */
+export const LENGTH_TITLE: Record<Kind, string> = { movie: 'Movie length', show: 'Episode length', book: 'Book length', game: 'Time to beat (main story)' }
+const KIND_WORD: Record<Kind, string> = { movie: 'movies', show: 'TV shows', book: 'books', game: 'games' }
 
 export interface PickFilters {
   kind: Kind
@@ -71,8 +102,25 @@ export interface Candidate {
   genres: string[]
   overview?: string
   runtime?: number
-  media?: Media
+  media?: Media | TrackMedia
 }
+
+/** Candidates from a book or game. `runtime` holds pages / hours. */
+export const fromTrack = (m: TrackMedia): Candidate => ({
+  id: m.id,
+  type: m.type,
+  title: m.title,
+  poster: m.poster,
+  year: m.year,
+  score: m.communityRating,
+  votes: m.communityVotes,
+  genres: m.genres,
+  overview: m.overview,
+  runtime: m.type === 'book' ? (m as Book).pageCount : (m as Game).timeToBeat?.normally,
+})
+
+/** Any catalogue title → candidate. */
+export const fromAny = (m: Media | TrackMedia): Candidate => (m.type === 'book' || m.type === 'game' ? fromTrack(m as TrackMedia) : fromMedia(m as Media))
 
 export const fromMedia = (m: Media): Candidate => ({
   id: m.id,
@@ -98,8 +146,23 @@ export function libraryCandidates(
   watchlistMovies: Record<string, true>,
   watchedEpisodes: Record<string, true>,
   meta: Record<string, TitleMeta>,
+  tracks?: { book: TrackMap; game: TrackMap },
 ): { items: Candidate[]; unknown: string[] } {
   const len = lengthOf(f.kind, f.length)
+  if (f.kind === 'book' || f.kind === 'game') {
+    const items: Candidate[] = []
+    for (const [id, t] of Object.entries(tracks?.[f.kind] ?? {})) {
+      if (!t.followed || t.state === 'done' || t.state === 'stopped') continue
+      if (f.source === 'not_started' && t.state) continue
+      if (t.item.releaseDate && t.item.releaseDate > new Date().toISOString().slice(0, 10)) continue
+      const genres = t.item.genres ?? []
+      if (f.genre && !genres.includes(f.genre.name)) continue
+      const size = f.kind === 'book' ? t.item.pageCount : t.item.ttb
+      if (!inLength(len, size)) continue
+      items.push({ id, type: f.kind, title: t.item.title, poster: t.item.poster, year: t.item.year, genres, runtime: size })
+    }
+    return { items, unknown: [] }
+  }
   const unknown: string[] = []
   const out: Candidate[] = []
   const pool =
@@ -130,7 +193,7 @@ export function describe(f: PickFilters): string {
   return [
     f.source !== 'anything' ? src?.label : null,
     f.genre?.name,
-    f.kind === 'movie' ? 'movies' : 'TV shows',
+    KIND_WORD[f.kind],
     len.key !== 'any' ? `· ${len.short}` : null,
   ]
     .filter(Boolean)

@@ -9,13 +9,14 @@ interface UpItem {
   id: string
   showId: string
   date: string
-  kind: 'tv' | 'movie'
+  kind: 'tv' | 'movie' | 'book' | 'game'
   poster?: string
   title: string
   epTitle?: string
   season?: number
   number?: number
 }
+const UP_BADGE = { tv: 'EP', movie: 'FILM', book: 'BOOK', game: 'GAME' } as const
 const pad = (n: number) => String(n).padStart(2, '0')
 const PTR_THRESHOLD = 70
 
@@ -30,6 +31,8 @@ export function UpComingScreen() {
   const libraryMovies = useLibrary((s) => s.libraryMovies)
   const watchlistMovies = useLibrary((s) => s.watchlistMovies)
   const watchedMovies = useLibrary((s) => s.watchedMovies)
+  const books = useLibrary((s) => s.books)
+  const games = useLibrary((s) => s.games)
   const [visible, setVisible] = useState(50)
 
   // Pull-to-refresh state.
@@ -71,11 +74,19 @@ export function UpComingScreen() {
         out.push({ id: m.id, showId: m.id, date: m.releaseDate, kind: 'movie', poster: m.poster, title: m.title })
       }
     }
+    // Books and games you follow that aren't out yet (finished ones excluded).
+    for (const [kind, map] of [['book', books], ['game', games]] as const) {
+      for (const [id, t] of Object.entries(map)) {
+        const d = t.item.releaseDate
+        if (t.followed && t.state !== 'done' && d && d >= todayIso)
+          out.push({ id: `${kind}:${id}`, showId: id, date: d, kind, poster: t.item.poster, title: t.item.title, epTitle: kind === 'book' ? t.item.authors?.[0] : t.item.platforms?.slice(0, 3).join(', ') })
+      }
+    }
     const seen = new Set<string>()
     const dedup = out.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)))
     dedup.sort((a, b) => a.date.localeCompare(b.date))
     return dedup
-  }, [byShow, watchlistShows, libraryShows, stoppedShows, libraryMovies, watchlistMovies, watchedMovies])
+  }, [byShow, watchlistShows, libraryShows, stoppedShows, libraryMovies, watchlistMovies, watchedMovies, books, games])
 
   const shown = items.slice(0, visible)
   const groups = useMemo(() => {
@@ -180,7 +191,7 @@ export function UpComingScreen() {
       {items.length === 0 && !building && !refreshing && (
         <div className="empty">
           <div className="empty-title">Nothing on the horizon</div>
-          <div className="empty-sub">Upcoming episodes and movies from everything you follow will appear here</div>
+          <div className="empty-sub">New episodes, movies, books and games from everything you follow will appear here</div>
         </div>
       )}
 
@@ -194,7 +205,7 @@ export function UpComingScreen() {
             <button
               key={it.id}
               className="up-row pressable"
-              onClick={() => nav(`/${it.kind === 'tv' ? 'show' : 'movie'}/${it.showId}`)}
+              onClick={() => nav(`/${it.kind === 'tv' ? 'show' : it.kind}/${it.showId}`)}
             >
               <SmartImage src={it.poster} alt={it.title} className="up-poster" />
               <div className="up-body">
@@ -202,10 +213,12 @@ export function UpComingScreen() {
                 <div className="up-sub">
                   {it.kind === 'tv'
                     ? `S${pad(it.season ?? 0)} · E${pad(it.number ?? 0)}${it.epTitle ? ` · ${it.epTitle}` : ''}`
-                    : 'Movie'}
+                    : it.kind === 'movie'
+                      ? 'Movie'
+                      : [it.kind === 'book' ? 'Book' : 'Video game', it.epTitle].filter(Boolean).join(' · ')}
                 </div>
               </div>
-              <span className={`up-kind ${it.kind}`}>{it.kind === 'tv' ? 'EP' : 'FILM'}</span>
+              <span className={`up-kind ${it.kind}`}>{UP_BADGE[it.kind]}</span>
             </button>
           ))}
         </div>

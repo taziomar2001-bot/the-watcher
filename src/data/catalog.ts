@@ -1,4 +1,6 @@
-import type { Show, Movie, UpcomingEpisode, Media } from '../types'
+import type { Show, Movie, UpcomingEpisode, Media, ContentKind, TrackMedia } from '../types'
+import { BOOK_GENRES, discoverBookPage } from './books'
+import { gameGenres, discoverGamePage } from './games'
 import { SHOWS, MOVIES, SHOWS_BY_ID, MOVIES_BY_ID } from './mock'
 import * as tmdb from './tmdb'
 
@@ -209,18 +211,22 @@ async function _discoverMovies(): Promise<DiscoverSection<Movie>[]> {
 
 // ---- Genres + discover pages (Random pick, Watch together) ----
 
-export async function genreList(kind: 'movie' | 'show'): Promise<{ id: number; name: string }[]> {
+export async function genreList(kind: ContentKind): Promise<{ id: number; name: string }[]> {
+  if (kind === 'book') return BOOK_GENRES
+  if (kind === 'game') return gameGenres()
   if (USE_TMDB) return cached('genres:' + kind, 120 * MIN, () => tmdb.genreList(kind))
   const names = new Set((kind === 'show' ? SHOWS : MOVIES).flatMap((m) => m.genres))
   return [...names].sort().map((name, i) => ({ id: i + 1, name }))
 }
 
 export async function discoverPage(
-  kind: 'movie' | 'show',
+  kind: ContentKind,
   page: number,
   genre?: { id: number; name: string },
   len?: { min?: number; max?: number },
-): Promise<{ items: Media[]; totalPages: number }> {
+): Promise<{ items: (Media | TrackMedia)[]; totalPages: number }> {
+  if (kind === 'book') return discoverBookPage(page, genre, len)
+  if (kind === 'game') return discoverGamePage(page, genre, len)
   if (USE_TMDB)
     return cached(`disc:${kind}:${genre?.id ?? 0}:${len?.min ?? 0}-${len?.max ?? 0}:${page}`, 30 * MIN, () => tmdb.discoverPage(kind, page, genre?.id, len))
   const minutes = (m: Media) => (m.type === 'movie' ? m.runtime : m.seasons[0]?.episodes[0]?.runtime)

@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, CheckIcon } from '../components/Icons'
 import { Segmented } from './primitives'
-import { LENGTHS, SOURCES, lengthOf, type Genre, type Kind, type PickFilters } from '../logic/pickFilters'
+import { LENGTHS, LENGTH_TITLE, SOURCES, lengthOf, type Genre, type Kind, type PickFilters } from '../logic/pickFilters'
+import { KINDS_ON } from '../logic/content'
+import { KIND, KindIcon } from './kinds'
 
 type Sheet = 'source' | 'genre' | 'length' | null
 
@@ -32,10 +34,13 @@ export function PickFilterBar({
   return (
     <div className="pf-bar">
       <Segmented
-        options={[
-          { key: 'movie', label: 'Movies' },
-          { key: 'show', label: 'TV shows' },
-        ]}
+        options={(['movie', 'show', 'book', 'game'] as Kind[])
+          .filter((k) => KINDS_ON.includes(k))
+          .map((k) =>
+            KINDS_ON.length > 2
+              ? { key: k, label: <span className="seg-icon"><KindIcon kind={k} size={21} /></span>, aria: KIND[k].label }
+              : { key: k, label: k === 'movie' ? 'Movies' : 'TV shows' },
+          )}
         value={value.kind}
         onChange={setKind}
       />
@@ -77,7 +82,7 @@ export function PickFilterBar({
               )}
               {sheet === 'length' && (
                 <>
-                  <div className="sheet-title">{value.kind === 'movie' ? 'Movie length' : 'Episode length'}</div>
+                  <div className="sheet-title">{LENGTH_TITLE[value.kind]}</div>
                   {LENGTHS[value.kind].map((l) => (
                     <OptionRow key={l.key} label={l.label} on={value.length === l.key} onClick={() => (set({ length: l.key }), close())} />
                   ))}

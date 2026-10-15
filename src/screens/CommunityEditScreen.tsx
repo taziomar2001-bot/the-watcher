@@ -1,3 +1,5 @@
+import { KINDS_ON } from '../logic/content'
+import { getGame } from '../data/games'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -103,9 +105,12 @@ function Page({ title, onBack, right, children }: { title: string; onBack: () =>
 }
 
 const CONTENT_OPTIONS: { key: CommunityContentType; label: string; hint: string }[] = [
-  { key: 'show', label: 'TV Shows', hint: 'Series, seasons and episodes' },
-  { key: 'movie', label: 'Movies', hint: 'Films' },
-]
+  { key: 'show' as const, label: 'TV Shows', hint: 'Series, seasons and episodes' },
+  { key: 'movie' as const, label: 'Movies', hint: 'Films' },
+  { key: 'book' as const, label: 'Books', hint: 'Novels, non-fiction, comics' },
+  { key: 'game' as const, label: 'Video Games', hint: 'Any platform' },
+].filter((o) => KINDS_ON.includes(o.key))
+const ORDER: CommunityContentType[] = ['show', 'movie', 'book', 'game']
 const PRIVACY_OPTIONS: { key: 'public' | 'private'; label: string; hint: string }[] = [
   { key: 'public', label: 'Public', hint: 'Anyone can read the news and join. Chat is for members.' },
   { key: 'private', label: 'Private', hint: 'Anyone can find it; you approve who joins and only members see inside.' },
@@ -133,7 +138,7 @@ function CommunityForm({
   const [description, setDescription] = useState(c?.description ?? '')
   const [visibility, setVisibility] = useState<'public' | 'private'>(c?.visibility ?? 'public')
   const [contentTypes, setContentTypes] = useState<CommunityContentType[]>(
-    c?.content_types ?? (initialTitles[0] ? [initialTitles[0].ref.startsWith('show:') ? 'show' : 'movie'] : ['show', 'movie']),
+    c?.content_types ?? (initialTitles[0] ? [initialTitles[0].ref.split(':')[0] as CommunityContentType] : ['show', 'movie']),
   )
   const [place, setPlace] = useState<CommunityLocation>(
     c
@@ -195,7 +200,7 @@ function CommunityForm({
         visibility,
         contentTypes,
         location: place,
-        topic: first ? { type: first.ref.split(':')[0] as 'show' | 'movie', id: first.ref.split(':')[1], title: first.title, poster: first.poster ?? undefined } : undefined,
+        topic: first ? { type: first.ref.split(':')[0] as CommunityContentType, id: first.ref.split(':')[1], title: first.title, poster: first.poster ?? undefined } : undefined,
       })
       if (!r.ok) {
         setSaving(false)
@@ -264,7 +269,7 @@ function CommunityForm({
         {name.trim().length > 0 && name.trim().length < 3 && <div className="fg-foot warn">Names need at least 3 characters.</div>}
 
         <FormGroup title="Details">
-          <FormRow label="Content" value={contentTypes.length === 2 ? 'TV Shows & Movies' : contentTypesLabel(contentTypes)} onClick={() => setDrawer('content')} />
+          <FormRow label="Content" value={contentTypes.length >= CONTENT_OPTIONS.length ? 'Everything' : contentTypes.length === 2 && contentTypes.includes('show') && contentTypes.includes('movie') ? 'TV Shows & Movies' : contentTypesLabel(contentTypes)} onClick={() => setDrawer('content')} />
           <CommunityLocationField value={place} onChange={(v) => setPlace(v ?? { kind: 'global' })} />
           <FormRow label="Privacy" value={visibility === 'public' ? 'Public' : 'Private'} onClick={() => setDrawer('privacy')} />
         </FormGroup>
@@ -306,7 +311,7 @@ function CommunityForm({
       </div>
 
       {drawer === 'content' && (
-        <ChoiceDrawer title="Content" multi options={CONTENT_OPTIONS} value={contentTypes} onChange={setContentTypes} onClose={() => setDrawer(null)} note="Pick one or both." />
+        <ChoiceDrawer title="Content" multi options={CONTENT_OPTIONS} value={contentTypes} onChange={(v) => setContentTypes([...v].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)))} onClose={() => setDrawer(null)} note={CONTENT_OPTIONS.length > 2 ? 'Pick one or more.' : 'Pick one or both.'} />
       )}
       {drawer === 'privacy' && (
         <ChoiceDrawer title="Privacy" options={PRIVACY_OPTIONS} value={[visibility]} onChange={(v) => setVisibility(v[0])} onClose={() => setDrawer(null)} />
@@ -410,7 +415,7 @@ function ArtSheet({
     void Promise.all(
       titles.map(async (t) => {
         const [type, id] = t.ref.split(':')
-        const m = await (type === 'show' ? getShow(id) : getMovie(id)).catch(() => undefined)
+        const m = await (type === 'show' ? getShow(id) : type === 'movie' ? getMovie(id) : type === 'game' ? getGame(id) : Promise.resolve(undefined)).catch(() => undefined)
         return [t.ref, m?.backdrop] as const
       }),
     ).then((pairs) => alive && setBackdrops(Object.fromEntries(pairs.filter((p) => p[1]) as [string, string][])))

@@ -33,6 +33,13 @@
   --purple: #b98cff;
   --blue: #4f8bff; /* followed movie that hasn't been released yet */
 
+  /* kind accents (badges, legends, charts) — from the galaxy palette, kept
+     apart from the status colours above */
+  --kind-show: #9d87ff; /* nebula violet */
+  --kind-movie: #ffc04d; /* sun gold */
+  --kind-book: #3cd6c4; /* aurora teal */
+  --kind-game: #ff6b9a; /* nebula rose */
+
   /* surfaces over images keep white text in both themes */
   --on-image: #ffffff;
   --scrim: rgba(0, 0, 0, 0.55);
@@ -100,6 +107,10 @@
   --red: #e0384a;
   --blue: #2f6fe8;
   --purple: #7b4fe0;
+  --kind-show: #6a4fe0;
+  --kind-movie: #9a5b00;
+  --kind-book: #0b8d80;
+  --kind-game: #d4386a;
   --scrim: rgba(0, 0, 0, 0.45);
   --nav-bg: rgba(255, 255, 255, 0.88);
   --sheet-bg: #ffffff;

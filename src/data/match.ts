@@ -7,7 +7,7 @@ export interface MatchSession {
   code: string
   host_id: string
   guest_id: string | null
-  kind: 'movie' | 'show'
+  kind: 'movie' | 'show' | 'book' | 'game'
   genre_id: number | null
   genre_name: string | null
   seed: number
@@ -58,7 +58,7 @@ export function errorCode(message?: string): string {
 }
 
 export async function createSession(
-  kind: 'movie' | 'show',
+  kind: 'movie' | 'show' | 'book' | 'game',
   genre?: { id: number; name: string },
   extra?: { min?: number; max?: number; source?: 'anything' | 'watchlist' | 'not_started'; deck?: DeckItem[] },
 ): Promise<{ ok: true; id: string; code: string } | { ok: false; code: string }> {

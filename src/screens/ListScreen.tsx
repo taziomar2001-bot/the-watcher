@@ -1,3 +1,4 @@
+import { trackColor } from '../logic/tracks'
 import { whenDrawersSettled } from '../ui/gestures'
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -62,6 +63,7 @@ export function ListScreen() {
       let color: ReturnType<typeof movieColor> | undefined
       if (p.type === 'show' && lib.libraryShows[p.id]) color = showColor(classifyShow(lib.libraryShows[p.id], lib.watchedEpisodes), !!lib.stoppedShows[p.id])
       else if (p.type === 'movie' && lib.libraryMovies[p.id]) color = movieColor(!!lib.watchedMovies[p.id], isUnreleased(lib.libraryMovies[p.id].releaseDate))
+      else if (p.type === 'book' || p.type === 'game') color = trackColor((p.type === 'book' ? lib.books : lib.games)[p.id])
       return { ...r, color }
     })
     .filter(Boolean) as (ResolvedItem & { color?: ReturnType<typeof movieColor> })[]
@@ -417,7 +419,8 @@ export function ListScreen() {
             lib.addToList(list.id, ref, meta)
             if (media) {
               if (media.type === 'show') lib.patchLibraryShow(media.id, toLibraryItem(media))
-              else lib.patchLibraryMovie(media.id, toLibraryItem(media))
+              else if (media.type === 'movie') lib.patchLibraryMovie(media.id, toLibraryItem(media))
+              // Books/games: the list keeps its own snapshot (meta) of the title.
             }
           }}
           onClose={() => setAdding(false)}
@@ -429,4 +432,4 @@ export function ListScreen() {
 }
 
 export const kindNoun = (k: ListKind) =>
-  k === 'mixed' ? 'titles' : k === 'shows' ? 'shows' : k === 'movies' ? 'movies' : k === 'seasons' ? 'seasons' : 'episodes'
+  k === 'mixed' ? 'titles' : k === 'shows' ? 'shows' : k === 'movies' ? 'movies' : k === 'seasons' ? 'seasons' : k === 'books' ? 'books' : k === 'games' ? 'games' : 'episodes'

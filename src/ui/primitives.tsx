@@ -21,7 +21,7 @@ export function Segmented<T extends string>({
   value,
   onChange,
 }: {
-  options: { key: T; label: string }[]
+  options: { key: T; label: React.ReactNode; aria?: string }[]
   value: T
   onChange: (v: T) => void
 }) {
@@ -35,6 +35,8 @@ export function Segmented<T extends string>({
           role="tab"
           aria-selected={o.key === value}
           className={`segmented-opt ${o.key === value ? 'active' : ''}`}
+          aria-label={o.aria}
+          title={o.aria}
           onClick={() => onChange(o.key)}
         >
           {o.label}

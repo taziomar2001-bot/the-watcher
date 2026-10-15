@@ -66,6 +66,14 @@ const loaders = {
   PublicLibraryScreen: () => import('./screens/PublicLibraryScreen').then((m) => ({ default: m.PublicLibraryScreen })),
   MatchHomeScreen: () => import('./screens/MatchScreen').then((m) => ({ default: m.MatchHomeScreen })),
   MatchSessionScreen: () => import('./screens/MatchScreen').then((m) => ({ default: m.MatchSessionScreen })),
+  BooksScreen: () => import('./screens/TrackTabScreen').then((m) => ({ default: m.BooksScreen })),
+  GamesScreen: () => import('./screens/TrackTabScreen').then((m) => ({ default: m.GamesScreen })),
+  BookScreen: () => import('./screens/TrackScreen').then((m) => ({ default: m.BookScreen })),
+  GameScreen: () => import('./screens/TrackScreen').then((m) => ({ default: m.GameScreen })),
+  ProfileBooksDashboard: () => import('./screens/TrackProfileScreens').then((m) => ({ default: m.ProfileBooksDashboard })),
+  ProfileGamesDashboard: () => import('./screens/TrackProfileScreens').then((m) => ({ default: m.ProfileGamesDashboard })),
+  ProfileBooksLibrary: () => import('./screens/TrackProfileScreens').then((m) => ({ default: m.ProfileBooksLibrary })),
+  ProfileGamesLibrary: () => import('./screens/TrackProfileScreens').then((m) => ({ default: m.ProfileGamesLibrary })),
 }
 const TVCategoryScreen = lazy(loaders.TVCategoryScreen)
 const CommunityListScreen = lazy(loaders.CommunityListScreen)
@@ -90,6 +98,14 @@ const ConnectionsScreen = lazy(loaders.ConnectionsScreen)
 const PublicLibraryScreen = lazy(loaders.PublicLibraryScreen)
 const MatchHomeScreen = lazy(loaders.MatchHomeScreen)
 const MatchSessionScreen = lazy(loaders.MatchSessionScreen)
+const BooksScreen = lazy(loaders.BooksScreen)
+const GamesScreen = lazy(loaders.GamesScreen)
+const BookScreen = lazy(loaders.BookScreen)
+const GameScreen = lazy(loaders.GameScreen)
+const ProfileBooksDashboard = lazy(loaders.ProfileBooksDashboard)
+const ProfileGamesDashboard = lazy(loaders.ProfileGamesDashboard)
+const ProfileBooksLibrary = lazy(loaders.ProfileBooksLibrary)
+const ProfileGamesLibrary = lazy(loaders.ProfileGamesLibrary)
 function prefetchScreens() {
   const run = () => Object.values(loaders).forEach((load) => void load().catch(() => {}))
   const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
@@ -228,6 +244,14 @@ export default function App() {
         <Route path="/show/:id/season/:season/episode/:number" element={<EpisodeScreen />} />
         <Route path="/movies" element={<MoviesScreen />} />
         <Route path="/movie/:id" element={<MovieScreen />} />
+        <Route path="/books" element={<BooksScreen />} />
+        <Route path="/book/:id" element={<BookScreen />} />
+        <Route path="/games" element={<GamesScreen />} />
+        <Route path="/game/:id" element={<GameScreen />} />
+        <Route path="/profile/books" element={<ProfileBooksDashboard />} />
+        <Route path="/profile/games" element={<ProfileGamesDashboard />} />
+        <Route path="/library/books" element={<ProfileBooksLibrary />} />
+        <Route path="/library/games" element={<ProfileGamesLibrary />} />
         <Route path="/upcoming" element={<UpComingScreen />} />
         <Route path="/discover" element={<DiscoverScreen />} />
         <Route path="/discover/random" element={<RandomScreen />} />

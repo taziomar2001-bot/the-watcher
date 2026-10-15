@@ -2954,3 +2954,76 @@ textarea.sync-input { font-family: inherit; }
 .profile-avatar img, .user-avatar img, .lb-avatar img, .account-avatar img, .settings-avatar img {
   width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;
 }
+
+/* ================= Books & video games ================= */
+/* Kind accents: one colour per kind everywhere it's labelled. */
+.up-kind.tv, .type-badge.show, .kind-badge.k-show { background: color-mix(in srgb, var(--kind-show) 20%, transparent); color: var(--kind-show); }
+.up-kind.movie, .type-badge.movie, .kind-badge.k-movie { background: color-mix(in srgb, var(--kind-movie) 20%, transparent); color: var(--kind-movie); }
+.up-kind.book, .type-badge.book, .kind-badge.k-book { background: color-mix(in srgb, var(--kind-book) 20%, transparent); color: var(--kind-book); }
+.up-kind.game, .type-badge.game, .kind-badge.k-game { background: color-mix(in srgb, var(--kind-game) 20%, transparent); color: var(--kind-game); }
+.up-kind.book, .up-kind.game { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; letter-spacing: .04em; }
+.kind-badge { font-size: 10px; font-weight: 800; letter-spacing: .05em; padding: 2px 7px; border-radius: 5px; }
+.pf-split .tv, .pf-legend i.tv { background: var(--kind-show); }
+.pf-split .mv, .pf-legend i.mv { background: var(--kind-movie); }
+.dash-icon.book { background: color-mix(in srgb, var(--kind-book) 20%, transparent); color: var(--kind-book); }
+.dash-icon.game { background: color-mix(in srgb, var(--kind-game) 20%, transparent); color: var(--kind-game); }
+
+/* Icon toggles (Discover, Pick for me, Favorites) */
+.seg-icon { display: inline-flex; align-items: center; justify-content: center; height: 100%; }
+.segmented-opt .seg-icon svg { display: block; }
+
+/* Book/game page */
+.dh.blur-bg .dh-backdrop .smart-img img { filter: blur(22px) saturate(1.25) brightness(.7); transform: scale(1.25); }
+.action-btn.on.tone-orange .action-btn-icon { background: var(--yellow); color: #241100; border-color: var(--yellow); }
+.data-credit { font-size: 11.5px; color: var(--text-mute); padding: 14px 2px 0; }
+.status-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 6px; border-bottom: 1px solid var(--border-soft); color: var(--text); }
+.status-row:last-child { border-bottom: 0; }
+.status-row:disabled { opacity: .4; }
+.status-row-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 0%, transparent); }
+.status-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.status-row-label { font-size: 15.5px; font-weight: 700; }
+.status-row-hint { font-size: 12.5px; color: var(--text-mute); margin-top: 1px; }
+.status-row.on .status-row-label { color: var(--text); }
+
+/* ================= Profile: everything on one screen ================= */
+.profile-tab .profile-head2 { padding-bottom: 8px; }
+.profile-bio2 { margin: 0; padding: 0 var(--s-4) 12px; font-size: 13.5px; line-height: 1.4; color: var(--text-dim);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.profile-bio.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.profile-tab .pf { gap: 9px; }
+.profile-tab .pf-hero { padding: 14px 14px 12px; }
+.pf-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.profile-tab .pf-big { font-size: 31px; }
+.pf-left2 { display: flex; align-items: center; gap: 9px; text-align: right; padding: 2px 0 0; color: var(--text); flex: 0 1 auto; min-width: 0; }
+.pf-left2-text { display: flex; flex-direction: column; font-size: 12.5px; color: var(--text-dim); line-height: 1.3; min-width: 0; }
+.pf-left2-text b { color: var(--text); font-weight: 800; font-size: 14px; }
+.pf-left2-text span { font-size: 11.5px; color: var(--text-mute); white-space: nowrap; }
+.pf-left2 .pf-ring { width: 44px; height: 44px; }
+.pf-left2 .pf-ring span { width: 36px; height: 36px; font-size: 11px; background: color-mix(in srgb, var(--surface) 92%, transparent); }
+.profile-tab .pf-split { margin-top: 10px; }
+.pf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.profile-tab .pf-card { padding: 11px 12px 10px; border-radius: 16px; }
+.profile-tab .pf-card-head { font-size: 13.5px; gap: 6px; }
+.pf-card.k-show .pf-card-head svg:first-child { color: var(--kind-show); }
+.pf-card.k-movie .pf-card-head svg:first-child { color: var(--kind-movie); }
+.pf-card.k-book .pf-card-head svg:first-child { color: var(--kind-book); }
+.pf-card.k-game .pf-card-head svg:first-child { color: var(--kind-game); }
+.pf-num-row { display: flex; align-items: baseline; gap: 6px; margin-top: 8px; }
+.pf-num-row .pf-num { margin-top: 0; font-size: 25px; }
+.pf-num-row .pf-cap { margin-top: 0; }
+.profile-tab .pf-facts { margin-top: 8px; padding-top: 7px; gap: 2px; font-size: 12px; }
+.pf-mini { display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border-soft); color: var(--text); min-width: 0; }
+.pf-mini-title { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; font-weight: 800; }
+.pf-mini-title svg { color: var(--text-mute); }
+.pf-mini-sub { font-size: 12px; color: var(--text-mute); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* Settings: bio counter */
+.settings-field-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.char-count { font-size: 11.5px; color: var(--text-mute); font-variant-numeric: tabular-nums; font-weight: 600; }
+.char-count.over { color: var(--red); }
+/* Chip bars with more options than fit: scroll sideways instead of squeezing. */
+.cat-nav.scroll-x { overflow-x: auto; scrollbar-width: none; }
+.cat-nav.scroll-x::-webkit-scrollbar { display: none; }
+.cat-nav.scroll-x .cat-chip { flex: 0 0 auto; padding: 8px 12px; overflow: visible; }
+.cat-chip .chip-n { opacity: .6; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.cat-nav.scroll-x { margin-bottom: 10px; }

@@ -29,7 +29,8 @@ alter table public.communities
 
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'communities_content_types_check') then
+  -- 012 widens this rule (books, games); never put the narrow one back.
+  if not exists (select 1 from pg_constraint where conname in ('communities_content_types_check', 'communities_content_types_v2')) then
     alter table public.communities add constraint communities_content_types_check check (
       content_types = array['show']::text[]
       or content_types = array['movie']::text[]

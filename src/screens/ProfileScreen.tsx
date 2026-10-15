@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, ChevronLeft, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, PlusIcon, ListIcon } from '../components/Icons'
+import { ChevronRight, ChevronLeft, SettingsIcon, HeartIcon, PlusIcon } from '../components/Icons'
+import { BOOKS_ON, GAMES_ON } from '../logic/content'
+import { trackTotals, useTrackEntries } from '../logic/tracks'
+import { KindIcon } from '../ui/kinds'
+import type { ContentKind } from '../types'
 import { NewListSheet } from '../ui/NewListSheet'
 import { kindLabel, listCover, listSummary } from '../logic/lists'
 import { useLibrary } from '../store/useLibrary'
@@ -37,8 +41,6 @@ export function ProfileScreen() {
   const name = lib.profile.displayName || lib.profile.username || 'you'
 
   const showsFollowed = Object.keys(lib.watchlistShows).length
-  // Watched = at least one episode watched; Finished = fully completed.
-  const showsWatched = shows.filter((e) => effectiveSeen(e.item, lib.watchedEpisodes) >= 1).length
   const showsFinished = shows.filter((e) => e.cls === 'finished').length
   const episodesWatched = shows.reduce((n, e) => n + effectiveSeen(e.item, lib.watchedEpisodes), 0)
   const tvMin = episodesWatched * EP_MIN
@@ -61,10 +63,11 @@ export function ProfileScreen() {
   const tvShare = totalWatched > 0 ? tvMin / totalWatched : 0.5
   // How far through everything you follow you are, by time.
   const through = totalWatched + remainingTotal > 0 ? totalWatched / (totalWatched + remainingTotal) : 0
-  const covers = lib.lists.map((l) => listCover(l, lib)).filter(Boolean).slice(0, 3) as string[]
+  const bookT = trackTotals(useTrackEntries('book'))
+  const gameT = trackTotals(useTrackEntries('game'))
 
   return (
-    <div className="scroll-area route-fade">
+    <div className="scroll-area route-fade profile-tab">
       {/* Identity */}
       <div className="profile-head2">
         <div className="profile-avatar">
@@ -93,12 +96,28 @@ export function ProfileScreen() {
           <SettingsIcon size={20} />
         </button>
       </div>
+      {social?.bio && <p className="profile-bio2">{social.bio}</p>}
 
       <div className="page-pad pf">
-        {/* Time watched: one number, split TV / movies */}
+        {/* Time watched, with what's left and how far through it you are */}
         <div className="pf-hero">
-          <div className="pf-label">Time watched</div>
-          <div className="pf-big">{hm(totalWatched)}</div>
+          <div className="pf-hero-top">
+            <div>
+              <div className="pf-label">Time watched</div>
+              <div className="pf-big">{hm(totalWatched)}</div>
+            </div>
+            <button className="pf-left2 pressable" onClick={() => nav('/upcoming')} aria-label={`${hm(remainingTotal)} left in your watchlist, ${Math.round(through * 100)}% through`}>
+              <span className="pf-left2-text">
+                <b>{hm(remainingTotal)}</b> left
+                <span>
+                  {remainingEps.toLocaleString()} ep · {moviesToWatch.toLocaleString()} movie{moviesToWatch === 1 ? '' : 's'}
+                </span>
+              </span>
+              <span className="pf-ring" style={{ ['--p' as string]: `${Math.round(through * 100)}` }}>
+                <span>{Math.round(through * 100)}%</span>
+              </span>
+            </button>
+          </div>
           <div className="pf-split" aria-hidden="true">
             <span className="tv" style={{ flexGrow: Math.max(tvShare, 0.02) }} />
             <span className="mv" style={{ flexGrow: Math.max(1 - tvShare, 0.02) }} />
@@ -109,77 +128,60 @@ export function ProfileScreen() {
           </div>
         </div>
 
-        {/* TV and Movies side by side */}
-        <div className="pf-pair">
-          <button className="pf-card pressable" onClick={() => nav('/profile/tv')}>
-            <span className="pf-card-head">
-              <TvIcon size={18} /> TV Shows <ChevronRight size={16} className="pf-chev" />
-            </span>
-            <span className="pf-num">{showsFollowed.toLocaleString()}</span>
-            <span className="pf-cap">followed</span>
-            <span className="pf-facts">
-              <span><b>{tvInProgress.toLocaleString()}</b> in progress</span>
-              <span><b>{showsFinished.toLocaleString()}</b> finished</span>
-              <span><b>{episodesWatched.toLocaleString()}</b> episodes</span>
-            </span>
-          </button>
-          <button className="pf-card pressable" onClick={() => nav('/profile/movies')}>
-            <span className="pf-card-head">
-              <ClapperboardIcon size={18} /> Movies <ChevronRight size={16} className="pf-chev" />
-            </span>
-            <span className="pf-num">{moviesWatched.toLocaleString()}</span>
-            <span className="pf-cap">watched</span>
-            <span className="pf-facts">
-              <span><b>{moviesToWatch.toLocaleString()}</b> to watch</span>
-              <span><b>{moviesFollowed.toLocaleString()}</b> followed</span>
-              <span><b>{showsWatched.toLocaleString()}</b> shows started</span>
-            </span>
-          </button>
+        {/* One card per kind */}
+        <div className="pf-grid">
+          <KindCard kind="show" title="TV Shows" to="/profile/tv" num={showsFollowed} cap="followed"
+            facts={[[tvInProgress, 'in progress'], [showsFinished, 'finished']]} />
+          <KindCard kind="movie" title="Movies" to="/profile/movies" num={moviesWatched} cap="watched"
+            facts={[[moviesToWatch, 'to watch'], [moviesFollowed, 'followed']]} />
+          {BOOKS_ON && (
+            <KindCard kind="book" title="Books" to="/profile/books" num={bookT.done} cap="finished"
+              facts={[[bookT.active, 'reading'], [bookT.backlog, 'want to read']]} />
+          )}
+          {GAMES_ON && (
+            <KindCard kind="game" title="Video Games" to="/profile/games" num={gameT.done} cap="finished"
+              facts={[[gameT.active, 'playing'], [gameT.backlog, 'in backlog']]} />
+          )}
         </div>
-
-        {/* What's left of what you follow */}
-        <button className="pf-left pressable" onClick={() => nav('/upcoming')} aria-label="What's left in your watchlist">
-          <span className="pf-ring" style={{ ['--p' as string]: `${Math.round(through * 100)}` }}>
-            <span>{Math.round(through * 100)}%</span>
-          </span>
-          <span className="pf-left-text">
-            <span className="pf-left-title">{hm(remainingTotal)} left in your watchlist</span>
-            <span className="pf-left-sub">
-              {remainingEps.toLocaleString()} episode{remainingEps === 1 ? '' : 's'} · {moviesToWatch.toLocaleString()} movie{moviesToWatch === 1 ? '' : 's'} to go
-            </span>
-          </span>
-        </button>
 
         {/* Stats and Lists */}
         <div className="pf-pair">
-          <button className="pf-card short pressable" onClick={() => nav('/profile/stats')}>
-            <span className="pf-tile-icon stats" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M5 20V11M12 20V4M19 20v-6" /></svg>
-            </span>
-            <span className="pf-tile-title">Stats</span>
-            <span className="pf-tile-sub">Genres, decades, ratings</span>
+          <button className="pf-mini pressable" onClick={() => nav('/profile/stats')}>
+            <span className="pf-mini-title">Stats <ChevronRight size={15} /></span>
+            <span className="pf-mini-sub">Genres, decades, ratings</span>
           </button>
-          <button className="pf-card short pressable" onClick={() => nav('/profile/lists')}>
-            {covers.length > 0 ? (
-              <span className="pf-covers" aria-hidden="true">
-                {covers.map((c, i) => (
-                  <img key={i} src={c} alt="" style={{ zIndex: 3 - i }} />
-                ))}
-              </span>
-            ) : (
-              <span className="pf-tile-icon lists" aria-hidden="true">
-                <ListIcon size={20} />
-              </span>
-            )}
-            <span className="pf-tile-title">Lists</span>
-            <span className="pf-tile-sub">
+          <button className="pf-mini pressable" onClick={() => nav('/profile/lists')}>
+            <span className="pf-mini-title">Lists <ChevronRight size={15} /></span>
+            <span className="pf-mini-sub">
               {lib.lists.length} list{lib.lists.length === 1 ? '' : 's'} · Favorites
             </span>
           </button>
         </div>
       </div>
-      <div style={{ height: 20 }} />
+      <div style={{ height: 12 }} />
     </div>
+  )
+}
+
+function KindCard({ kind, title, to, num, cap, facts }: { kind: ContentKind; title: string; to: string; num: number; cap: string; facts: [number, string][] }) {
+  const nav = useNavigate()
+  return (
+    <button className={`pf-card k-${kind} pressable`} onClick={() => nav(to)}>
+      <span className="pf-card-head">
+        <KindIcon kind={kind} size={17} /> {title} <ChevronRight size={15} className="pf-chev" />
+      </span>
+      <span className="pf-num-row">
+        <span className="pf-num">{num.toLocaleString()}</span>
+        <span className="pf-cap">{cap}</span>
+      </span>
+      <span className="pf-facts">
+        {facts.map(([n, label]) => (
+          <span key={label}>
+            <b>{n.toLocaleString()}</b> {label}
+          </span>
+        ))}
+      </span>
+    </button>
   )
 }
 
@@ -212,7 +214,14 @@ export function ProfileListsScreen() {
           </span>
           <span className="list-row-text">
             <span className="list-row-name">Favorites</span>
-            <span className="list-row-sub">{compositionLabel(Object.keys(lib.favoriteMovies).length, Object.keys(lib.favoriteShows).length)}</span>
+            <span className="list-row-sub">
+              {compositionLabel(
+                Object.keys(lib.favoriteMovies).length,
+                Object.keys(lib.favoriteShows).length,
+                Object.values(lib.books).filter((t) => t.favorite).length,
+                Object.values(lib.games).filter((t) => t.favorite).length,
+              )}
+            </span>
           </span>
           <ChevronRight size={20} />
         </button>
@@ -233,7 +242,7 @@ export function ProfileListsScreen() {
         ))}
         {lists.length === 0 && (
           <div className="empty compact">
-            <div className="empty-sub">Make a list of shows, seasons, episodes or movies — ranked or not.</div>
+            <div className="empty-sub">Make a list of shows, seasons, episodes, movies, books or games — ranked or not.</div>
             <button className="sync-btn primary pressable" style={{ marginTop: 12 }} onClick={() => setCreating(true)}>
               <PlusIcon size={15} /> New list
             </button>

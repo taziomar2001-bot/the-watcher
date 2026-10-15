@@ -6,10 +6,13 @@ import { useToast } from '../store/useToast'
 import { kindAccepts, kindLabel, parseItemRef } from '../logic/lists'
 import { ListIcon, CheckIcon, HeartIcon, PlusIcon } from '../components/Icons'
 import { NewListSheet } from './NewListSheet'
+import { FAV_LIMIT } from '../logic/stats'
 
 const KINDS_FOR: Record<string, ListKind[]> = {
   show: ['mixed', 'shows'],
   movie: ['mixed', 'movies'],
+  book: ['mixed', 'books'],
+  game: ['mixed', 'games'],
   season: ['seasons'],
   episode: ['episodes'],
 }
@@ -22,13 +25,25 @@ export function AddToListSheet({ itemRef, meta, onClose }: { itemRef: string; me
   const removeFromList = useLibrary((s) => s.removeFromList)
   const favShows = useLibrary((s) => s.favoriteShows)
   const favMovies = useLibrary((s) => s.favoriteMovies)
+  const books = useLibrary((s) => s.books)
+  const games = useLibrary((s) => s.games)
+  const trackFavorite = useLibrary((s) => s.trackFavorite)
   const toggleFavorite = useToggleFavorite()
   const toast = useToast((s) => s.show)
   const [creating, setCreating] = useState(false)
 
   const { type, id } = parseItemRef(itemRef)
-  const canFav = type === 'show' || type === 'movie'
-  const isFav = type === 'show' ? !!favShows[id] : type === 'movie' ? !!favMovies[id] : false
+  const canFav = type === 'show' || type === 'movie' || type === 'book' || type === 'game'
+  const trackMap = type === 'book' ? books : type === 'game' ? games : undefined
+  const isFav = type === 'show' ? !!favShows[id] : type === 'movie' ? !!favMovies[id] : !!trackMap?.[id]?.favorite
+  const toggleFav = () => {
+    if (type === 'show' || type === 'movie') return void toggleFavorite(type, id)
+    if (!trackMap) return
+    if (!isFav && Object.values(trackMap).filter((t) => t.favorite).length >= FAV_LIMIT)
+      return toast(`You can have up to ${FAV_LIMIT} favorite ${type === 'book' ? 'books' : 'games'} — remove one first.`, { duration: 4200 })
+    const item = trackMap[id]?.item ?? { id, type: type as 'book' | 'game', title: meta?.t ?? 'Untitled', poster: meta?.p, year: meta?.y }
+    trackFavorite(type as 'book' | 'game', id, item, !isFav)
+  }
   const fitting = lists.filter((l) => kindAccepts(l.kind, itemRef))
 
   if (creating)
@@ -50,7 +65,7 @@ export function AddToListSheet({ itemRef, meta, onClose }: { itemRef: string; me
         <div className="sheet-handle" />
         <div className="sheet-title">Add to a list</div>
         {canFav && (
-          <button className="list-pick-row" onClick={() => toggleFavorite(type as 'show' | 'movie', id)}>
+          <button className="list-pick-row" onClick={toggleFav}>
             <span className="list-pick-name">
               <span className="fav-badge sm">
                 <HeartIcon size={12} fill="#fff" strokeWidth={0} />
@@ -93,7 +108,8 @@ export function useListMembership(itemRef: string): number {
   const favShows = useLibrary((s) => s.favoriteShows)
   const favMovies = useLibrary((s) => s.favoriteMovies)
   const { type, id } = parseItemRef(itemRef)
-  const fav = type === 'show' ? !!favShows[id] : type === 'movie' ? !!favMovies[id] : false
+  const trackFav = useLibrary((s) => (type === 'book' ? !!s.books[id]?.favorite : type === 'game' ? !!s.games[id]?.favorite : false))
+  const fav = type === 'show' ? !!favShows[id] : type === 'movie' ? !!favMovies[id] : trackFav
   return lists.filter((l) => l.items.includes(itemRef)).length + (fav ? 1 : 0)
 }
 

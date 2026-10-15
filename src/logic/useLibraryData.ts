@@ -13,6 +13,17 @@ export interface MovieEntry {
   lastWatched?: number
 }
 
+/**
+ * A cached summary can be partial (e.g. only release counts were patched in
+ * before the title itself was saved): fill the gaps from the catalogue and
+ * always carry the id; skip it if there's still no title to show.
+ */
+function complete(id: string, saved?: LibraryItem, cat?: LibraryItem): LibraryItem | undefined {
+  if (saved?.title && saved.id) return saved
+  const merged = { ...cat, ...saved, id } as LibraryItem
+  return merged.title ? merged : undefined
+}
+
 function useShowCatalog() {
   const { data } = useAsync(() => allShows(), [])
   return useMemo(() => {
@@ -53,7 +64,7 @@ export function useShowEntries(): TvEntry[] {
     ])
     const out: TvEntry[] = []
     for (const id of ids) {
-      const item = lib.libraryShows[id] ?? catById[id]
+      const item = complete(id, lib.libraryShows[id], catById[id])
       if (!item) continue
       out.push({
         item,
@@ -90,7 +101,7 @@ export function useMovieEntries(): MovieEntry[] {
     ])
     const out: MovieEntry[] = []
     for (const id of ids) {
-      const item = lib.libraryMovies[id] ?? catById[id]
+      const item = complete(id, lib.libraryMovies[id], catById[id])
       if (!item) continue
       out.push({
         item,

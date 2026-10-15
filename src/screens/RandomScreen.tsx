@@ -8,7 +8,9 @@ import { discoverPage, genreList } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
 import { useTitleMeta, enrichTitles } from '../store/useTitleMeta'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
-import { describe, fromMedia, lengthOf, libraryCandidates, type Candidate, type Genre, type PickFilters } from '../logic/pickFilters'
+import { describe, fromAny, lengthOf, libraryCandidates, type Candidate, type Genre, type PickFilters } from '../logic/pickFilters'
+import { toTrackItem } from '../logic/tracks'
+import type { Media, TrackMedia } from '../types'
 import { largePoster, toLibraryItem } from '../utils/media'
 import { formatDuration } from '../utils/duration'
 import { useToast } from '../store/useToast'
@@ -55,14 +57,16 @@ export function RandomScreen() {
   // missing facts in the background (cached on this device).
   const fromLibrary = f.source !== 'anything'
   const lib_ = useMemo(
-    () => (fromLibrary ? libraryCandidates(f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta) : null),
-    [fromLibrary, f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta],
+    () => (fromLibrary ? libraryCandidates(f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta, { book: lib.books, game: lib.games }) : null),
+    [fromLibrary, f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta, lib.books, lib.games],
   )
   useEffect(() => {
     if (lib_?.unknown.length) void enrichTitles(lib_.unknown)
   }, [lib_?.unknown.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const seen = (c: Candidate) => (c.type === 'movie' ? !!lib.watchedMovies[c.id] : !!lib.lastWatched[c.id])
+  // "Anything" leaves out what you've already watched / read / played (or started).
+  const seen = (c: Candidate) =>
+    c.type === 'movie' ? !!lib.watchedMovies[c.id] : c.type === 'show' ? !!lib.lastWatched[c.id] : !!(c.type === 'book' ? lib.books : lib.games)[c.id]?.state
 
   const candidates = async (): Promise<Candidate[]> => {
     if (lib_) return lib_.items
@@ -73,7 +77,7 @@ export function RandomScreen() {
     for (let attempt = 0; attempt < 4; attempt++) {
       const page = attempt === 3 ? 1 : 1 + Math.floor(Math.random() * pages)
       const res = page === 1 ? first : await discoverPage(f.kind, page, f.genre ?? undefined, range)
-      const fresh = res.items.map((m) => ({ ...fromMedia(m), media: m })).filter((c) => !seen(c))
+      const fresh = res.items.map((m) => ({ ...fromAny(m), media: m })).filter((c) => !seen(c))
       if (fresh.length) return fresh
     }
     return []
@@ -111,15 +115,31 @@ export function RandomScreen() {
     }, 90)
   }
 
-  const following = pick ? (pick.type === 'movie' ? !!lib.watchlistMovies[pick.id] : !!lib.watchlistShows[pick.id]) : false
+  const isTrack = pick?.type === 'book' || pick?.type === 'game'
+  const following = pick
+    ? pick.type === 'movie'
+      ? !!lib.watchlistMovies[pick.id]
+      : pick.type === 'show'
+        ? !!lib.watchlistShows[pick.id]
+        : !!(pick.type === 'book' ? lib.books : lib.games)[pick.id]?.followed
+    : false
   const follow = () => {
     if (!pick) return
-    const item = pick.media ? toLibraryItem(pick.media) : undefined
-    if (pick.type === 'movie') lib.toggleWatchlistMovie(pick.id, item)
-    else lib.toggleWatchlistShow(pick.id, item)
+    if (pick.type === 'book' || pick.type === 'game') {
+      const item = pick.media
+        ? toTrackItem(pick.media as TrackMedia)
+        : { id: pick.id, type: pick.type, title: pick.title, poster: pick.poster, year: pick.year, genres: pick.genres }
+      lib.trackFollow(pick.type, pick.id, item, !following)
+    } else {
+      const item = pick.media ? toLibraryItem(pick.media as Media) : undefined
+      if (pick.type === 'movie') lib.toggleWatchlistMovie(pick.id, item)
+      else lib.toggleWatchlistShow(pick.id, item)
+    }
     if (!following) toast(`Following ${pick.title}`)
   }
-  const runtime = pick ? pick.runtime ?? meta[`${pick.type}:${pick.id}`]?.r : undefined
+  const runtime = pick ? pick.runtime ?? (isTrack ? undefined : meta[`${pick.type}:${pick.id}`]?.r) : undefined
+  const sizeText = (n?: number) =>
+    !n || !pick ? null : pick.type === 'show' ? `${n} min episodes` : pick.type === 'movie' ? formatDuration(n) : pick.type === 'book' ? `${n} pages` : `~${n} h to beat`
 
   return (
     <div className="scroll-area route-fade">
@@ -158,11 +178,11 @@ export function RandomScreen() {
             <div className="rp-info">
               <div className="rp-title">{pick.title}</div>
               <div className="rp-meta">
-                {[pick.year, pick.genres.slice(0, 2).join(', '), runtime ? (pick.type === 'show' ? `${runtime} min episodes` : formatDuration(runtime)) : null]
+                {[pick.year, pick.genres.slice(0, 2).join(', '), sizeText(runtime)]
                   .filter(Boolean)
                   .join(' · ')}
               </div>
-              <PublicScore value={pick.score} votes={pick.votes} />
+              <PublicScore value={pick.score} votes={pick.votes} source={pick.type === 'book' ? 'Google Books' : pick.type === 'game' ? 'IGDB' : 'TMDB'} />
               {pick.overview && <p className="rp-overview">{pick.overview}</p>}
               <div className="rp-actions">
                 <button className="follow-btn primary pressable" onClick={() => nav(`/${pick.type}/${pick.id}`)}>
@@ -177,7 +197,7 @@ export function RandomScreen() {
         ) : empty ? (
           <div className="empty">
             <div className="empty-title">Nothing to pick from</div>
-            <div className="empty-sub">No {describe(f)} {fromLibrary ? 'left to watch' : 'found'}. Try loosening a filter.</div>
+            <div className="empty-sub">No {describe(f)} {fromLibrary ? (f.kind === 'book' ? 'left to read' : f.kind === 'game' ? 'left to play' : 'left to watch') : 'found'}. Try loosening a filter.</div>
           </div>
         ) : (
           <div className="pick-placeholder">

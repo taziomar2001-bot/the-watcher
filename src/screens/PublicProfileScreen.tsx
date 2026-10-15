@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, HeartIcon, ClapperboardIcon, TvIcon } from '../components/Icons'
+import { ChevronLeft, ChevronRight, HeartIcon, MovieCameraIcon, TvIcon } from '../components/Icons'
+import { KINDS_ON } from '../logic/content'
+import { KindIcon } from '../ui/kinds'
 import {
   getProfileById,
   getProfileStats,
@@ -102,7 +104,9 @@ export function PublicProfileScreen() {
   const total = stats ? hm(stats.minutes_watched) : null
   const favs = showcase?.favorites ?? []
   const favShows = favs.filter((f) => f.type === 'show').length
-  const favMovies = favs.length - favShows
+  const favMovies = favs.filter((f) => f.type === 'movie').length
+  const favBooks = favs.filter((f) => f.type === 'book').length
+  const favGames = favs.filter((f) => f.type === 'game').length
 
   return (
     <div className="scroll-area route-fade">
@@ -128,7 +132,7 @@ export function PublicProfileScreen() {
         </div>
       </div>
 
-      {profile.bio && <div className="profile-bio">{profile.bio}</div>}
+      {profile.bio && <div className="profile-bio clamp2">{profile.bio}</div>}
 
       <div className="page-pad" style={{ paddingBottom: 12 }}>
         {rel && <FollowButton target={profile} initial={rel.outgoing} onChange={() => setReload((n) => n + 1)} />}
@@ -185,7 +189,7 @@ export function PublicProfileScreen() {
               <div className="dash-card">
                 <div className="dash-card-head">
                   <span className="dash-icon movie">
-                    <ClapperboardIcon size={18} />
+                    <MovieCameraIcon size={18} />
                   </span>
                   Movies
                 </div>
@@ -208,6 +212,32 @@ export function PublicProfileScreen() {
                   )}
                 </div>
               </div>
+
+              {([
+                ['book', 'Books', stats.books_followed, stats.books_finished],
+                ['game', 'Video Games', stats.games_followed, stats.games_finished],
+              ] as const)
+                .filter(([k, , followed]) => KINDS_ON.includes(k) && !!followed)
+                .map(([k, label, followed, finished]) => (
+                  <div className="dash-card" key={k}>
+                    <div className="dash-card-head">
+                      <span className={`dash-icon ${k}`}>
+                        <KindIcon kind={k} size={18} />
+                      </span>
+                      {label}
+                    </div>
+                    <div className="dash-metrics">
+                      <div className="dash-metric">
+                        <b>{(followed ?? 0).toLocaleString()}</b>
+                        <span>in library</span>
+                      </div>
+                      <div className="dash-metric">
+                        <b>{(finished ?? 0).toLocaleString()}</b>
+                        <span>finished</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
             </>
           )}
 
@@ -222,7 +252,7 @@ export function PublicProfileScreen() {
               </span>
               <span className="list-row-text">
                 <span className="list-row-name">Favorites</span>
-                <span className="list-row-sub">{compositionLabel(favMovies, favShows)}</span>
+                <span className="list-row-sub">{compositionLabel(favMovies, favShows, favBooks, favGames)}</span>
               </span>
               <ChevronRight size={20} />
             </button>

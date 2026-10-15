@@ -50,6 +50,26 @@ export default defineConfig({
             },
           },
           {
+            // Book covers (Google Books) and game art (IGDB).
+            urlPattern: /^https:\/\/(books\.google\.com\/books\/(content|publisher)|images\.igdb\.com\/)/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'cover-images',
+              expiration: { maxEntries: 1500, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Google Books API and the IGDB proxy: instant answers, refreshed in the background.
+            urlPattern: /^https:\/\/(www\.googleapis\.com\/books\/|[^/]+\/functions\/v1\/igdb)/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'books-games-api',
+              expiration: { maxEntries: 600, maxAgeSeconds: 60 * 60 * 12, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
             urlPattern: /^https:\/\/api\.themoviedb\.org\/.*/i,
             // Show the last answer instantly and refresh it in the background.
             // Answers older than 12h are never shown (the expiration check

@@ -1,3 +1,6 @@
+import { KINDS_ON } from '../logic/content'
+import { KIND, KindIcon } from '../ui/kinds'
+import type { ContentKind } from '../types'
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { SnapshotList, type SnapRow } from '../ui/SnapshotList'
@@ -19,7 +22,7 @@ export function PublicLibraryScreen({ kind }: { kind: Kind }) {
   const nav = useNavigate()
   const { id = '', listId = '' } = useParams()
   const scrollRef = useScrollMemory<HTMLDivElement>(`pub-${id}-${kind}-${listId}`)
-  const [favTab, setFavTab] = useState<'show' | 'movie'>('show')
+  const [favTab, setFavTab] = useState<ContentKind>('show')
   const [data, setData] = useState<{ profile: SocialProfile | null; showcase: Showcase | null } | undefined>()
 
   useEffect(() => {
@@ -60,10 +63,9 @@ export function PublicLibraryScreen({ kind }: { kind: Kind }) {
       <>
         <div className="page-pad" style={{ paddingBottom: 10 }}>
           <Segmented
-            options={[
-              { key: 'show', label: 'TV Shows' },
-              { key: 'movie', label: 'Movies' },
-            ]}
+            options={KINDS_ON.map((k) =>
+              KINDS_ON.length > 2 ? { key: k, label: <span className="seg-icon"><KindIcon kind={k} size={21} /></span>, aria: KIND[k].label } : { key: k, label: KIND[k].label },
+            )}
             value={favTab}
             onChange={setFavTab}
           />

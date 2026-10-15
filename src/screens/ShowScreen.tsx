@@ -248,7 +248,7 @@ export function ShowScreen() {
                   }}
                 >
                   <span>
-                    <PauseIcon size={16} /> Stop watching{!started ? ' (start watching first)' : ''}
+                    <PauseIcon size={16} /> Stopped watching{!started ? ' (start watching first)' : ''}
                   </span>
                 </button>
               )}

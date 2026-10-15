@@ -24,6 +24,9 @@ function timeAgo(ms?: number): string {
   return `${Math.floor(s / 86400)}d ago`
 }
 
+/** Fits on two lines on the Profile tab, even on small phones. */
+export const BIO_MAX = 80
+
 export function SettingsScreen() {
   const nav = useNavigate()
   const themePref = useTheme((t) => t.pref)
@@ -232,8 +235,14 @@ export function SettingsScreen() {
                   </div>
                 </label>
                 <label className="settings-field">
-                  <span>Bio</span>
-                  <input className="sync-input" value={bioEdit} placeholder="A short line about you" maxLength={160} onChange={(e) => setBioEdit(e.target.value)} onBlur={saveBio} />
+                  <span className="settings-field-row">
+                    Bio
+                    <span className={`char-count ${bioEdit.length > BIO_MAX ? 'over' : ''}`}>
+                      {bioEdit.length}/{BIO_MAX}
+                    </span>
+                  </span>
+                  <input className="sync-input" value={bioEdit} placeholder="A short line about you" maxLength={Math.max(BIO_MAX, bioEdit.length)} onChange={(e) => setBioEdit(e.target.value.length > BIO_MAX && e.target.value.length > bioEdit.length ? bioEdit : e.target.value)} onBlur={saveBio} />
+                  {bioEdit.length > BIO_MAX && <span className="vis-hint">Shorten it to {BIO_MAX} characters so it fits on two lines.</span>}
                 </label>
                 <div className="settings-field">
                   <span>Account</span>

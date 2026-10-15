@@ -81,3 +81,51 @@ export interface UpcomingEpisode {
   isLatest?: boolean
   released: boolean
 }
+
+// ---- Books & video games (status-only tracking) ----
+
+/** Every kind of title the app tracks. */
+export type ContentKind = 'show' | 'movie' | 'book' | 'game'
+/** The two status-tracked kinds (no episodes / runtimes). */
+export type TrackKind = 'book' | 'game'
+
+export interface Book {
+  id: string // Google Books volume id
+  type: 'book'
+  title: string
+  subtitle?: string
+  authors: string[]
+  poster?: string
+  overview: string
+  genres: string[]
+  pageCount?: number
+  releaseDate?: string // ISO (YYYY-MM-DD when known)
+  year?: number
+  publisher?: string
+  language?: string
+  isbn?: string
+  communityRating?: number // 0-10 (Google's 1–5 average × 2)
+  communityVotes?: number
+}
+
+export interface Game {
+  id: string // IGDB game id
+  type: 'game'
+  title: string
+  poster?: string
+  backdrop?: string
+  overview: string
+  genres: string[]
+  platforms: string[]
+  releaseDate?: string // ISO, first release
+  year?: number
+  developer?: string
+  publisher?: string
+  modes?: string[] // Single player, Multiplayer…
+  communityRating?: number // 0-10 (IGDB total rating / 10)
+  communityVotes?: number
+  /** IGDB average time to beat, in hours. */
+  timeToBeat?: { hastily?: number; normally?: number; completely?: number }
+}
+
+export type TrackMedia = Book | Game

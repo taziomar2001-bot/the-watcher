@@ -8,16 +8,16 @@ export function formatVotes(n: number): string {
   return String(n)
 }
 
-export function PublicScore({ value, votes, compact }: { value?: number; votes?: number; compact?: boolean }) {
+export function PublicScore({ value, votes, compact, source = 'TMDB' }: { value?: number; votes?: number; compact?: boolean; source?: string }) {
   if (value == null || !(value > 0) || votes === 0) return null
   const tone = value >= 7.5 ? 'high' : value >= 6 ? 'mid' : 'low'
   return (
-    <span className={`public-score ${tone} ${compact ? 'compact' : ''}`} title="Average rating from TMDB users, out of 10">
+    <span className={`public-score ${tone} ${compact ? 'compact' : ''}`} title={`Average rating from ${source} users, out of 10`}>
       <b>{value.toFixed(1)}</b>
       <span className="public-score-of">/10</span>
       {!compact && (
         <span className="public-score-src">
-          TMDB{votes ? ` · ${formatVotes(votes)} votes` : ''}
+          {source}{votes ? ` · ${formatVotes(votes)} votes` : ''}
         </span>
       )}
     </span>

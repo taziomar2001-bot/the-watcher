@@ -100,6 +100,10 @@ const SYNC_KEYS = [
   'migrationVersion',
   'importedShowIds',
   'importedMovieKeys',
+  // Books & games (added Oct 2026). The 012 SQL keeps these keys in the cloud
+  // copy even if an older app version saves without them.
+  'books',
+  'games',
 ] as const
 
 type Snap = Record<string, unknown>
@@ -116,6 +120,7 @@ const EMPTY_DEFAULTS: Snap = {
   profile: { username: '', following: 0, followers: 0, comments: 0 },
   tvTimeImported: true, tvTimeMoviesImported: true, migrationVersion: 999,
   importedShowIds: {}, importedMovieKeys: {},
+  books: {}, games: {},
 }
 
 function snapshot(): Snap {
@@ -138,6 +143,7 @@ function snapHasData(d: Snap): boolean {
     d.movieRatings, d.episodeRatings, d.ratingAt, d.libraryShows,
     d.libraryMovies, d.lastWatched, d.followedAt, d.addedAt,
     d.stoppedShows, d.lists, d.importedShowIds, d.importedMovieKeys,
+    d.books, d.games,
   ].some((v) => n(v) > 0) ||
     JSON.stringify(d.profile ?? EMPTY_DEFAULTS.profile) !== JSON.stringify(EMPTY_DEFAULTS.profile)
 }

@@ -27,8 +27,8 @@ export interface CustomList {
   remixOf?: { name: string; by?: string; community?: string }
 }
 
-/** "mixed" = shows and movies together (every list made before typed lists). */
-export type ListKind = 'mixed' | 'shows' | 'seasons' | 'episodes' | 'movies'
+/** "mixed" = any whole titles together (every list made before typed lists). */
+export type ListKind = 'mixed' | 'shows' | 'seasons' | 'episodes' | 'movies' | 'books' | 'games'
 export interface RefMeta {
   t: string // title
   s?: string // show name (seasons / episodes)
@@ -68,6 +68,43 @@ export interface LibraryItem {
   genres?: string[] // populated when full detail is fetched (for genre analysis)
 }
 
+// ---- Books & video games: status-only tracking ----
+export type TrackKind = 'book' | 'game'
+/** active = reading / playing · done = finished · stopped = stopped midway. */
+export type TrackState = 'active' | 'done' | 'stopped'
+
+/** Cached summary of a book or game, enough to draw it anywhere offline. */
+export interface TrackItem {
+  id: string
+  type: TrackKind
+  title: string
+  poster?: string
+  year?: number
+  releaseDate?: string
+  genres?: string[]
+  authors?: string[] // books
+  pageCount?: number // books
+  platforms?: string[] // games
+  developer?: string // games
+  ttb?: number // games: hours to beat (main story), when known
+  /** When the summary was last refreshed from the catalogue (release dates move). */
+  checkedAt?: number
+}
+
+/** One record per book/game in your library (all its state in one place). */
+export interface Tracked {
+  item: TrackItem
+  followed?: boolean
+  state?: TrackState
+  favorite?: boolean
+  rating?: number // personal 1–5 stars
+  addedAt: number
+  stateAt?: number
+  startedAt?: number
+  finishedAt?: number
+}
+export type TrackMap = Record<string, Tracked>
+
 export interface ImportedShow {
   id: string
   item: LibraryItem
@@ -99,6 +136,8 @@ interface LibraryState {
   addedAt: Record<string, number>
   stoppedShows: IdMap // manually "Stopped Watching" shows
   lists: CustomList[]
+  books: TrackMap
+  games: TrackMap
   profile: { username: string; displayName?: string; avatar?: string; hideFavorites?: boolean; following: number; followers: number; comments: number }
   tvTimeImported: boolean
   tvTimeMoviesImported: boolean
@@ -147,6 +186,15 @@ interface LibraryState {
   patchLibraryShow: (id: string, patch: Partial<LibraryItem>) => void
   patchLibraryMovie: (id: string, patch: Partial<LibraryItem>) => void
   backfillSeen: (showId: string, orderedReleasedEpIds: string[], count: number) => void
+  /** Follow / unfollow a book or game (status, rating and favorite are kept). */
+  trackFollow: (kind: TrackKind, id: string, item: TrackItem, on?: boolean) => void
+  /** Reading/playing, finished, stopped — or null to go back to "not started". */
+  trackSetState: (kind: TrackKind, id: string, state: TrackState | null, item?: TrackItem) => void
+  trackFavorite: (kind: TrackKind, id: string, item: TrackItem, on: boolean) => void
+  /** 1–5 stars; the same value again clears it. */
+  trackRate: (kind: TrackKind, id: string, rating: number, item?: TrackItem) => void
+  /** Refresh the cached summary (only for titles already in the library). */
+  trackPatchItem: (kind: TrackKind, id: string, patch: Partial<TrackItem>) => void
 }
 
 export interface ImportedMovie {
@@ -164,6 +212,18 @@ export interface ImportedMovie {
 const FAV_CAP = 12
 
 const on = (map: IdMap, id: string): IdMap => ({ ...map, [id]: true })
+/** Store a book/game record, or drop it once nothing about it is left to keep. */
+const keep = (map: TrackMap, id: string, rec: Tracked): TrackMap => {
+  const next = { ...map }
+  if (!rec.followed && !rec.state && !rec.favorite && rec.rating == null) delete next[id]
+  else {
+    const clean = { ...rec }
+    if (!clean.favorite) delete clean.favorite
+    if (!clean.followed) delete clean.followed
+    next[id] = clean
+  }
+  return next
+}
 const off = (map: IdMap, id: string): IdMap => {
   const next = { ...map }
   delete next[id]
@@ -225,6 +285,8 @@ export const useLibrary = create<LibraryState>()(
       addedAt: {},
       stoppedShows: {},
       lists: [],
+      books: {},
+      games: {},
       profile: { username: demoMode ? 'omar' : '', following: demoMode ? 48 : 0, followers: demoMode ? 27 : 0, comments: demoMode ? 132 : 0 },
       // In mock mode there is nothing to import, so mark it done up-front.
       tvTimeImported: !USE_TMDB,
@@ -515,6 +577,79 @@ export const useLibrary = create<LibraryState>()(
           const next = { ...s.watchedEpisodes }
           orderedReleasedEpIds.slice(0, count).forEach((id) => (next[id] = true))
           return { watchedEpisodes: next }
+        }),
+
+      // ---- Books & games ----
+      trackFollow: (kind, id, item, on) =>
+        set((s) => {
+          const key = kind === 'book' ? 'books' : 'games'
+          const map = s[key]
+          const cur = map[id]
+          const next = on ?? !cur?.followed
+          if (!next) {
+            if (!cur) return {}
+            const rec: Tracked = { ...cur, followed: false }
+            return { [key]: keep(map, id, rec) } as Partial<LibraryState>
+          }
+          const now = Date.now()
+          return { [key]: { ...map, [id]: { ...cur, item: { ...cur?.item, ...item }, followed: true, addedAt: cur?.addedAt ?? now } } } as Partial<LibraryState>
+        }),
+      trackSetState: (kind, id, state, item) =>
+        set((s) => {
+          const key = kind === 'book' ? 'books' : 'games'
+          const map = s[key]
+          const cur = map[id]
+          if (!cur && !item) return {}
+          const now = Date.now()
+          const base: Tracked = cur ?? { item: item!, addedAt: now }
+          const rec: Tracked = { ...base, item: item ? { ...base.item, ...item } : base.item }
+          if (state === null) {
+            delete rec.state
+            delete rec.stateAt
+            delete rec.startedAt
+            delete rec.finishedAt
+            return { [key]: keep(map, id, rec) } as Partial<LibraryState>
+          }
+          rec.state = state
+          rec.stateAt = now
+          rec.followed = true // anything you're reading/playing or finished is in your library
+          if (state === 'active') rec.startedAt = rec.startedAt ?? now
+          if (state === 'done') {
+            rec.finishedAt = now
+            rec.startedAt = rec.startedAt ?? now
+          } else delete rec.finishedAt
+          return { [key]: { ...map, [id]: rec } } as Partial<LibraryState>
+        }),
+      trackFavorite: (kind, id, item, on) =>
+        set((s) => {
+          const key = kind === 'book' ? 'books' : 'games'
+          const map = s[key]
+          const cur = map[id]
+          if (on) {
+            if (Object.values(map).filter((t) => t.favorite).length >= FAV_CAP && !cur?.favorite) return {}
+            return { [key]: { ...map, [id]: { ...cur, item: { ...cur?.item, ...item }, favorite: true, addedAt: cur?.addedAt ?? Date.now() } } } as Partial<LibraryState>
+          }
+          if (!cur) return {}
+          return { [key]: keep(map, id, { ...cur, favorite: false }) } as Partial<LibraryState>
+        }),
+      trackRate: (kind, id, rating, item) =>
+        set((s) => {
+          const key = kind === 'book' ? 'books' : 'games'
+          const map = s[key]
+          const cur = map[id]
+          if (!cur && !item) return {}
+          const base: Tracked = cur ?? { item: item!, addedAt: Date.now() }
+          const rec: Tracked = { ...base }
+          if (rec.rating === rating) delete rec.rating
+          else rec.rating = rating
+          return { [key]: keep(map, id, rec) } as Partial<LibraryState>
+        }),
+      trackPatchItem: (kind, id, patch) =>
+        set((s) => {
+          const key = kind === 'book' ? 'books' : 'games'
+          const cur = s[key][id]
+          if (!cur) return {}
+          return { [key]: { ...s[key], [id]: { ...cur, item: { ...cur.item, ...patch } } } } as Partial<LibraryState>
         }),
     }),
     { name: 'the-watcher-library-v1', storage: deferredStorage<LibraryState>() },

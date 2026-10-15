@@ -349,3 +349,37 @@ export function RemixIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
     </svg>
   )
 }
+
+/** Cinema camera (movies). */
+export function MovieCameraIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth} {...p}>
+      <circle cx="6.5" cy="6.6" r="2.6" />
+      <circle cx="13.2" cy="6.1" r="3.1" />
+      <rect x="3" y="10.2" width="12" height="9" rx="1.6" />
+      <path d="M15 13.6 21 10.6v8l-6-3" />
+    </svg>
+  )
+}
+
+/** Open book (books). */
+export function BookIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth} {...p}>
+      <path d="M12 6.7C9.2 5 6.1 4.6 3 5.4v13c3.1-.8 6.2-.4 9 1.3" />
+      <path d="M12 6.7c2.8-1.7 5.9-2.1 9-1.3v13c-3.1-.8-6.2-.4-9 1.3V6.7Z" />
+    </svg>
+  )
+}
+
+/** Game controller (video games). */
+export function GamepadIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth} {...p}>
+      <path d="M7.6 7.4h8.8a4.6 4.6 0 0 1 4.5 3.7l.9 4.9a2.6 2.6 0 0 1-4.6 2.1L15.6 16H8.4l-1.6 2.1a2.6 2.6 0 0 1-4.6-2.1l.9-4.9a4.6 4.6 0 0 1 4.5-3.7Z" />
+      <path d="M8.2 10.3v3.4M6.5 12h3.4" />
+      <circle cx="15.6" cy="10.9" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="17.4" cy="13.2" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}

@@ -14,6 +14,7 @@ export function DetailHero({
   backLabel = 'Back',
   children,
   still,
+  blurBackdrop,
 }: {
   backdrop?: string
   poster?: string
@@ -25,9 +26,11 @@ export function DetailHero({
   children?: React.ReactNode
   /** Episode pages: wide still instead of a poster. */
   still?: boolean
+  /** No wide art (books): use the cover, softly blurred, behind the title. */
+  blurBackdrop?: boolean
 }) {
   return (
-    <header className={`dh ${still ? 'still' : ''}`}>
+    <header className={`dh ${still ? 'still' : ''} ${blurBackdrop ? 'blur-bg' : ''}`}>
       <div className="dh-backdrop">
         <SmartImage src={backdrop} alt="" />
         <div className="detail-hero-scrim" />
@@ -64,7 +67,7 @@ export function ActionBtn({
   icon: React.ReactNode
   label: string
   on?: boolean
-  tone?: 'green' | 'gold' | 'red'
+  tone?: 'green' | 'gold' | 'red' | 'orange'
   onClick?: () => void
   disabled?: boolean
 }) {

@@ -1,9 +1,17 @@
 import type { Community, CommunityContentType, CommunityDiscoveryFilters, CommunityLocationKind } from '../data/communities'
 
-export const COMMUNITY_CONTENT_TYPES: { key: CommunityContentType; label: string }[] = [
+import { KINDS_ON } from './content'
+
+const ALL_CONTENT_TYPES: { key: CommunityContentType; label: string }[] = [
   { key: 'show', label: 'TV Shows' },
   { key: 'movie', label: 'Movies' },
+  { key: 'book', label: 'Books' },
+  { key: 'game', label: 'Video Games' },
 ]
+/** The categories offered in this build (books/games once connected). */
+export const COMMUNITY_CONTENT_TYPES = ALL_CONTENT_TYPES.filter((t) => KINDS_ON.includes(t.key))
+/** Label for any stored type, even one this build doesn't offer yet. */
+const typeLabel = (k: CommunityContentType) => ALL_CONTENT_TYPES.find((t) => t.key === k)?.label ?? k
 
 export interface CommunityLocation {
   kind: CommunityLocationKind
@@ -21,10 +29,10 @@ export function validCommunityLocation(location: CommunityLocation): boolean {
 }
 
 export function contentTypesLabel(types?: CommunityContentType[]): string {
-  const chosen = COMMUNITY_CONTENT_TYPES.filter((t) => types?.includes(t.key))
-  return chosen.length === 0 || chosen.length === COMMUNITY_CONTENT_TYPES.length
+  const chosen = ALL_CONTENT_TYPES.filter((t) => types?.includes(t.key))
+  return chosen.length === 0 || chosen.length === ALL_CONTENT_TYPES.length
     ? 'General'
-    : chosen.map((t) => t.label).join(' · ')
+    : chosen.map((t) => typeLabel(t.key)).join(' · ')
 }
 
 export function communityLocation(c: Pick<Community, 'location_kind' | 'location_country_name' | 'location_city' | 'location_admin_name'>): string {

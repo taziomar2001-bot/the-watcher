@@ -1,7 +1,11 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { getShow } from '../data/catalog'
+import { getBook } from '../data/books'
+import { gamesByIds } from '../data/games'
 import { useLibrary } from '../store/useLibrary'
+import { toTrackItem } from './tracks'
+import { toLibraryItem } from '../utils/media'
 
 export interface UpEp {
   season: number
@@ -87,12 +91,44 @@ async function pool<T>(items: T[], limit: number, worker: (t: T) => Promise<void
 
 let inFlight: Promise<void> | null = null
 
+const TRACK_TTL = 24 * 60 * 60 * 1000
+/**
+ * Followed books and games that aren't out yet (or have no date) get their
+ * release date re-checked at most once a day — dates move, especially games.
+ */
+async function refreshTrackDates(force: boolean) {
+  const lib = useLibrary.getState()
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const stale = (kind: 'books' | 'games') =>
+    Object.entries(lib[kind])
+      .filter(([, t]) => t.followed && t.state !== 'done' && (!t.item.releaseDate || t.item.releaseDate >= todayIso))
+      .filter(([, t]) => force || !t.item.checkedAt || Date.now() - t.item.checkedAt > TRACK_TTL)
+      .map(([id]) => id)
+  const games = stale('games')
+  if (games.length) {
+    try {
+      for (const g of await gamesByIds(games)) useLibrary.getState().trackPatchItem('game', g.id, toTrackItem(g))
+    } catch {
+      /* retried next time */
+    }
+  }
+  await pool(stale('books').slice(0, 40), 3, async (id) => {
+    try {
+      const b = await getBook(id)
+      if (b) useLibrary.getState().trackPatchItem('book', id, toTrackItem(b))
+    } catch {
+      /* retried next time */
+    }
+  })
+}
+
 /**
  * Incremental build: prune shows no longer followed/stopped, then fetch only the
  * shows that are new or stale (>24h). Unchanged shows are never refetched, so
  * repeat opens are effectively free.
  */
 async function sync(force: boolean, onlyId?: string): Promise<void> {
+  if (!onlyId) void refreshTrackDates(force)
   const lib = useLibrary.getState()
   const store = useUpcoming.getState()
   const wantedIds = upcomingShowIds(lib)
@@ -136,7 +172,10 @@ async function sync(force: boolean, onlyId?: string): Promise<void> {
           .map((e) => ({ season: e.season, number: e.number, title: e.title, airDate: e.airDate as string }))
         // Reuse the same normalized data to enrich the show's classification fields.
         const airedDates = all.filter((e) => e.airDate && e.airDate <= todayIso).map((e) => e.airDate as string)
+        const saved = useLibrary.getState().libraryShows[id]
         useLibrary.getState().patchLibraryShow(id, {
+          // Never leave a summary without its title (followed by watching an episode, say).
+          ...(saved?.title ? {} : toLibraryItem(s)),
           totalEpisodes: s.totalEpisodes || all.length,
           releasedEpisodes: all.filter((e) => isReleased(e.airDate)).length,
           latestReleaseDate: airedDates.length ? airedDates.sort()[airedDates.length - 1] : undefined,

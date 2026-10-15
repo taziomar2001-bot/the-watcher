@@ -11,7 +11,7 @@ import { useCached } from '../utils/cache'
 import { CommunityFilterSheet, type MyCommunityRoleFilter } from '../ui/CommunityFilterSheet'
 
 export interface TopicDraft {
-  type: 'show' | 'movie'
+  type: 'show' | 'movie' | 'book' | 'game'
   id: string
   title: string
   poster?: string
@@ -96,7 +96,7 @@ export function CommunitiesScreen() {
   const topicParam = params.get('topic')
   const stateTopic = (location.state as { topic?: TopicDraft } | null)?.topic
   const topic: TopicDraft | undefined = topicParam
-    ? stateTopic ?? { type: topicParam.split(':')[0] as 'show' | 'movie', id: topicParam.split(':')[1], title: '' }
+    ? stateTopic ?? { type: topicParam.split(':')[0] as TopicDraft['type'], id: topicParam.split(':')[1], title: '' }
     : undefined
   const { list: mine, error: mineError, reload: reloadMine } = useMyCommunities()
   const foundQ = useCached<Community[] | { error: string }>(

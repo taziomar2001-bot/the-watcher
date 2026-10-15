@@ -31,7 +31,7 @@ import {
   type MatchSession,
   type Swipe,
 } from '../data/match'
-import type { Media, Movie, Show } from '../types'
+import type { Media, Movie, Show, TrackMedia } from '../types'
 import { largePoster } from '../utils/media'
 import { RowsSkeleton } from '../ui/Skeletons'
 
@@ -45,11 +45,11 @@ interface Card {
   genres: string[]
   overview?: string
 }
-const toCard = (m: Media): Card => ({
+const toCard = (m: Media | TrackMedia): Card => ({
   id: m.id,
   title: m.title,
   poster: m.poster,
-  year: m.type === 'movie' ? (m as Movie).year : (m as Show).firstAirYear,
+  year: m.type === 'movie' ? (m as Movie).year : m.type === 'show' ? (m as Show).firstAirYear : (m as TrackMedia).year,
   score: m.communityRating,
   votes: m.communityVotes,
   genres: m.genres,
@@ -97,8 +97,8 @@ export function MatchHomeScreen() {
   const shows = useShowEntries()
   const movies = useMovieEntries()
   const own = useMemo(
-    () => (f.source !== 'anything' ? libraryCandidates(f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta) : null),
-    [f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta],
+    () => (f.source !== 'anything' ? libraryCandidates(f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta, { book: lib.books, game: lib.games }) : null),
+    [f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta, lib.books, lib.games],
   )
   useEffect(() => {
     if (own?.unknown.length) void enrichTitles(own.unknown)
@@ -164,7 +164,7 @@ export function MatchHomeScreen() {
           )}
           <div className="match-option">
             <div className="match-option-title">Start a session</div>
-            <div className="vis-hint">Pick movies or shows and a genre, then share the code with your friend.</div>
+            <div className="vis-hint">Pick what you’re in the mood for and a genre, then share the code with your friend.</div>
             <button className="welcome-primary pressable" onClick={() => setMode('setup')}>
               Start
             </button>
@@ -223,6 +223,8 @@ export function MatchSessionScreen() {
   const toast = useToast((s) => s.show)
   const watchedMovies = useLibrary((s) => s.watchedMovies)
   const lastWatched = useLibrary((s) => s.lastWatched)
+  const books = useLibrary((s) => s.books)
+  const games = useLibrary((s) => s.games)
   const [session, setSession] = useState<MatchSession | null | undefined>()
   const [swipes, setSwipes] = useState<Swipe[]>([])
   const [partner, setPartner] = useState<SocialProfile | null>(null)
@@ -395,7 +397,9 @@ export function MatchSessionScreen() {
 
   const top = remaining[0]
   const next = remaining[1]
-  const watched = (cid: string) => (session.kind === 'movie' ? !!watchedMovies[cid] : !!lastWatched[cid])
+  const doneLabel = session.kind === 'book' ? 'Read' : session.kind === 'game' ? 'Played' : 'Watched'
+  const watched = (cid: string) =>
+    session.kind === 'movie' ? !!watchedMovies[cid] : session.kind === 'show' ? !!lastWatched[cid] : (session.kind === 'book' ? books : games)[cid]?.state === 'done'
 
   return (
     <div className="scroll-area route-fade">
@@ -424,9 +428,9 @@ export function MatchSessionScreen() {
       )}
 
       <div className="deck">
-        {next && <SwipeCard key={next.id + '-under'} card={next} under watched={watched(next.id)} />}
+        {next && <SwipeCard key={next.id + '-under'} card={next} under watched={watched(next.id)} doneLabel={doneLabel} />}
         {top ? (
-          <SwipeCard key={top.id} card={top} watched={watched(top.id)} onDecide={(liked) => void decide(top, liked)} />
+          <SwipeCard key={top.id} card={top} watched={watched(top.id)} doneLabel={doneLabel} onDecide={(liked) => void decide(top, liked)} />
         ) : (
           <div className="empty">
             <div className="empty-title">{pageOrder && pagesLoaded >= pageOrder.length ? 'You’ve seen everything' : 'Loading titles…'}</div>
@@ -487,7 +491,7 @@ export function MatchSessionScreen() {
 }
 
 /** Drag left (no) or right (yes); also works with the buttons below. */
-function SwipeCard({ card, under, watched, onDecide }: { card: Card; under?: boolean; watched?: boolean; onDecide?: (liked: boolean) => void }) {
+function SwipeCard({ card, under, watched, doneLabel = 'Watched', onDecide }: { card: Card; under?: boolean; watched?: boolean; doneLabel?: string; onDecide?: (liked: boolean) => void }) {
   const [dx, setDx] = useState(0)
   const [leaving, setLeaving] = useState<0 | 1 | -1>(0)
   const start = useRef<{ x: number; y: number; id: number } | null>(null)
@@ -533,7 +537,7 @@ function SwipeCard({ card, under, watched, onDecide }: { card: Card; under?: boo
       <div className="swipe-info">
         <div className="pick-title">
           {card.title}
-          {watched && <span className="lock-chip">Watched</span>}
+          {watched && <span className="lock-chip">{doneLabel}</span>}
         </div>
         <div className="pick-meta">{[card.year, card.genres.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}</div>
         <PublicScore value={card.score} votes={card.votes} compact />
@@ -542,7 +546,7 @@ function SwipeCard({ card, under, watched, onDecide }: { card: Card; under?: boo
   )
 }
 
-function lengthOfRange(kind: 'movie' | 'show', min?: number | null, max?: number | null): string {
+function lengthOfRange(kind: PICK.Kind, min?: number | null, max?: number | null): string {
   if (!min && !max) return 'any'
   return PICK.LENGTHS[kind].find((l) => (l.min ?? null) === (min ?? null) && (l.max ?? null) === (max ?? null))?.key ?? 'any'
 }

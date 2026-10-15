@@ -7,7 +7,10 @@ import { useAsync, useDebounced } from '../hooks/useAsync'
 import { search as searchCatalog, getShow } from '../data/catalog'
 import type { ListKind, RefMeta } from '../store/useLibrary'
 import { episodeCode, episodeRef, movieRef, seasonRef, showRef } from '../logic/lists'
-import type { Media, Show } from '../types'
+import { searchBooks } from '../data/books'
+import { searchGames } from '../data/games'
+import { KINDS_ON } from '../logic/content'
+import type { Media, Show, TrackMedia, Book, Game } from '../types'
 
 /**
  * Full-screen picker. "mixed" / "shows" / "movies" search titles directly;
@@ -23,18 +26,32 @@ export function TitlePicker({
   kind: ListKind
   title?: string
   isPicked: (ref: string) => boolean
-  onToggle: (ref: string, meta: RefMeta, media?: Media) => void
+  onToggle: (ref: string, meta: RefMeta, media?: Media | TrackMedia) => void
   onClose: () => void
 }) {
   const [q, setQ] = useState('')
   const dq = useDebounced(q, 250)
   const [show, setShow] = useState<{ id: string; title: string } | null>(null)
-  const { data: results, loading, error } = useAsync(() => (dq.trim() ? searchCatalog(dq) : Promise.resolve([] as Media[])), [dq])
-  const wantShows = kind !== 'movies'
+  const wantShows = kind === 'mixed' || kind === 'shows' || kind === 'seasons' || kind === 'episodes'
   const wantMovies = kind === 'mixed' || kind === 'movies'
+  const wantBooks = (kind === 'mixed' && KINDS_ON.includes('book')) || kind === 'books'
+  const wantGames = (kind === 'mixed' && KINDS_ON.includes('game')) || kind === 'games'
+  const { data: results, loading, error } = useAsync(
+    async (): Promise<(Media | TrackMedia)[]> => {
+      if (!dq.trim()) return []
+      const [tm, bk, gm] = await Promise.all([
+        wantShows || wantMovies ? searchCatalog(dq) : Promise.resolve([] as Media[]),
+        wantBooks ? searchBooks(dq).catch(() => [] as Book[]) : Promise.resolve([] as Book[]),
+        wantGames ? searchGames(dq).catch(() => [] as Game[]) : Promise.resolve([] as Game[]),
+      ])
+      return [...tm, ...bk.slice(0, 10), ...gm.slice(0, 10)]
+    },
+    [dq, kind],
+  )
   const drill = kind === 'seasons' || kind === 'episodes'
-  const hits = (results ?? []).filter((m) => (m.type === 'show' ? wantShows : wantMovies))
-  const what = kind === 'movies' ? 'movies' : kind === 'shows' ? 'TV shows' : drill ? 'a TV show' : 'movies & TV shows'
+  const hits = (results ?? []).filter((m) => (m.type === 'show' ? wantShows : m.type === 'movie' ? wantMovies : m.type === 'book' ? wantBooks : wantGames))
+  const what =
+    kind === 'movies' ? 'movies' : kind === 'shows' ? 'TV shows' : kind === 'books' ? 'books' : kind === 'games' ? 'games' : drill ? 'a TV show' : KINDS_ON.length > 2 ? 'titles' : 'movies & TV shows'
 
   return createPortal(
     <div className="picker-backdrop">
@@ -75,7 +92,7 @@ export function TitlePicker({
             </div>
           ) : (
             hits.map((m) => {
-              const year = m.type === 'movie' ? m.year : (m as Show).firstAirYear
+              const year = m.type === 'show' ? (m as Show).firstAirYear : m.year
               if (drill)
                 return (
                   <button key={m.id} className="pick-row pressable" onClick={() => setShow({ id: m.id, title: m.title })}>
@@ -87,14 +104,15 @@ export function TitlePicker({
                     <ChevronRight size={20} />
                   </button>
                 )
-              const ref = m.type === 'show' ? showRef(m.id) : movieRef(m.id)
+              const ref = m.type === 'show' ? showRef(m.id) : m.type === 'movie' ? movieRef(m.id) : `${m.type}:${m.id}`
               const on = isPicked(ref)
+              const label = m.type === 'show' ? 'TV' : m.type === 'movie' ? 'Film' : m.type === 'book' ? ['Book', (m as Book).authors[0]].filter(Boolean).join(' · ') : 'Game'
               return (
                 <button key={ref} className="pick-row pressable" onClick={() => onToggle(ref, { t: m.title, p: m.poster, y: year }, m)}>
                   <SmartImage src={m.poster} alt="" className="pick-poster" />
                   <span className="pick-info">
                     <span className="pick-title">{m.title}</span>
-                    <span className="pick-sub">{[year, m.type === 'show' ? 'TV' : 'Film'].filter(Boolean).join(' · ')}</span>
+                    <span className="pick-sub">{[year, label].filter(Boolean).join(' · ')}</span>
                   </span>
                   <span className={`pick-check ${on ? 'on' : ''}`}>{on ? <CheckIcon size={16} /> : <PlusIcon size={16} />}</span>
                 </button>

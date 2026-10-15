@@ -8,7 +8,7 @@ import type { SocialProfile } from './social'
 
 export type CommunityRole = 'owner' | 'admin' | 'member'
 export type MemberStatus = 'active' | 'pending' | 'banned'
-export type CommunityContentType = 'show' | 'movie'
+export type CommunityContentType = 'show' | 'movie' | 'book' | 'game'
 export type CommunityLocationKind = 'global' | 'country' | 'city'
 
 export interface Community {
@@ -16,7 +16,7 @@ export interface Community {
   name: string
   description: string
   visibility: 'public' | 'private'
-  topic_type: 'show' | 'movie' | null
+  topic_type: 'show' | 'movie' | 'book' | 'game' | null
   topic_id: string | null
   topic_title: string | null
   topic_poster: string | null
@@ -222,7 +222,7 @@ export async function createCommunity(input: {
   name: string
   description: string
   visibility: 'public' | 'private'
-  topic?: { type: 'show' | 'movie'; id: string; title: string; poster?: string }
+  topic?: { type: 'show' | 'movie' | 'book' | 'game'; id: string; title: string; poster?: string }
   contentTypes: CommunityContentType[]
   location: { kind: CommunityLocationKind; countryCode?: string; countryName?: string; city?: string; adminName?: string; placeId?: number }
 }): Promise<Result<string>> {

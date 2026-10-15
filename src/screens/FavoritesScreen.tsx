@@ -13,9 +13,17 @@ import { useAsync } from '../hooks/useAsync'
 import { search as searchCatalog } from '../data/catalog'
 import { toLibraryItem } from '../utils/media'
 import { showColor, movieColor, isUnreleased } from '../logic/status'
+import { searchBooks } from '../data/books'
+import { searchGames } from '../data/games'
+import { KINDS_ON } from '../logic/content'
+import { KIND, KindIcon } from '../ui/kinds'
+import { toTrackItem, trackColor, WORDS } from '../logic/tracks'
+import { FAV_LIMIT } from '../logic/stats'
+import { useToast } from '../store/useToast'
+import type { ContentKind, Media, TrackMedia } from '../types'
 
-// Remember the selected TV/Movies tab across navigating into a title and back.
-let favKindMem: 'show' | 'movie' = 'show'
+// Remember the selected tab across navigating into a title and back.
+let favKindMem: ContentKind = 'show'
 
 /**
  * Favorites — the user's starred shows & movies as a 3-up poster grid (matching
@@ -29,8 +37,8 @@ export function FavoritesScreen() {
   const lib = useLibrary()
   const shows = useShowEntries()
   const movies = useMovieEntries()
-  const [kind, setKindState] = useState<'show' | 'movie'>(favKindMem)
-  const setKind = (k: 'show' | 'movie') => {
+  const [kind, setKindState] = useState<ContentKind>(favKindMem)
+  const setKind = (k: ContentKind) => {
     favKindMem = k
     setKindState(k)
   }
@@ -38,12 +46,35 @@ export function FavoritesScreen() {
   const [edit, setEdit] = useState(false)
   const [adding, setAdding] = useState(false)
   const [q, setQ] = useState('')
-  const { data: results } = useAsync(() => (q.trim() ? searchCatalog(q) : Promise.resolve([])), [q])
+  const { data: results } = useAsync(async (): Promise<(Media | TrackMedia)[]> => {
+    if (!q.trim()) return []
+    if (kind === 'book') return searchBooks(q)
+    if (kind === 'game') return searchGames(q)
+    return (await searchCatalog(q)).filter((m) => m.type === kind)
+  }, [q, kind])
   const toggleFavorite = useToggleFavorite()
+  const toast = useToast((s) => s.show)
   const favMovies = Object.keys(lib.favoriteMovies).length
   const favShows = Object.keys(lib.favoriteShows).length
+  const favBooks = Object.values(lib.books).filter((t) => t.favorite).length
+  const favGames = Object.values(lib.games).filter((t) => t.favorite).length
+  const isFav = (m: Media | TrackMedia) =>
+    m.type === 'show' ? !!lib.favoriteShows[m.id] : m.type === 'movie' ? !!lib.favoriteMovies[m.id] : !!(m.type === 'book' ? lib.books : lib.games)[m.id]?.favorite
+  const toggleAny = (m: Media | TrackMedia) => {
+    if (m.type === 'show' || m.type === 'movie') return void toggleFavorite(m.type, m.id, toLibraryItem(m as Media))
+    const on = !isFav(m)
+    if (on && (m.type === 'book' ? favBooks : favGames) >= FAV_LIMIT)
+      return toast(`You can have up to ${FAV_LIMIT} favorite ${WORDS[m.type].many} — remove one first.`, { duration: 4200 })
+    lib.trackFavorite(m.type, m.id, toTrackItem(m as TrackMedia), on)
+  }
 
   const items = useMemo(() => {
+    if (kind === 'book' || kind === 'game') {
+      return Object.entries(kind === 'book' ? lib.books : lib.games)
+        .filter(([, t]) => t.favorite)
+        .map(([id, t]) => ({ id, type: kind, poster: t.item.poster, title: t.item.title, color: trackColor(t) ?? ('orange' as const) }))
+        .sort((a, b) => a.title.localeCompare(b.title))
+    }
     if (kind === 'show') {
       return shows
         .filter((e) => lib.favoriteShows[e.item.id])
@@ -66,9 +97,13 @@ export function FavoritesScreen() {
         color: movieColor(!!lib.watchedMovies[e.item.id], isUnreleased(e.item.releaseDate)),
       }))
       .sort((a, b) => a.title.localeCompare(b.title))
-  }, [kind, shows, movies, lib.favoriteShows, lib.favoriteMovies, lib.stoppedShows, lib.watchedMovies])
+  }, [kind, shows, movies, lib.favoriteShows, lib.favoriteMovies, lib.stoppedShows, lib.watchedMovies, lib.books, lib.games])
 
-  const removeFav = (type: 'show' | 'movie', id: string) => toggleFavorite(type, id)
+  const removeFav = (type: ContentKind, id: string) => {
+    if (type === 'show' || type === 'movie') return void toggleFavorite(type, id)
+    const t = (type === 'book' ? lib.books : lib.games)[id]
+    if (t) lib.trackFavorite(type, id, t.item, false)
+  }
 
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
@@ -79,7 +114,7 @@ export function FavoritesScreen() {
           </button>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 24 }}>Favorites</h1>
-            <div className="sub">{compositionLabel(favMovies, favShows)}</div>
+            <div className="sub">{compositionLabel(favMovies, favShows, favBooks, favGames)}</div>
           </div>
         </div>
         <button className="icon-round pressable" onClick={() => setMenu(true)} aria-label="Favorites options">
@@ -89,10 +124,9 @@ export function FavoritesScreen() {
 
       <div className="page-pad" style={{ paddingBottom: 10 }}>
         <Segmented
-          options={[
-            { key: 'show', label: 'TV Shows' },
-            { key: 'movie', label: 'Movies' },
-          ]}
+          options={KINDS_ON.map((k) =>
+            KINDS_ON.length > 2 ? { key: k, label: <span className="seg-icon"><KindIcon kind={k} size={21} /></span>, aria: KIND[k].label } : { key: k, label: KIND[k].label },
+          )}
           value={kind}
           onChange={(k) => {
             setKind(k)
@@ -104,7 +138,7 @@ export function FavoritesScreen() {
       {items.length === 0 ? (
         <div className="empty">
           <div className="empty-title">No favorites yet</div>
-          <div className="empty-sub">Use the ••• menu to add shows and movies</div>
+          <div className="empty-sub">Use the ••• menu to add {KIND[kind].label.toLowerCase()}</div>
         </div>
       ) : (
         <div className="poster-grid">
@@ -174,26 +208,26 @@ export function FavoritesScreen() {
               </button>
             </div>
             <div className="picker-search">
-              <SearchField value={q} onChange={setQ} placeholder="Search movies & TV shows" autoFocus />
+              <SearchField value={q} onChange={setQ} placeholder={`Search ${KIND[kind].label.toLowerCase()}`} autoFocus />
             </div>
             <div className="picker-body">
               {!q.trim() ? (
                 <div className="empty compact">
-                  <div className="empty-sub">Search to favorite shows or movies</div>
+                  <div className="empty-sub">Search to favorite {KIND[kind].label.toLowerCase()}</div>
                 </div>
               ) : (
                 (results ?? []).map((m) => {
-                  const fav = m.type === 'show' ? !!lib.favoriteShows[m.id] : !!lib.favoriteMovies[m.id]
+                  const fav = isFav(m)
                   return (
                     <button
                       key={`${m.type}:${m.id}`}
                       className="pick-row pressable"
-                      onClick={() => toggleFavorite(m.type, m.id, toLibraryItem(m))}
+                      onClick={() => toggleAny(m)}
                     >
                       <SmartImage src={m.poster} alt={m.title} className="pick-poster" />
                       <span className="pick-info">
                         <span className="pick-title">{m.title}</span>
-                        <span className="pick-sub">{m.type === 'show' ? 'TV' : 'Film'}</span>
+                        <span className="pick-sub">{KIND[m.type].one}</span>
                       </span>
                       <span className={`pick-check ${fav ? 'on' : ''}`}>
                         {fav ? <CheckIcon size={16} /> : <PlusIcon size={16} />}

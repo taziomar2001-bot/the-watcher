@@ -29,15 +29,21 @@ export interface ProfileStats {
   movies_followed?: number
   tv_minutes?: number
   movie_minutes?: number
+  // Added by 012_books_games.sql.
+  books_followed?: number
+  books_finished?: number
+  games_followed?: number
+  games_finished?: number
 }
 
 const BASE_STAT_COLS = 'episodes_watched,shows_watched,shows_finished,movies_watched,minutes_watched'
 const FULL_STAT_COLS = BASE_STAT_COLS + ',shows_followed,movies_followed,tv_minutes,movie_minutes'
+const TRACK_STAT_COLS = FULL_STAT_COLS + ',books_followed,books_finished,games_followed,games_finished'
 
 /** A title someone chose to show on their profile (favorites / public lists). */
 export interface ShowcaseItem {
   id: string
-  type: 'show' | 'movie' | 'season' | 'episode'
+  type: 'show' | 'movie' | 'book' | 'game' | 'season' | 'episode'
   title: string
   poster?: string
   year?: number
@@ -47,7 +53,7 @@ export interface ShowcaseItem {
 export interface ShowcaseList {
   id: string
   name: string
-  kind?: 'mixed' | 'shows' | 'seasons' | 'episodes' | 'movies'
+  kind?: 'mixed' | 'shows' | 'seasons' | 'episodes' | 'movies' | 'books' | 'games'
   ranked?: boolean
   cover?: string
   items: ShowcaseItem[]
@@ -131,6 +137,12 @@ export async function pushMyStats(stats: ProfileStats): Promise<boolean> {
     if (!uid) return false
     const row = { user_id: uid, ...stats, updated_at: new Date().toISOString() }
     let { error } = await supabase.from('profile_stats').upsert(row, { onConflict: 'user_id' })
+    if (isSchemaMissing(error) && stats.books_followed !== undefined) {
+      // 012 not run yet: save everything but the book/game counts.
+      const { books_followed, books_finished, games_followed, games_finished, ...rest } = row
+      void books_followed, void books_finished, void games_followed, void games_finished
+      ;({ error } = await supabase.from('profile_stats').upsert(rest, { onConflict: 'user_id' }))
+    }
     if (isSchemaMissing(error)) {
       // 004 not run yet: save the original columns only.
       const { episodes_watched, shows_watched, shows_finished, movies_watched, minutes_watched } = stats
@@ -257,7 +269,8 @@ export async function getProfileStats(id: string): Promise<ProfileStats | null> 
   if (!supabase) return null
   try {
     const run = (cols: string) => supabase!.from('profile_stats').select(cols).eq('user_id', id).maybeSingle()
-    let { data, error } = await run(FULL_STAT_COLS)
+    let { data, error } = await run(TRACK_STAT_COLS)
+    if (isSchemaMissing(error)) ({ data, error } = await run(FULL_STAT_COLS))
     if (isSchemaMissing(error)) ({ data, error } = await run(BASE_STAT_COLS))
     return (data as unknown as ProfileStats) ?? null
   } catch {

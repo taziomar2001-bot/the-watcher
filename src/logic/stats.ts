@@ -5,7 +5,6 @@ import { useShowEntries, useMovieEntries } from './useLibraryData'
 import { effectiveSeen } from './status'
 import { useSync } from './sync'
 import { pushMyStats, pushMyShowcase, type Showcase, type ShowcaseItem } from '../data/social'
-import type { LibraryItem } from '../store/useLibrary'
 
 // Shared watch-time assumptions (kept in one place so Profile, public profiles
 // and the Leaderboard all agree).
@@ -68,10 +67,12 @@ export function useMyStats(): UserTotals {
  * "9 Movies · 7 TV Shows" — the composition of a mixed collection, never a bare
  * total. Drops any zero category and pluralises naturally; empty → "No titles".
  */
-export function compositionLabel(movies: number, shows: number): string {
+export function compositionLabel(movies: number, shows: number, books = 0, games = 0): string {
   const parts: string[] = []
   if (movies > 0) parts.push(`${movies} ${movies === 1 ? 'Movie' : 'Movies'}`)
   if (shows > 0) parts.push(`${shows} ${shows === 1 ? 'TV Show' : 'TV Shows'}`)
+  if (books > 0) parts.push(`${books} ${books === 1 ? 'Book' : 'Books'}`)
+  if (games > 0) parts.push(`${games} ${games === 1 ? 'Game' : 'Games'}`)
   if (parts.length === 0) return 'No titles'
   return parts.join(' · ')
 }
@@ -97,6 +98,20 @@ export function useStatsSync() {
   const status = useSync((s) => s.status)
   const syncReady = useSync((s) => s.syncReady)
   const stats = useMyStats()
+  const books = useLibrary((s) => s.books)
+  const games = useLibrary((s) => s.games)
+  const trackCounts = useMemo(() => {
+    const count = (m: typeof books) => {
+      let followed = 0
+      let finished = 0
+      for (const t of Object.values(m)) {
+        if (t.followed || t.state) followed++
+        if (t.state === 'done') finished++
+      }
+      return { followed, finished }
+    }
+    return { b: count(books), g: count(games) }
+  }, [books, games])
   const showcase = useMyShowcase()
   const last = useRef('')
   const lastShowcase = useRef('')
@@ -115,6 +130,10 @@ export function useStatsSync() {
       movies_followed: stats.moviesFollowed,
       tv_minutes: stats.tvMin,
       movie_minutes: stats.movieMin,
+      books_followed: trackCounts.b.followed,
+      books_finished: trackCounts.b.finished,
+      games_followed: trackCounts.g.followed,
+      games_finished: trackCounts.g.finished,
     }
     const key = JSON.stringify(payload)
     if (key === last.current) return
@@ -123,7 +142,7 @@ export function useStatsSync() {
       void pushMyStats(payload)
     }, 2500)
     return () => clearTimeout(t)
-  }, [status, syncReady, stats])
+  }, [status, syncReady, stats, trackCounts])
 
   useEffect(() => {
     if (status !== 'signedIn' || !syncReady) {
@@ -139,7 +158,7 @@ export function useStatsSync() {
   }, [status, syncReady, showcase])
 }
 
-const toShowcaseItem = (type: 'show' | 'movie', id: string, it?: LibraryItem): ShowcaseItem | null =>
+const toShowcaseItem = (type: 'show' | 'movie' | 'book' | 'game', id: string, it?: { title: string; poster?: string; year?: number }): ShowcaseItem | null =>
   it?.title ? { id, type, title: it.title, poster: it.poster, year: it.year } : null
 
 /**
@@ -152,13 +171,18 @@ export function useMyShowcase(): Showcase {
   const libraryShows = useLibrary((s) => s.libraryShows)
   const libraryMovies = useLibrary((s) => s.libraryMovies)
   const lists = useLibrary((s) => s.lists)
+  const books = useLibrary((s) => s.books)
+  const games = useLibrary((s) => s.games)
   const hideFavorites = useLibrary((s) => !!s.profile.hideFavorites)
   return useMemo(() => {
+    const src = { libraryShows, libraryMovies, books, games }
     const favorites = hideFavorites
       ? []
       : [
           ...Object.keys(favoriteShows).map((id) => toShowcaseItem('show', id, libraryShows[id])),
           ...Object.keys(favoriteMovies).map((id) => toShowcaseItem('movie', id, libraryMovies[id])),
+          ...Object.entries(books).filter(([, t]) => t.favorite).map(([id, t]) => toShowcaseItem('book', id, t.item)),
+          ...Object.entries(games).filter(([, t]) => t.favorite).map(([id, t]) => toShowcaseItem('game', id, t.item)),
         ].filter((x): x is ShowcaseItem => !!x)
     const publicLists = lists
       .filter((l) => l.visibility === 'public')
@@ -167,11 +191,11 @@ export function useMyShowcase(): Showcase {
         name: l.name,
         kind: l.kind ?? 'mixed',
         ranked: !!l.ranked,
-        cover: listCover(l, { libraryShows, libraryMovies }),
+        cover: listCover(l, src),
         items: l.items
           .slice(0, 250)
           .map((ref): ShowcaseItem | null => {
-            const r = resolveItem(ref, { libraryShows, libraryMovies }, l.meta)
+            const r = resolveItem(ref, src, l.meta)
             if (!r) return null
             const x: ShowcaseItem = { id: parseItemRef(ref).id, type: r.type, title: r.title, poster: r.poster, year: r.year }
             if (r.type === 'season' || r.type === 'episode') {
@@ -183,5 +207,5 @@ export function useMyShowcase(): Showcase {
           .filter((x): x is ShowcaseItem => !!x),
       }))
     return { favorites, lists: publicLists }
-  }, [favoriteShows, favoriteMovies, libraryShows, libraryMovies, lists, hideFavorites])
+  }, [favoriteShows, favoriteMovies, libraryShows, libraryMovies, books, games, lists, hideFavorites])
 }

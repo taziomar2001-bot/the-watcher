@@ -21,6 +21,7 @@ are safe to re-run and none restructure or delete library data):
 9. `supabase/009_titles_lists_comments.sql` — communities about several titles, lists shared in communities, comments on shows/seasons/episodes/movies, Watch together filters (copies each community's existing linked title; changes nothing else)
 10. `supabase/010_community_title_order.sql` — owners/admins can set the order of a community's titles
 11. `supabase/011_community_discovery.sql` — community content and location categories, comment likes, and action-based ordering of your communities. Run this before deploying the corresponding app update. It does not read or change anyone's personal library.
+12. `supabase/012_books_games.sql` — books and video games. Lets communities, community titles/lists, comments and Watch together accept books and games (only their CHECK rules widen; no row changes), adds public book/game counts, and adds a safety trigger so an older copy of the app can never save the library without its new "books"/"games" keys. **Run it before deploying the books & games update.** After it, don't re-run an older file's narrow content-type rule — 011 already skips it.
 
 The city picker uses country-specific place lists generated from [GeoNames](https://www.geonames.org/export/) data. Only the selected country's list is fetched when the city picker opens; the rest of the app never loads the city database. To refresh the lists, download and extract `cities1000.zip` and `admin1CodesASCII.txt` from the GeoNames data export into one directory, then run `node scripts/build-community-cities.mjs <that-directory>` and then `node scripts/build-city-index.mjs` (the worldwide city search index, `public/places/index.json`, loaded only when the location picker opens). GeoNames data is provided under a Creative Commons Attribution license; keep the GeoNames credit in the picker.
 
@@ -54,6 +55,24 @@ Devices pick up the restored library the next time the app opens.
   library on first sign-in if the account is empty.
 - A device copy from a different account is never shown or uploaded.
 - Offline edits are kept on the device and uploaded on reconnect.
+
+## Books and video games
+
+Both kinds stay hidden in the live app until their catalogue is connected.
+
+**Books — Google Books**
+1. In [Google Cloud Console](https://console.cloud.google.com/) create (or pick) a project → APIs & Services → Library → enable **Books API**.
+2. APIs & Services → Credentials → Create credentials → **API key**. Restrict it: *Application restrictions* → Websites → your site (e.g. `https://your-site.netlify.app/*`); *API restrictions* → Books API.
+3. In Netlify → Site configuration → Environment variables, add `VITE_GOOGLE_BOOKS_KEY` = that key, and redeploy.
+
+**Video games — IGDB (through a Supabase Edge Function)**
+1. At [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps) register an application (any name; OAuth redirect `http://localhost`; category *Application Integration*). Copy its **Client ID** and create a **Client Secret**. Twitch requires two-factor authentication on the account.
+2. Supabase → Edge Functions → **Deploy a new function** → *Via editor*, name it `igdb`, paste `supabase/functions/igdb/index.ts`, deploy. (Or with the CLI: `supabase functions deploy igdb --no-verify-jwt`.)
+3. In that function's settings, turn **off** "Verify JWT" (it only serves public catalogue data, and the app may use a non-JWT publishable key).
+4. Supabase → Edge Functions → **Secrets**: add `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (never in the app, never in chat). Optional: `ALLOWED_ORIGINS` = your site's origin, e.g. `https://your-site.netlify.app`.
+5. In Netlify, add `VITE_IGDB` = `on`, and redeploy.
+
+Game data comes from IGDB.com and book data from Google Books; both are credited on title pages.
 
 ## Configure the app
 
