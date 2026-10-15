@@ -2755,13 +2755,13 @@ body.modal-open .scroll-area { overflow: hidden !important; }
    a moving gradient that repaints every frame. */
 .skeleton, .smart-img-skeleton { background: var(--skeleton-b); background-size: auto; animation: skPulse 1.1s ease-in-out infinite alternate; }
 @keyframes skPulse { from { opacity: .55; } to { opacity: 1; } }
-/* Long lists: let the browser skip laying out and painting rows off screen. */
-.poster-grid > .poster-thumb, .card-list > .media-card, .episode-list > *, .list-row, .tc, .user-row, .lb-row, .community-card, .community-row, .ep-list-row {
+/* Long vertical lists: let the browser skip rendering rows off screen. Only
+   the height is estimated (never the width), and never on grid cells, so
+   layouts like the 3-per-row poster grid are unaffected. */
+.card-list > .media-card, .episode-list > * {
   content-visibility: auto;
-  contain-intrinsic-size: auto 120px;
+  contain-intrinsic-block-size: auto 96px;
 }
-.poster-grid > .poster-thumb { contain-intrinsic-size: auto 210px; }
-.community-card { contain-intrinsic-size: auto 170px; }
 
 /* Drawers never outgrow the screen: their content scrolls. */
 .sheet { max-height: 88dvh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
