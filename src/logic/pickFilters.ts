@@ -4,6 +4,7 @@ import type { MovieEntry } from './useLibraryData'
 import type { TitleMeta } from '../data/tmdb'
 import type { Media, Movie, Show, ContentKind, TrackMedia, Book, Game } from '../types'
 import type { TrackMap } from '../store/useLibrary'
+import { bookInGenre } from '../data/books'
 
 // Shared filters for "Pick for me" and "Watch together".
 
@@ -156,7 +157,7 @@ export function libraryCandidates(
       if (f.source === 'not_started' && t.state) continue
       if (t.item.releaseDate && t.item.releaseDate > new Date().toISOString().slice(0, 10)) continue
       const genres = t.item.genres ?? []
-      if (f.genre && !genres.includes(f.genre.name)) continue
+      if (f.genre && !(f.kind === 'book' ? bookInGenre(genres, f.genre.name) : genres.includes(f.genre.name))) continue
       const size = f.kind === 'book' ? t.item.pageCount : t.item.ttb
       if (!inLength(len, size)) continue
       items.push({ id, type: f.kind, title: t.item.title, poster: t.item.poster, year: t.item.year, genres, runtime: size })

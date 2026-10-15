@@ -37,7 +37,7 @@ const ALL_CATEGORIES: (ContentCategory & { on: boolean })[] = [
   { key: 'games', label: 'Video Games', path: '/games', Icon: GamepadIcon, matches: (p: string) => p === '/games', on: GAMES_ON },
 ]
 export const CONTENT_CATEGORIES: ContentCategory[] = ALL_CATEGORIES.filter((c) => c.on)
-const DEFAULT_CATEGORY = CONTENT_CATEGORIES.find((c) => c.key === 'tv')!
+const DEFAULT_CATEGORY = CONTENT_CATEGORIES.find((c) => c.key === 'movies')!
 
 /** Kinds available in this build, in display order. */
 export const KINDS_ON: ('show' | 'movie' | 'book' | 'game')[] = KIND_ORDER.filter((k) => (k === 'book' ? BOOKS_ON : k === 'game' ? GAMES_ON : true))
@@ -48,23 +48,16 @@ export function nextContentPath(pathname: string): string {
   return CONTENT_CATEGORIES[(i + 1) % CONTENT_CATEGORIES.length].path
 }
 
-const LAST_KEY = 'tw-content-last'
+// The Content tab opens on Movies each time the app starts, then remembers the
+// category you were last on for the rest of that visit.
+let lastKey: string | null = null
 
 export function lastContentPath(): string {
-  try {
-    const k = localStorage.getItem(LAST_KEY)
-    return CONTENT_CATEGORIES.find((c) => c.key === k)?.path ?? DEFAULT_CATEGORY.path
-  } catch {
-    return DEFAULT_CATEGORY.path
-  }
+  return CONTENT_CATEGORIES.find((c) => c.key === lastKey)?.path ?? DEFAULT_CATEGORY.path
 }
 
 export function rememberContent(key: string) {
-  try {
-    localStorage.setItem(LAST_KEY, key)
-  } catch {
-    /* ignore */
-  }
+  lastKey = key
 }
 
 export const isContentPath = (pathname: string) => CONTENT_CATEGORIES.some((c) => c.matches(pathname))

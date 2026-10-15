@@ -5,6 +5,7 @@ import { SmartImage } from '../components/ui'
 import { PublicScore } from '../ui/PublicScore'
 import { PickFilterBar } from '../ui/PickFilters'
 import { discoverPage, genreList } from '../data/catalog'
+import { bookSource } from '../data/books'
 import { useLibrary } from '../store/useLibrary'
 import { useTitleMeta, enrichTitles } from '../store/useTitleMeta'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
@@ -65,8 +66,20 @@ export function RandomScreen() {
   }, [lib_?.unknown.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // "Anything" leaves out what you've already watched / read / played (or started).
+  // Books can be in your library under another catalogue's id, so they're
+  // also matched by title.
+  const readTitles = useMemo(
+    () => new Set(Object.values(lib.books ?? {}).filter((t) => t.state).map((t) => t.item.title.trim().toLowerCase())),
+    [lib.books],
+  )
   const seen = (c: Candidate) =>
-    c.type === 'movie' ? !!lib.watchedMovies[c.id] : c.type === 'show' ? !!lib.lastWatched[c.id] : !!(c.type === 'book' ? lib.books : lib.games)[c.id]?.state
+    c.type === 'movie'
+      ? !!lib.watchedMovies[c.id]
+      : c.type === 'show'
+        ? !!lib.lastWatched[c.id]
+        : c.type === 'book'
+          ? !!lib.books[c.id]?.state || readTitles.has(c.title.trim().toLowerCase())
+          : !!lib.games[c.id]?.state
 
   const candidates = async (): Promise<Candidate[]> => {
     if (lib_) return lib_.items
@@ -182,7 +195,7 @@ export function RandomScreen() {
                   .filter(Boolean)
                   .join(' · ')}
               </div>
-              <PublicScore value={pick.score} votes={pick.votes} source={pick.type === 'book' ? 'Google Books' : pick.type === 'game' ? 'IGDB' : 'TMDB'} />
+              <PublicScore value={pick.score} votes={pick.votes} source={pick.type === 'book' ? bookSource(pick.id) : pick.type === 'game' ? 'IGDB' : 'TMDB'} />
               {pick.overview && <p className="rp-overview">{pick.overview}</p>}
               <div className="rp-actions">
                 <button className="follow-btn primary pressable" onClick={() => nav(`/${pick.type}/${pick.id}`)}>

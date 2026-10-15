@@ -9,7 +9,7 @@ import { AddToListSheet, useListMembership } from '../ui/AddToList'
 import { Sheet } from '../ui/Sheet'
 import { HeartIcon, PeopleIcon, PlusIcon, CheckIcon, ListIcon, BookIcon, GamepadIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
-import { getBook } from '../data/books'
+import { bookSource, getBook } from '../data/books'
 import { getGame } from '../data/games'
 import { useLibrary, type TrackKind, type TrackState } from '../store/useLibrary'
 import { useToast } from '../store/useToast'
@@ -103,7 +103,7 @@ function TrackScreen({ kind }: { kind: TrackKind }) {
     <div className="scroll-area route-fade">
       <DetailHero backdrop={game?.backdrop ?? media.poster} blurBackdrop={!game?.backdrop} poster={media.poster} title={media.title} onBack={() => nav(-1)} meta={meta}>
         <div className="dh-scores">
-          <PublicScore value={media.communityRating} votes={media.communityVotes} source={KIND[kind].source} />
+          <PublicScore value={media.communityRating} votes={media.communityVotes} source={kind === 'book' ? bookSource(id) : KIND[kind].source} />
           {t?.rating != null && <span className="dh-mine">{t.rating} ★ you</span>}
         </div>
         {statusText && color && (
@@ -230,7 +230,7 @@ function TrackScreen({ kind }: { kind: TrackKind }) {
               </>
             )}
           </dl>
-          <div className="data-credit">Data from {KIND[kind].source}</div>
+          <div className="data-credit">Data from {kind === 'book' ? bookSource(id) : KIND[kind].source}</div>
         </div>
       )}
       {tab === 'comments' && <TitleComments target={ref} what={media.title} />}

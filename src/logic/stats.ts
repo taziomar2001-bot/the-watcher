@@ -12,7 +12,7 @@ export const EP_MIN = 42
 export const MOVIE_MIN = 115
 
 /** Maximum favourites allowed per category (movies and TV shows independently). */
-export const FAV_LIMIT = 12
+export const FAV_LIMIT = 9
 
 export interface UserTotals {
   showsFollowed: number

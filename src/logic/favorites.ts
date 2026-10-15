@@ -4,7 +4,7 @@ import { FAV_LIMIT } from './stats'
 
 /**
  * Central favourite toggler used everywhere (Discover, Show/Movie detail, the
- * Favorites picker, Add-to-list). Enforces the per-category cap of 12 and, when
+ * Favorites picker, Add-to-list). Enforces the per-category cap of 9 and, when
  * the cap is hit, tells the user to remove one first instead of silently doing
  * nothing or replacing an existing favourite. Removing is always allowed.
  */

@@ -27,7 +27,7 @@ import type { TrackKind } from '../store/useLibrary'
 
 // Module-scoped so Discover's mode + query survive navigating to a detail page
 // and back (scroll position is preserved separately by useScrollMemory).
-const discoverMem = { kind: 'show' as ContentKind, q: '' }
+const discoverMem = { kind: 'movie' as ContentKind, q: '' }
 
 export function DiscoverScreen() {
   const nav = useNavigate()

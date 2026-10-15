@@ -6,7 +6,7 @@ import type { ContentKind } from '../types'
 export const KIND: Record<ContentKind, { label: string; one: string; badge: string; Icon: ComponentType<{ size?: number }>; source: string }> = {
   show: { label: 'TV Shows', one: 'TV show', badge: 'TV', Icon: TvIcon, source: 'TMDB' },
   movie: { label: 'Movies', one: 'Movie', badge: 'FILM', Icon: MovieCameraIcon, source: 'TMDB' },
-  book: { label: 'Books', one: 'Book', badge: 'BOOK', Icon: BookIcon, source: 'Google Books' },
+  book: { label: 'Books', one: 'Book', badge: 'BOOK', Icon: BookIcon, source: 'Open Library' },
   game: { label: 'Video Games', one: 'Video game', badge: 'GAME', Icon: GamepadIcon, source: 'IGDB' },
 }
 
