@@ -58,6 +58,7 @@ const loaders = {
   CommunitiesScreen: () => import('./screens/CommunitiesScreen').then((m) => ({ default: m.CommunitiesScreen })),
   CommunitiesDiscoverScreen: () => import('./screens/CommunitiesDiscoverScreen').then((m) => ({ default: m.CommunitiesDiscoverScreen })),
   CommunityScreen: () => import('./screens/CommunityScreen').then((m) => ({ default: m.CommunityScreen })),
+  CommunityEditScreen: () => import('./screens/CommunityEditScreen').then((m) => ({ default: m.CommunityEditScreen })),
   ConnectionsScreen: () => import('./screens/ConnectionsScreen').then((m) => ({ default: m.ConnectionsScreen })),
   PublicLibraryScreen: () => import('./screens/PublicLibraryScreen').then((m) => ({ default: m.PublicLibraryScreen })),
   MatchHomeScreen: () => import('./screens/MatchScreen').then((m) => ({ default: m.MatchHomeScreen })),
@@ -80,6 +81,7 @@ const SettingsScreen = lazy(loaders.SettingsScreen)
 const CommunitiesScreen = lazy(loaders.CommunitiesScreen)
 const CommunitiesDiscoverScreen = lazy(loaders.CommunitiesDiscoverScreen)
 const CommunityScreen = lazy(loaders.CommunityScreen)
+const CommunityEditScreen = lazy(loaders.CommunityEditScreen)
 const ConnectionsScreen = lazy(loaders.ConnectionsScreen)
 const PublicLibraryScreen = lazy(loaders.PublicLibraryScreen)
 const MatchHomeScreen = lazy(loaders.MatchHomeScreen)
@@ -210,6 +212,7 @@ export default function App() {
         <Route path="/profile/lists" element={<ProfileListsScreen />} />
         <Route path="/c/:id" element={<CommunityScreen />} />
         <Route path="/c/:id/members" element={<CommunityScreen view="members" />} />
+        <Route path="/c/:id/edit" element={<CommunityEditScreen />} />
         <Route path="/c/:id/l/:owner/:listId" element={<CommunityListScreen />} />
         <Route path="/tv" element={<TVShowsScreen />} />
         <Route path="/tv/category/:key" element={<TVCategoryScreen />} />

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { PlusIcon, ChevronRight, SearchIcon, FilterIcon } from '../components/Icons'
+import { PlusIcon, ChevronRight, FilterIcon } from '../components/Icons'
 import { SmartImage } from '../components/ui'
 import { SearchField, SectionHeader } from '../ui/primitives'
 import { useSync } from '../logic/sync'
@@ -93,7 +93,6 @@ export function CommunitiesScreen() {
   const [params, setParams] = useSearchParams()
   const signedIn = useSync((s) => s.status === 'signedIn')
   const [creating, setCreating] = useState<TopicDraft | null | false>(false)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [q, setQ] = useState('')
   const [filters, setFilters] = useState<CommunityDiscoveryFilters>({})
   const [role, setRole] = useState<MyCommunityRoleFilter>('all')
@@ -143,10 +142,6 @@ export function CommunitiesScreen() {
         </div>
         {signedIn && !error && (
           <div className="header-icons">
-            {!topic && <button className="icon-round pressable" onClick={() => setSearchOpen((open) => !open)}
-              aria-label={searchOpen ? 'Close your community search' : 'Search your communities'}>
-              <SearchIcon size={20} />
-            </button>}
             <button className="icon-round pressable" onClick={() => setCreating(topic ?? null)} aria-label="Create a community">
               <PlusIcon size={20} />
             </button>
@@ -185,7 +180,7 @@ export function CommunitiesScreen() {
             </button>
           </div>
           <SectionHeader title="Your communities" />
-          {searchOpen && (
+          {(mine?.length ?? 0) > 0 && (
             <div className="page-pad community-search-controls">
               <SearchField value={q} onChange={setQ} placeholder="Search your communities" />
               <button className={`icon-round pressable ${hasFilters ? 'has-filters' : ''}`}
@@ -202,7 +197,7 @@ export function CommunitiesScreen() {
                 <Empty title="No matches" sub="Try another search or clear the filters." />
               ) : visible.map((c) => <CommunityCard key={c.id} c={c} badge={badgeFor(c)} />)}
           </div>
-          {pending.length > 0 && !searchOpen && (
+          {pending.length > 0 && !term && (
             <>
               <SectionHeader title="Requests" />
               <div className="page-pad">

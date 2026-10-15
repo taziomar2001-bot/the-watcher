@@ -51,7 +51,7 @@ export function CommunityFilterSheet({
               onClick={() => setLocation(kind === 'anywhere' ? undefined : kind === 'global' ? { kind } : kind === 'country'
                 ? { kind, countryCode: location.countryCode, countryName: location.countryName }
                 : { ...location, kind })}>
-              {kind === 'anywhere' ? 'Anywhere' : kind === 'global' ? 'Global' : kind === 'country' ? 'Country' : 'City'}
+              {kind === 'anywhere' ? 'Any' : kind === 'global' ? 'Global' : kind === 'country' ? 'Country' : 'City'}
             </button>
           ))}
         </div>

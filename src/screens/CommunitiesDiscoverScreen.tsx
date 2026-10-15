@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, FilterIcon, SearchIcon } from '../components/Icons'
+import { ChevronLeft, FilterIcon } from '../components/Icons'
 import { discoverCommunities, type Community, type CommunityDiscoveryFilters } from '../data/communities'
 import { CommunityCard, CardSkeletons } from './CommunitiesScreen'
 import { CommunityFilterSheet } from '../ui/CommunityFilterSheet'
@@ -10,7 +10,6 @@ import { useSync } from '../logic/sync'
 export function CommunitiesDiscoverScreen() {
   const nav = useNavigate()
   const signedIn = useSync((s) => s.status === 'signedIn')
-  const [searchOpen, setSearchOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filters, setFilters] = useState<CommunityDiscoveryFilters>({})
@@ -62,16 +61,12 @@ export function CommunitiesDiscoverScreen() {
           <h1>Discover</h1>
           <div className="sub">Find a community for you</div>
         </div>
-        <div className="header-icons">
-          <button className="icon-round pressable" onClick={() => setSearchOpen((open) => !open)}
-            aria-label={searchOpen ? 'Close search' : 'Search communities'}><SearchIcon size={20} /></button>
-          <button className={`icon-round pressable ${filters.contentType || filters.location ? 'has-filters' : ''}`}
-            onClick={() => setFilterOpen(true)} aria-label="Filter communities"><FilterIcon size={20} /></button>
-        </div>
       </div>
-      {searchOpen && <div className="page-pad community-search-controls">
+      <div className="page-pad community-search-controls">
         <SearchField value={search} onChange={updateSearch} placeholder="Search all communities" />
-      </div>}
+        <button className={`icon-round pressable ${filters.contentType || filters.location ? 'has-filters' : ''}`}
+          onClick={() => setFilterOpen(true)} aria-label="Filter communities"><FilterIcon size={20} /></button>
+      </div>
       <div className="page-pad">
         {!signedIn ? <div className="empty"><div className="empty-title">Sign in to discover communities</div></div> :
           error ? <div className="empty"><div className="empty-title">Couldn’t load communities</div><div className="empty-sub">{error === 'not_set_up' ? 'Run the community SQL steps in Supabase.' : 'Check your connection and try again.'}</div></div> :
