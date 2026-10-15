@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ConfirmSheet } from '../ui/Sheet'
 import { useNavigate, useParams } from 'react-router-dom'
 import { EpisodeRow } from '../ui/cards'
 import { CheckIcon, ListIcon, PeopleIcon } from '../components/Icons'
@@ -153,32 +154,18 @@ export function SeasonScreen() {
       )}
 
       {confirmReset && (
-        <div className="sheet-backdrop" onClick={() => setConfirmReset(false)}>
-          <div className="sheet" onClick={(ev) => ev.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="confirm-title">Mark season as not watched?</div>
-            <div className="confirm-body">
-              This removes the watched status from every episode in {seasonObj.name}. Your episode history for other
-              seasons is unaffected.
-            </div>
-            <div className="confirm-actions">
-              <button className="sync-btn ghost pressable" onClick={() => setConfirmReset(false)}>
-                Cancel
-              </button>
-              <button
-                className="sync-btn pressable"
-                style={{ background: 'var(--yellow)', color: '#231400', borderColor: 'var(--yellow)' }}
-                onClick={() => {
-                  markAllUnwatched(allIds)
-                  setConfirmReset(false)
-                  toast('Season marked not watched')
-                }}
-              >
-                Mark Not Watched
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmSheet
+          title="Mark season as not watched?"
+          body={`This removes the watched status from every episode in ${seasonObj.name}. Other seasons aren’t affected.`}
+          confirmLabel="Unwatch season"
+          danger
+          onCancel={() => setConfirmReset(false)}
+          onConfirm={() => {
+            markAllUnwatched(allIds)
+            setConfirmReset(false)
+            toast('Season marked not watched')
+          }}
+        />
       )}
     </div>
   )

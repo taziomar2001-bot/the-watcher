@@ -1,4 +1,5 @@
 import { discardPending } from '../utils/deferredStorage'
+import { ConfirmSheet } from '../ui/Sheet'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AuthScreen } from '../ui/AuthScreen'
@@ -303,61 +304,39 @@ export function SettingsScreen() {
       {showAuth && <AuthScreen onClose={() => setShowAuth(false)} />}
 
       {confirmSignOut && (
-        <div
-          className="sheet-backdrop"
-          onClick={(e) => {
-            e.stopPropagation()
+        <ConfirmSheet
+          title="Sign out?"
+          body="Your library stays safe in your account. This device stops showing it until you sign in again."
+          confirmLabel="Sign out"
+          onCancel={() => setConfirmSignOut(false)}
+          onConfirm={() => {
             setConfirmSignOut(false)
+            sync.signOut()
           }}
-        >
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="confirm-title">Sign out?</div>
-            <div className="confirm-body">Your library is saved in your account. Signing out removes it from this device until you sign in again.</div>
-            <div className="confirm-actions">
-              <button className="sync-btn ghost pressable" onClick={() => setConfirmSignOut(false)}>
-                Cancel
-              </button>
-              <button
-                className="sync-btn pressable"
-                onClick={() => {
-                  setConfirmSignOut(false)
-                  sync.signOut()
-                }}
-              >
-                Sign Out
-              </button>
-            </div>
-          </div>
-        </div>
+        />
       )}
 
       {confirmDelete && (
-        <div
-          className="sheet-backdrop"
-          onClick={(e) => {
-            e.stopPropagation()
+        <ConfirmSheet
+          danger
+          title="Delete your library?"
+          body={
+            <>
+              This permanently deletes your watch history, ratings, favorites and lists from your account and this device, then signs you out. It can’t be undone.
+              <br />
+              <br />
+              Your sign-in, public profile and community posts stay.
+            </>
+          }
+          confirmLabel="Delete library"
+          typeToConfirm="delete"
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => {
             setConfirmDelete(false)
+            void doDelete()
           }}
-        >
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="confirm-title">Delete your library?</div>
-            <div className="confirm-body">
-              This deletes your watch history, ratings and lists from your account and this device. Your login and profile stay.
-            </div>
-            <div className="confirm-actions">
-              <button className="sync-btn ghost pressable" onClick={() => setConfirmDelete(false)}>
-                Cancel
-              </button>
-              <button className="sync-btn danger pressable" onClick={doDelete}>
-                Delete Library
-              </button>
-            </div>
-          </div>
-        </div>
+        />
       )}
-
     </div>
   )
 }

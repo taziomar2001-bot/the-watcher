@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Sheet } from './Sheet'
 import { ChevronRight, SearchIcon, FilterIcon, CheckIcon } from '../components/Icons'
 import { DOT_COLOR, DOT_LABEL, type DotColor } from '../logic/status'
 
@@ -123,9 +124,7 @@ export function SortMenu<T extends string>({
         <span>{current?.label ?? title}</span>
       </button>
       {open && (
-        <div className="sheet-backdrop" onClick={() => setOpen(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
+        <Sheet onClose={() => setOpen(false)} label={title}>
             <div className="sheet-title">{title}</div>
             {options.map((o) => (
               <button
@@ -140,8 +139,7 @@ export function SortMenu<T extends string>({
                 {o.key === value && <CheckIcon size={18} />}
               </button>
             ))}
-          </div>
-        </div>
+        </Sheet>
       )}
     </>
   )

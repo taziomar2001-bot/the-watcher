@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ConfirmSheet } from '../ui/Sheet'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, DotsIcon, PeopleIcon, PlusIcon } from '../components/Icons'
@@ -410,6 +411,7 @@ function Announcements({ c, isMember, isMod }: { c: Community; isMember: boolean
   const [posting, setPosting] = useState(false)
   const [openPost, setOpenPost] = useState<string | null>(null)
   const [postMenu, setPostMenu] = useState<Post | null>(null)
+  const [confirmPost, setConfirmPost] = useState<Post | null>(null)
 
   const load = postsQ.reload
 
@@ -514,11 +516,9 @@ function Announcements({ c, isMember, isMod }: { c: Community; isMember: boolean
               )}
               <button
                 className="sheet-row danger"
-                onClick={async () => {
-                  const p = postMenu
+                onClick={() => {
+                  setConfirmPost(postMenu)
                   setPostMenu(null)
-                  if (await deletePost(p.id)) setPosts((list) => list?.filter((x) => x.id !== p.id))
-                  else toast('Couldn’t delete right now')
                 }}
               >
                 <span>Delete post</span>
@@ -527,6 +527,21 @@ function Announcements({ c, isMember, isMod }: { c: Community; isMember: boolean
           </div>,
           document.body,
         )}
+      {confirmPost && (
+        <ConfirmSheet
+          danger
+          title="Delete this post?"
+          body="It’s removed for everyone, with its comments and reactions."
+          confirmLabel="Delete"
+          onCancel={() => setConfirmPost(null)}
+          onConfirm={async () => {
+            const p = confirmPost
+            setConfirmPost(null)
+            if (await deletePost(p.id)) setPosts((list) => list?.filter((x) => x.id !== p.id))
+            else toast('Couldn’t delete right now')
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -629,6 +644,7 @@ function Chat({ c, isMod }: { c: Community; isMod: boolean }) {
   const [more, setMore] = useState(false)
   const [draft, setDraft] = useState('')
   const [picked, setPicked] = useState<number | null>(null)
+  const [confirmMsg, setConfirmMsg] = useState<Message | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
   const addPeople = useCallback(async (ids: string[]) => {
@@ -729,10 +745,9 @@ function Chat({ c, isMod }: { c: Community; isMod: boolean }) {
               {picked === m.id && (mine || isMod) && (
                 <button
                   className="msg-del"
-                  onClick={async () => {
+                  onClick={() => {
                     setPicked(null)
-                    if (await deleteMessage(m.id)) setMsgs((list) => list?.filter((x) => x.id !== m.id))
-                    else toast('Couldn’t delete')
+                    setConfirmMsg(m)
                   }}
                 >
                   Delete message
@@ -743,6 +758,21 @@ function Chat({ c, isMod }: { c: Community; isMod: boolean }) {
         })
       )}
       <div ref={endRef} />
+      {confirmMsg && (
+        <ConfirmSheet
+          danger
+          title="Delete this message?"
+          body="It’s removed for everyone in the chat."
+          confirmLabel="Delete"
+          onCancel={() => setConfirmMsg(null)}
+          onConfirm={async () => {
+            const m = confirmMsg
+            setConfirmMsg(null)
+            if (await deleteMessage(m.id)) setMsgs((list) => list?.filter((x) => x.id !== m.id))
+            else toast('Couldn’t delete')
+          }}
+        />
+      )}
       <ComposerBar value={draft} onChange={setDraft} onSend={() => void send()} placeholder={`Message ${c.name}`} maxLength={1000} />
     </div>
   )
@@ -756,6 +786,7 @@ function Members({ c, me, onChanged }: { c: Community; me: Membership | null; on
   const toast = useToast((s) => s.show)
   const [list, setList] = useState<Member[] | undefined>()
   const [acting, setActing] = useState<Member | null>(null)
+  const [confirmAct, setConfirmAct] = useState<{ m: Member; action: 'remove' | 'ban' | 'transfer_owner' } | null>(null)
   const isMod = me?.status === 'active' && me.role !== 'member'
   const isOwner = me?.status === 'active' && me.role === 'owner'
 
@@ -887,20 +918,42 @@ function Members({ c, me, onChanged }: { c: Community; me: Membership | null; on
                 </button>
               )}
               {isOwner && (
-                <button className="sheet-row" onClick={() => void act(acting, 'transfer_owner')}>
+                <button className="sheet-row" onClick={() => (setConfirmAct({ m: acting, action: 'transfer_owner' }), setActing(null))}>
                   <span>Make owner (you become an admin)</span>
                 </button>
               )}
-              <button className="sheet-row danger" onClick={() => void act(acting, 'remove')}>
+              <button className="sheet-row danger" onClick={() => (setConfirmAct({ m: acting, action: 'remove' }), setActing(null))}>
                 <span>Remove from community</span>
               </button>
-              <button className="sheet-row danger" onClick={() => void act(acting, 'ban')}>
+              <button className="sheet-row danger" onClick={() => (setConfirmAct({ m: acting, action: 'ban' }), setActing(null))}>
                 <span>Ban</span>
               </button>
             </div>
           </div>,
           document.body,
         )}
+      {confirmAct && (() => {
+        const who = confirmAct.m.profile ? nameOf(confirmAct.m.profile) : 'this member'
+        const copy = {
+          ban: { title: `Ban ${who}?`, body: 'They’re removed and can’t join again unless you unban them.', label: 'Ban' },
+          remove: { title: `Remove ${who}?`, body: 'They’re removed from the community but can ask to join again.', label: 'Remove' },
+          transfer_owner: { title: `Make ${who} the owner?`, body: 'They get full control of the community, including deleting it. You become an admin and can’t take ownership back yourself.', label: 'Make owner' },
+        }[confirmAct.action]
+        return (
+          <ConfirmSheet
+            danger
+            title={copy.title}
+            body={copy.body}
+            confirmLabel={copy.label}
+            onCancel={() => setConfirmAct(null)}
+            onConfirm={() => {
+              const x = confirmAct
+              setConfirmAct(null)
+              void act(x.m, x.action)
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }

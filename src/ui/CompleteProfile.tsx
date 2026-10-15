@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ConfirmSheet } from './Sheet'
 import { supabase } from '../data/supabase'
 import { claimUsername, getMyProfile, updateMyIdentity } from '../data/social'
 import { hasPendingUsernameFor, useSync } from '../logic/sync'
@@ -39,6 +40,7 @@ export function useNeedsProfile(): [boolean, () => void] {
 export function CompleteProfile({ onDone }: { onDone: () => void }) {
   const email = useSync((s) => s.email)
   const signOut = useSync((s) => s.signOut)
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
   const updateProfile = useLibrary((s) => s.updateProfile)
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -142,9 +144,22 @@ export function CompleteProfile({ onDone }: { onDone: () => void }) {
         <button className="welcome-primary pressable" disabled={!valid || saving} onClick={() => void submit()}>
           {saving ? 'Saving…' : 'Continue'}
         </button>
-        <button className="welcome-switch pressable" disabled={saving} onClick={() => void signOut()}>
+        <button className="welcome-switch pressable" disabled={saving} onClick={() => setConfirmSignOut(true)}>
           Sign out
         </button>
+        {confirmSignOut && (
+          <ConfirmSheet
+            title="Sign out?"
+            body="Your account stays. You can sign back in any time to finish setting up your profile."
+            confirmLabel="Sign out"
+            zIndex="calc(var(--z-toast) + 1)"
+            onCancel={() => setConfirmSignOut(false)}
+            onConfirm={() => {
+              setConfirmSignOut(false)
+              void signOut()
+            }}
+          />
+        )}
       </div>
     </main>
   )

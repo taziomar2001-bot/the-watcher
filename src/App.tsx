@@ -29,6 +29,7 @@ import { DiscoverScreen } from './screens/DiscoverScreen'
 import { useCommunityListSync } from './logic/communityLists'
 import { ProfileScreen, ProfileListsScreen } from './screens/ProfileScreen'
 import { lastContentPath } from './logic/content'
+import { useEscapeClosesSheets } from './ui/Sheet'
 
 function readOnboarded(): boolean {
   try {
@@ -106,6 +107,7 @@ function BackgroundSync() {
 export default function App() {
   const location = useLocation()
   useNavTracker()
+  useEscapeClosesSheets()
   const syncStatus = useSync((s) => s.status)
   const showSyncGate = useSync((s) =>
     (s.status === 'signedIn' || s.status === 'busy') && s.mayShowLocal === false,

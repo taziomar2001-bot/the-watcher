@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AuthScreen } from './AuthScreen'
+import { ConfirmSheet } from './Sheet'
 import { forgetDeviceLibrary, hasUnsavedDeviceChanges } from '../logic/sync'
 
 /**
@@ -14,21 +15,16 @@ export function SignedOutLibraryGate() {
     <>
       <AuthScreen onClose={() => {}} note="Sign in to pick up where you left off." skipLabel="Continue without an account" onSkip={skip} />
       {confirm && (
-        <div className="sheet-backdrop" style={{ zIndex: 'calc(var(--z-toast) + 1)' }} onClick={() => setConfirm(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="confirm-title">Some changes aren’t synced yet</div>
-            <div className="confirm-body">Sign in to keep your latest changes. Continuing without an account removes them from this device.</div>
-            <div className="confirm-actions">
-              <button className="sync-btn ghost pressable" onClick={() => setConfirm(false)}>
-                Sign in instead
-              </button>
-              <button className="sync-btn danger pressable" onClick={forgetDeviceLibrary}>
-                Continue anyway
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmSheet
+          danger
+          zIndex="calc(var(--z-toast) + 1)"
+          title="Some changes aren’t synced yet"
+          body="Sign in to keep your latest changes. Continuing without an account removes them from this device."
+          cancelLabel="Sign in instead"
+          confirmLabel="Continue anyway"
+          onCancel={() => setConfirm(false)}
+          onConfirm={forgetDeviceLibrary}
+        />
       )}
     </>
   )

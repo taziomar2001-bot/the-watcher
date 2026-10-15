@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ConfirmSheet } from '../ui/Sheet'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft } from '../components/Icons'
 import { SmartImage } from '../components/ui'
@@ -229,6 +231,7 @@ export function MatchSessionScreen() {
   const [pageOrder, setPageOrder] = useState<number[] | null>(null)
   const [overlay, setOverlay] = useState<Card | null>(null)
   const [showMatches, setShowMatches] = useState(false)
+  const [confirmEnd, setConfirmEnd] = useState(false)
   const seenMatches = useRef<Set<string> | null>(null)
   const loadingPage = useRef(false)
 
@@ -401,7 +404,7 @@ export function MatchSessionScreen() {
         <button className="follow-btn pressable" onClick={() => setShowMatches((v) => !v)}>
           {matches.length} match{matches.length === 1 ? '' : 'es'}
         </button>
-        <button className="auth-link danger" onClick={() => void endSession(session.id).then(refresh)}>
+        <button className="auth-link danger" onClick={() => setConfirmEnd(true)}>
           End session
         </button>
       </div>
@@ -442,7 +445,20 @@ export function MatchSessionScreen() {
         </div>
       )}
 
-      {overlay && (
+      {confirmEnd && (
+        <ConfirmSheet
+          danger
+          title="End this session?"
+          body={`It ends for both of you. ${matches.length ? 'Your matches stay listed on the ended session.' : ''}`}
+          confirmLabel="End session"
+          onCancel={() => setConfirmEnd(false)}
+          onConfirm={() => {
+            setConfirmEnd(false)
+            void endSession(session.id).then(refresh)
+          }}
+        />
+      )}
+      {overlay && createPortal(
         <div className="match-overlay" role="dialog" aria-label="It's a match" onClick={() => setOverlay(null)}>
           <div className="match-burst" aria-hidden="true">
             {Array.from({ length: 14 }, (_, i) => (
@@ -463,7 +479,8 @@ export function MatchSessionScreen() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

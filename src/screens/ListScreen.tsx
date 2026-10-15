@@ -397,7 +397,7 @@ export function ListScreen() {
                   nav(-1)
                 }}
               >
-                Delete List
+                Delete list
               </button>
             </div>
           </div>

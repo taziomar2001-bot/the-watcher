@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { ConfirmSheet } from '../ui/Sheet'
 import { useNavigate, useParams } from 'react-router-dom'
 import { SeasonCard } from '../ui/cards'
 import { DetailHero, ActionBar, ActionBtn, DetailTabs, useDetailTab } from '../ui/Detail'
@@ -45,6 +46,7 @@ export function ShowScreen() {
   const [tab, setTab] = useDetailTab<'episodes' | 'about' | 'comments'>(`show:${id}`, 'about')
   const [listSheet, setListSheet] = useState(false)
   const [statusSheet, setStatusSheet] = useState(false)
+  const [confirmComplete, setConfirmComplete] = useState(false)
   const membership = useListMembership(`show:${id}`)
   const commentCount = useCommentCount(`show:${id}`)
 
@@ -212,9 +214,8 @@ export function ShowScreen() {
                 <button
                   className="sheet-row"
                   onClick={() => {
-                    lib.markAllPrevious(allReleasedIds)
                     setStatusSheet(false)
-                    toast('Marked all released episodes watched')
+                    setConfirmComplete(true)
                   }}
                 >
                   <span>
@@ -256,6 +257,19 @@ export function ShowScreen() {
           </div>,
           document.body,
         )}
+      {confirmComplete && (
+        <ConfirmSheet
+          title="Mark as completed?"
+          body={`Every released episode of ${show.title} (${allReleasedIds.length}) will be marked as watched.`}
+          confirmLabel="Mark completed"
+          onCancel={() => setConfirmComplete(false)}
+          onConfirm={() => {
+            setConfirmComplete(false)
+            lib.markAllPrevious(allReleasedIds)
+            toast('Marked all released episodes watched')
+          }}
+        />
+      )}
       {listSheet && <AddToListSheet itemRef={ref} meta={{ t: show.title, p: show.poster, y: show.firstAirYear }} onClose={() => setListSheet(false)} />}
     </div>
   )

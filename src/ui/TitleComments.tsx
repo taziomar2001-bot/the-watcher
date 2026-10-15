@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ConfirmSheet } from './Sheet'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { HeartIcon, DotsIcon, EyeOffIcon } from '../components/Icons'
@@ -59,6 +60,7 @@ export function TitleComments({ target, what }: { target: string; what: string }
   const [sending, setSending] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [menu, setMenu] = useState<TitleComment | null>(null)
+  const [confirmDel, setConfirmDel] = useState<TitleComment | null>(null)
   const [replies, setReplies] = useState<Record<string, TitleComment[] | 'loading'>>({})
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -114,7 +116,6 @@ export function TitleComments({ target, what }: { target: string; what: string }
   }
 
   const remove = async (c: TitleComment) => {
-    setMenu(null)
     if (!(await deleteTitleComment(c.id))) return toast('Couldn’t delete right now')
     if (c.reply_count > 0) patch(c.id, (x) => ({ ...x, deleted: true, body: '' }))
     else {
@@ -281,13 +282,27 @@ export function TitleComments({ target, what }: { target: string; what: string }
           <div className="sheet-backdrop" onClick={() => setMenu(null)}>
             <div className="sheet" onClick={(e) => e.stopPropagation()}>
               <div className="sheet-handle" />
-              <button className="sheet-row danger" onClick={() => void remove(menu)}>
+              <button className="sheet-row danger" onClick={() => (setConfirmDel(menu), setMenu(null))}>
                 <span>Delete comment</span>
               </button>
             </div>
           </div>,
           document.body,
         )}
+      {confirmDel && (
+        <ConfirmSheet
+          danger
+          title="Delete this comment?"
+          body={confirmDel.reply_count > 0 ? 'It will show as deleted so the replies stay.' : 'This can’t be undone.'}
+          confirmLabel="Delete"
+          onCancel={() => setConfirmDel(null)}
+          onConfirm={() => {
+            const c = confirmDel
+            setConfirmDel(null)
+            void remove(c)
+          }}
+        />
+      )}
     </div>
   )
 }

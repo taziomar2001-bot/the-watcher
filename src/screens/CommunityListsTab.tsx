@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ConfirmSheet } from '../ui/Sheet'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, DotsIcon, PlusIcon, OrderedListIcon, RemixIcon } from '../components/Icons'
@@ -184,6 +185,7 @@ export function CommunityListScreen() {
   const q = useCached<CommunityList | { missing: true }>(`cll:${id}:${owner}:${lid}`, async () => (await getCommunityList(id, owner, lid)) ?? { missing: true })
   const [menu, setMenu] = useState(false)
   const [remixing, setRemixing] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const myId = useSync((s) => s.userId)
   const addList = useLibrary((s) => s.addList)
   const { list: mine } = useMyCommunities()
@@ -284,12 +286,9 @@ export function CommunityListScreen() {
               </button>
               <button
                 className="sheet-row danger"
-                onClick={async () => {
+                onClick={() => {
                   setMenu(false)
-                  const r = await unlinkList(id, l.list_id, l.owner_id)
-                  if (!r.ok) return toast('Only owners and admins can remove lists')
-                  toast('Removed from the community')
-                  nav(-1)
+                  setConfirmRemove(true)
                 }}
               >
                 <span>Remove from community (owners & admins)</span>
@@ -298,6 +297,22 @@ export function CommunityListScreen() {
           </div>,
           document.body,
         )}
+      {confirmRemove && l && (
+        <ConfirmSheet
+          danger
+          title="Remove this list from the community?"
+          body="Only the community’s copy is removed. The list stays in its owner’s library."
+          confirmLabel="Remove"
+          onCancel={() => setConfirmRemove(false)}
+          onConfirm={async () => {
+            setConfirmRemove(false)
+            const r = await unlinkList(id, l.list_id, l.owner_id)
+            if (!r.ok) return toast('Only owners and admins can remove lists')
+            toast('Removed from the community')
+            nav(-1)
+          }}
+        />
+      )}
     </div>
   )
 }
