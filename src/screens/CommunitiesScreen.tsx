@@ -1,18 +1,13 @@
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { PlusIcon, ChevronRight, FilterIcon } from '../components/Icons'
 import { SmartImage } from '../components/ui'
 import { SearchField, SectionHeader } from '../ui/primitives'
 import { useSync } from '../logic/sync'
-import { useToast } from '../store/useToast'
-import { addCommunityTitles, communitiesForTitle, createCommunity, type Community, type CommunityContentType, type CommunityDiscoveryFilters } from '../data/communities'
+import { communitiesForTitle, type Community, type CommunityDiscoveryFilters } from '../data/communities'
 import { useMyCommunities } from '../logic/communityCache'
-import { communityLocation, communitySearchText, contentTypesLabel, matchesCommunityFilters, validCommunityLocation, type CommunityLocation } from '../logic/communityTaxonomy'
+import { communityLocation, communitySearchText, contentTypesLabel, matchesCommunityFilters } from '../logic/communityTaxonomy'
 import { useCached } from '../utils/cache'
-import { TitlePicker } from '../ui/TitlePicker'
-import { CommunityLocationField } from '../ui/CommunityLocationField'
-import { CommunityContentField } from '../ui/CommunityContentField'
 import { CommunityFilterSheet, type MyCommunityRoleFilter } from '../ui/CommunityFilterSheet'
 
 export interface TopicDraft {
@@ -92,7 +87,6 @@ export function CommunitiesScreen() {
   const location = useLocation()
   const [params, setParams] = useSearchParams()
   const signedIn = useSync((s) => s.status === 'signedIn')
-  const [creating, setCreating] = useState<TopicDraft | null | false>(false)
   const [q, setQ] = useState('')
   const [filters, setFilters] = useState<CommunityDiscoveryFilters>({})
   const [role, setRole] = useState<MyCommunityRoleFilter>('all')
@@ -117,8 +111,8 @@ export function CommunitiesScreen() {
   const error = mineError === 'not_set_up' || (foundQ.data && !Array.isArray(foundQ.data))
     ? 'not_set_up' : mineError || foundQ.failed ? 'error' : undefined
   useEffect(() => {
-    if (creating === false) void reloadMine()
-  }, [creating]) // eslint-disable-line react-hooks/exhaustive-deps
+    void reloadMine()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const myStatus = new Map((mine ?? []).map((c) => [c.id, c]))
   const badgeFor = (c: Community) => {
@@ -142,7 +136,7 @@ export function CommunitiesScreen() {
         </div>
         {signedIn && !error && (
           <div className="header-icons">
-            <button className="icon-round pressable" onClick={() => setCreating(topic ?? null)} aria-label="Create a community">
+            <button className="icon-round pressable" onClick={() => nav('/communities/new', { state: { topic } })} aria-label="Create a community">
               <PlusIcon size={20} />
             </button>
           </div>
@@ -165,7 +159,7 @@ export function CommunitiesScreen() {
             {found === undefined ? <CardSkeletons n={2} /> :
               found.length === 0 ? <Empty title="No communities yet" sub="Start the first one for this title." /> :
                 found.map((c) => <CommunityCard key={c.id} c={c} badge={badgeFor(c)} />)}
-            <button className="sync-btn primary full pressable" style={{ marginTop: 10 }} onClick={() => setCreating(topic)}>
+            <button className="sync-btn primary full pressable" style={{ marginTop: 10 }} onClick={() => nav('/communities/new', { state: { topic } })}>
               Start a community{topic.title ? ` for ${topic.title}` : ''}
             </button>
           </div>
@@ -214,16 +208,6 @@ export function CommunitiesScreen() {
           setRole(nextRole ?? 'all')
           setFilterOpen(false)
         }} onClose={() => setFilterOpen(false)} />}
-      {creating !== false && (
-        <CreateCommunitySheet
-          topic={creating ?? undefined}
-          onClose={() => setCreating(false)}
-          onCreated={(id) => {
-            setCreating(false)
-            nav(`/c/${id}`)
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -270,90 +254,6 @@ function Empty({ title, sub }: { title?: string; sub?: string }) {
       {title && <div className="empty-title">{title}</div>}
       {sub && <div className="empty-sub">{sub}</div>}
     </div>
-  )
-}
-
-function CreateCommunitySheet({ topic, onClose, onCreated }: { topic?: TopicDraft; onClose: () => void; onCreated: (id: string) => void }) {
-  const toast = useToast((s) => s.show)
-  const [name, setName] = useState(topic?.title ? `${topic.title} fans` : '')
-  const [description, setDescription] = useState('')
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public')
-  const [contentTypes, setContentTypes] = useState<CommunityContentType[]>(topic ? [topic.type] : ['show', 'movie'])
-  const [communityPlace, setCommunityPlace] = useState<CommunityLocation>({ kind: 'global' })
-  const [titles, setTitles] = useState<TopicDraft[]>(topic ? [topic] : [])
-  const [picking, setPicking] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const valid = name.trim().length >= 3 && name.trim().length <= 60 && contentTypes.length > 0 && validCommunityLocation(communityPlace)
-
-  const submit = async () => {
-    if (!valid || saving) return
-    setSaving(true)
-    const r = await createCommunity({ name: name.trim(), description: description.trim(), visibility, topic: titles[0], contentTypes, location: communityPlace })
-    if (r.ok && titles.length) {
-      await addCommunityTitles(
-        r.value,
-        titles.map((t) => ({ ref: `${t.type}:${t.id}`, title: t.title, poster: t.poster, year: t.year })),
-      )
-    }
-    setSaving(false)
-    if (r.ok) onCreated(r.value)
-    else toast(r.code === 'too_many_communities' ? 'You can own up to 10 communities' : 'Couldn’t create the community')
-  }
-
-  if (picking)
-    return (
-      <TitlePicker
-        kind="mixed"
-        title="Link titles"
-        isPicked={(ref) => titles.some((t) => `${t.type}:${t.id}` === ref)}
-        onToggle={(ref, meta) => {
-          const [type, id] = ref.split(':') as ['show' | 'movie', string]
-          setTitles((ts) =>
-            ts.some((t) => t.type === type && t.id === id) ? ts.filter((t) => !(t.type === type && t.id === id)) : ts.length >= 25 ? ts : [...ts, { type, id, title: meta.t, poster: meta.p, year: meta.y }],
-          )
-        }}
-        onClose={() => setPicking(false)}
-      />
-    )
-
-  return createPortal(
-    <div className="sheet-backdrop" onClick={onClose}>
-      <form
-        className="sheet community-form"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={(e) => {
-          e.preventDefault()
-          void submit()
-        }}
-      >
-        <div className="sheet-handle" />
-        <div className="sheet-title">New community</div>
-        <input className="sync-input" placeholder="Name" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
-        <textarea className="sync-input" placeholder="What’s it about? (optional)" maxLength={500} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-        <div className="field-label">About these titles</div>
-        <TitleChips titles={titles} onRemove={(t) => setTitles((ts) => ts.filter((x) => x !== t))} onAdd={() => setPicking(true)} />
-        <div className="vis-hint">Optional. Owners and admins can add more later; linked titles can’t be removed.</div>
-        <CommunityContentField value={contentTypes} onChange={setContentTypes} />
-        <CommunityLocationField value={communityPlace} onChange={setCommunityPlace} />
-        <div className="vis-choice">
-          <button type="button" className={`vis-opt pressable ${visibility === 'public' ? 'on' : ''}`} onClick={() => setVisibility('public')}>
-            Public
-          </button>
-          <button type="button" className={`vis-opt pressable ${visibility === 'private' ? 'on' : ''}`} onClick={() => setVisibility('private')}>
-            Private
-          </button>
-        </div>
-        <div className="vis-hint">
-          {visibility === 'public'
-            ? 'Anyone can read the news and join. Chat is for members.'
-            : 'Anyone can find it, but you approve who joins and only members see inside.'}
-        </div>
-        <button type="submit" className="welcome-primary pressable" disabled={!valid || saving}>
-          {saving ? 'Creating…' : 'Create community'}
-        </button>
-      </form>
-    </div>,
-    document.body,
   )
 }
 

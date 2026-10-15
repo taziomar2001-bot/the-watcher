@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CommunityDiscoveryFilters, CommunityRole } from '../data/communities'
-import { COMMUNITY_CONTENT_TYPES, validCommunityLocation, type CommunityLocation } from '../logic/communityTaxonomy'
+import { COMMUNITY_CONTENT_TYPES, type CommunityLocation } from '../logic/communityTaxonomy'
 import { CommunityLocationField } from './CommunityLocationField'
 
 export type MyCommunityRoleFilter = CommunityRole | 'all'
@@ -19,8 +19,6 @@ export function CommunityFilterSheet({
 }) {
   const [draft, setDraft] = useState(filters)
   const [draftRole, setDraftRole] = useState<MyCommunityRoleFilter>(role ?? 'all')
-  const location: CommunityLocation = draft.location ?? { kind: 'global' }
-  const locationSelected = draft.location !== undefined
   const setLocation = (value: CommunityLocation | undefined) => setDraft((f) => ({ ...f, location: value }))
 
   return createPortal(
@@ -28,8 +26,7 @@ export function CommunityFilterSheet({
       <form className="sheet community-form community-filter-sheet" onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault()
-          if (locationSelected && !validCommunityLocation(location)) return
-          onApply(draft, role === undefined ? undefined : draftRole)
+                    onApply(draft, role === undefined ? undefined : draftRole)
         }}>
         <div className="sheet-handle" />
         <div className="sheet-title">Filter communities</div>
@@ -43,21 +40,9 @@ export function CommunityFilterSheet({
               onClick={() => setDraft((f) => ({ ...f, contentType: type.key }))}>{type.label}</button>
           ))}
         </div>
-        <div className="field-label">Location</div>
-        <div className="vis-choice" role="group" aria-label="Location filter">
-          {(['anywhere', 'global', 'country', 'city'] as const).map((kind) => (
-            <button key={kind} type="button" className={`vis-opt pressable ${kind === 'anywhere' ? !locationSelected ? 'on' : '' : draft.location?.kind === kind ? 'on' : ''}`}
-              aria-pressed={kind === 'anywhere' ? !locationSelected : draft.location?.kind === kind}
-              onClick={() => setLocation(kind === 'anywhere' ? undefined : kind === 'global' ? { kind } : kind === 'country'
-                ? { kind, countryCode: location.countryCode, countryName: location.countryName }
-                : { ...location, kind })}>
-              {kind === 'anywhere' ? 'Any' : kind === 'global' ? 'Global' : kind === 'country' ? 'Country' : 'City'}
-            </button>
-          ))}
+        <div className="fg-card filter-location">
+          <CommunityLocationField value={draft.location} onChange={setLocation} allowAny />
         </div>
-        {locationSelected && location.kind !== 'global' && (
-          <CommunityLocationField value={location} onChange={setLocation} hideKindChoice />
-        )}
         {role !== undefined && (
           <>
             <div className="field-label">Your role</div>
@@ -71,7 +56,7 @@ export function CommunityFilterSheet({
             </div>
           </>
         )}
-        <button type="submit" className="welcome-primary pressable" disabled={locationSelected && !validCommunityLocation(location)}>
+        <button type="submit" className="welcome-primary pressable">
           Apply filters
         </button>
       </form>

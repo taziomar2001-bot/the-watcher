@@ -1,24 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, ImageIcon, PlusIcon, TrashIcon, CheckIcon } from '../components/Icons'
 import { SmartImage } from '../components/ui'
-import { communityHue } from './CommunitiesScreen'
+import { communityHue, type TopicDraft } from './CommunitiesScreen'
 import { RankReorder } from '../ui/RankReorder'
 import { TitlePicker } from '../ui/TitlePicker'
-import { CommunityContentField } from '../ui/CommunityContentField'
 import { CommunityLocationField } from '../ui/CommunityLocationField'
+import { ChoiceDrawer, FormGroup, FormInput, FormRow } from '../ui/FormRows'
 import { RowsSkeleton } from '../ui/Skeletons'
 import { useToast } from '../store/useToast'
 import { useSync } from '../logic/sync'
 import { fileToImage } from '../utils/image'
 import { dropCache, readCache, writeCache } from '../utils/cache'
 import { getMovie, getShow } from '../data/catalog'
-import { validCommunityLocation, type CommunityLocation } from '../logic/communityTaxonomy'
+import { contentTypesLabel, validCommunityLocation, type CommunityLocation } from '../logic/communityTaxonomy'
 import {
   addCommunityTitles,
   communityTitleOrder,
   communityTitles,
+  createCommunity,
   getCommunity,
   setTitleOrder,
   updateCommunity,
@@ -29,8 +30,9 @@ import {
 } from '../data/communities'
 
 type Art = 'avatar' | 'banner'
+type Drawer = null | 'content' | 'privacy' | 'order' | 'arrange'
 
-/** Edit a community on its own page: look, details, category, titles, privacy. */
+/** Edit a community (owners/admins). */
 export function CommunityEditScreen() {
   const nav = useNavigate()
   const { id = '' } = useParams()
@@ -60,7 +62,7 @@ export function CommunityEditScreen() {
       <Page title="Edit community" onBack={() => nav(-1)}>
         <div className="page-pad">
           <div className="skeleton" style={{ display: 'block', height: 150, borderRadius: 18, marginBottom: 18 }} />
-          <RowsSkeleton n={5} h={52} />
+          <RowsSkeleton n={5} h={48} />
         </div>
       </Page>
     )
@@ -72,7 +74,17 @@ export function CommunityEditScreen() {
         </div>
       </Page>
     )
-  return <EditForm c={c} initialTitles={titles!} onDone={() => nav(-1)} />
+  return <CommunityForm mode="edit" c={c} initialTitles={titles!} onDone={() => nav(-1)} />
+}
+
+/** Start a new community (optionally about a title, from a show/movie page). */
+export function CommunityCreateScreen() {
+  const nav = useNavigate()
+  const topic = (useLocation().state as { topic?: TopicDraft } | null)?.topic
+  const initial: CommunityTitle[] = topic?.id
+    ? [{ community_id: '', ref: `${topic.type}:${topic.id}`, title: topic.title, poster: topic.poster ?? null, year: topic.year ?? null }]
+    : []
+  return <CommunityForm mode="create" initialTitles={initial} suggestedName={topic?.title ? `${topic.title} fans` : ''} onDone={() => nav(-1)} onCreated={(id) => nav(`/c/${id}`, { replace: true })} />
 }
 
 function Page({ title, onBack, right, children }: { title: string; onBack: () => void; right?: React.ReactNode; children: React.ReactNode }) {
@@ -90,194 +102,244 @@ function Page({ title, onBack, right, children }: { title: string; onBack: () =>
   )
 }
 
-function EditForm({ c, initialTitles, onDone }: { c: Community; initialTitles: CommunityTitle[]; onDone: () => void }) {
+const CONTENT_OPTIONS: { key: CommunityContentType; label: string; hint: string }[] = [
+  { key: 'show', label: 'TV Shows', hint: 'Series, seasons and episodes' },
+  { key: 'movie', label: 'Movies', hint: 'Films' },
+]
+const PRIVACY_OPTIONS: { key: 'public' | 'private'; label: string; hint: string }[] = [
+  { key: 'public', label: 'Public', hint: 'Anyone can read the news and join. Chat is for members.' },
+  { key: 'private', label: 'Private', hint: 'Anyone can find it; you approve who joins and only members see inside.' },
+]
+
+function CommunityForm({
+  mode,
+  c,
+  initialTitles,
+  suggestedName = '',
+  onDone,
+  onCreated,
+}: {
+  mode: 'create' | 'edit'
+  c?: Community
+  initialTitles: CommunityTitle[]
+  suggestedName?: string
+  onDone: () => void
+  onCreated?: (id: string) => void
+}) {
   const toast = useToast((s) => s.show)
+  const editing = mode === 'edit' && !!c
   const [titles, setTitles] = useState(initialTitles)
-  const [name, setName] = useState(c.name)
-  const [description, setDescription] = useState(c.description)
-  const [visibility, setVisibility] = useState(c.visibility)
-  const [contentTypes, setContentTypes] = useState<CommunityContentType[]>(c.content_types ?? ['show', 'movie'])
-  const [place, setPlace] = useState<CommunityLocation>({
-    kind: c.location_kind ?? 'global',
-    countryCode: c.location_country_code ?? undefined,
-    countryName: c.location_country_name ?? undefined,
-    city: c.location_city ?? undefined,
-    adminName: c.location_admin_name ?? undefined,
-    placeId: c.location_place_id ?? undefined,
-  })
-  const [avatar, setAvatar] = useState<string | null | undefined>(c.avatar)
-  const [banner, setBanner] = useState<{ full: string | null; thumb: string | null } | undefined>(
-    c.banner || c.banner_thumb ? { full: c.banner ?? null, thumb: c.banner_thumb ?? null } : undefined,
+  const [name, setName] = useState(c?.name ?? suggestedName)
+  const [description, setDescription] = useState(c?.description ?? '')
+  const [visibility, setVisibility] = useState<'public' | 'private'>(c?.visibility ?? 'public')
+  const [contentTypes, setContentTypes] = useState<CommunityContentType[]>(
+    c?.content_types ?? (initialTitles[0] ? [initialTitles[0].ref.startsWith('show:') ? 'show' : 'movie'] : ['show', 'movie']),
   )
-  const [order, setOrder] = useState<TitleOrder | undefined>()
-  const orderAtOpen = useRef<TitleOrder | undefined>(undefined)
+  const [place, setPlace] = useState<CommunityLocation>(
+    c
+      ? {
+          kind: c.location_kind ?? 'global',
+          countryCode: c.location_country_code ?? undefined,
+          countryName: c.location_country_name ?? undefined,
+          city: c.location_city ?? undefined,
+          adminName: c.location_admin_name ?? undefined,
+          placeId: c.location_place_id ?? undefined,
+        }
+      : { kind: 'global' },
+  )
+  const [avatar, setAvatar] = useState<string | null | undefined>(c?.avatar)
+  const [banner, setBanner] = useState<{ full: string | null; thumb: string | null } | undefined>(
+    c && (c.banner || c.banner_thumb) ? { full: c.banner ?? null, thumb: c.banner_thumb ?? null } : undefined,
+  )
+  const [order, setOrder] = useState<TitleOrder>('added')
+  const orderAtOpen = useRef<TitleOrder>('added')
   const [refs, setRefs] = useState<string[]>(initialTitles.map((t) => t.ref))
   const startOrder = useRef(initialTitles.map((t) => t.ref).join('|'))
   const [art, setArt] = useState<Art | null>(null)
+  const [drawer, setDrawer] = useState<Drawer>(null)
   const [linking, setLinking] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    void communityTitleOrder(c.id).then((o) => {
+    if (!editing) return
+    void communityTitleOrder(c!.id).then((o) => {
       orderAtOpen.current = o
       setOrder(o)
     })
-  }, [c.id])
+  }, [editing, c])
 
   const byRef = new Map(titles.map((t) => [t.ref, t]))
+  const shown = order === 'custom' ? refs.map((r) => byRef.get(r)).filter((t): t is CommunityTitle => !!t) : titles
   const valid = name.trim().length >= 3 && contentTypes.length > 0 && validCommunityLocation(place)
-  const hue = communityHue(c.id)
+  const hue = communityHue(c?.id ?? name)
   const bannerSrc = banner?.full || banner?.thumb || undefined
+
+  const locationPatch = {
+    content_types: contentTypes,
+    location_kind: place.kind,
+    location_country_code: place.kind === 'global' ? null : place.countryCode ?? null,
+    location_country_name: place.kind === 'global' ? null : place.countryName ?? null,
+    location_city: place.kind === 'city' ? place.city ?? null : null,
+    location_admin_name: place.kind === 'city' ? place.adminName ?? null : null,
+    location_place_id: place.kind === 'city' ? place.placeId ?? null : null,
+  }
 
   const save = async () => {
     if (!valid || saving) return
     setSaving(true)
-    const patch: Parameters<typeof updateCommunity>[1] = {
-      name: name.trim(),
-      description: description.trim(),
-      visibility,
-      content_types: contentTypes,
-      location_kind: place.kind,
-      location_country_code: place.kind === 'global' ? null : place.countryCode ?? null,
-      location_country_name: place.kind === 'global' ? null : place.countryName ?? null,
-      location_city: place.kind === 'city' ? place.city ?? null : null,
-      location_admin_name: place.kind === 'city' ? place.adminName ?? null : null,
-      location_place_id: place.kind === 'city' ? place.placeId ?? null : null,
+    if (!editing) {
+      const first = titles[0]
+      const r = await createCommunity({
+        name: name.trim(),
+        description: description.trim(),
+        visibility,
+        contentTypes,
+        location: place,
+        topic: first ? { type: first.ref.split(':')[0] as 'show' | 'movie', id: first.ref.split(':')[1], title: first.title, poster: first.poster ?? undefined } : undefined,
+      })
+      if (!r.ok) {
+        setSaving(false)
+        return toast(r.code === 'too_many_communities' ? 'You can own up to 10 communities' : 'Couldn’t create the community')
+      }
+      if (titles.length) await addCommunityTitles(r.value, titles.map((t) => ({ ref: t.ref, title: t.title, poster: t.poster ?? undefined, year: t.year ?? undefined })))
+      if (avatar || banner) await updateCommunity(r.value, { avatar: avatar ?? null, banner: banner?.full ?? null, banner_thumb: banner?.thumb ?? null })
+      if (order === 'custom' && titles.length > 1) await setTitleOrder(r.value, 'custom', refs)
+      setSaving(false)
+      return onCreated?.(r.value)
     }
-    if (avatar !== c.avatar) patch.avatar = avatar ?? null
-    if ((banner?.full ?? null) !== (c.banner ?? null)) {
+    const patch: Parameters<typeof updateCommunity>[1] = { name: name.trim(), description: description.trim(), visibility, ...locationPatch }
+    if (avatar !== c!.avatar) patch.avatar = avatar ?? null
+    if ((banner?.full ?? null) !== (c!.banner ?? null)) {
       patch.banner = banner?.full ?? null
       patch.banner_thumb = banner?.thumb ?? null
     }
-    const r = await updateCommunity(c.id, patch)
-    if (r.ok && order && titles.length > 1) {
+    const r = await updateCommunity(c!.id, patch)
+    if (r.ok && titles.length > 1) {
       const changed = order === 'custom' ? refs.join('|') !== startOrder.current || orderAtOpen.current !== 'custom' : orderAtOpen.current !== 'added'
       if (changed) {
-        const o = await setTitleOrder(c.id, order, order === 'custom' ? refs : undefined)
-        if (!o.ok) toast(o.code === 'not_set_up' ? 'Title order needs 010_community_title_order.sql' : 'Couldn’t save the title order')
+        const o = await setTitleOrder(c!.id, order, order === 'custom' ? refs : undefined)
+        if (!o.ok) toast('Couldn’t save the title order')
       }
     }
     setSaving(false)
     if (!r.ok) return toast('Couldn’t save changes — check your connection')
     // The community page shows its cached copy first: update it to the saved values.
-    const key = `c:${useSync.getState().userId}:${c.id}`
+    const key = `c:${useSync.getState().userId}:${c!.id}`
     const cached = readCache<{ community: Community; me: unknown }>(key)
     if (cached && 'community' in cached) writeCache(key, { ...cached, community: { ...cached.community, ...patch } })
-    dropCache(`ct:${c.id}`)
+    dropCache(`ct:${c!.id}`)
     toast('Saved')
     onDone()
   }
 
+  const action = (
+    <button className="header-action pressable" disabled={!valid || saving} onClick={() => void save()}>
+      {saving ? (editing ? 'Saving…' : 'Creating…') : editing ? 'Save' : 'Create'}
+    </button>
+  )
+
   return (
-    <Page
-      title="Edit community"
-      onBack={onDone}
-      right={
-        <button className="follow-btn primary pressable" disabled={!valid || saving} onClick={() => void save()}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-      }
-    >
-      <div className="page-pad edit-page">
+    <Page title={editing ? 'Edit community' : 'New community'} onBack={onDone} right={action}>
+      <div className="page-pad cf">
         {/* Look */}
-        <section className="edit-section">
-          <div className="edit-look">
-            <button type="button" className="edit-look-banner pressable" style={{ background: `linear-gradient(135deg, ${hue}, color-mix(in srgb, ${hue} 35%, #0e1318))` }} onClick={() => setArt('banner')} aria-label="Change banner">
-              {bannerSrc && <img src={bannerSrc} alt="" />}
-              <span className="edit-look-chip">
-                <ImageIcon size={14} /> {bannerSrc ? 'Banner' : 'Add banner'}
-              </span>
-            </button>
-            <button type="button" className="edit-look-avatar pressable" style={avatar ? undefined : { background: hue }} onClick={() => setArt('avatar')} aria-label="Change picture">
-              {avatar ? <img src={avatar} alt="" /> : <span>{name.trim()[0]?.toUpperCase() ?? '?'}</span>}
-              <span className="edit-look-pen">
-                <ImageIcon size={12} />
-              </span>
-            </button>
-          </div>
-        </section>
+        <div className="cf-look">
+          <button type="button" className="cf-banner pressable" style={{ background: `linear-gradient(135deg, ${hue}, color-mix(in srgb, ${hue} 35%, #0e1318))` }} onClick={() => setArt('banner')} aria-label="Change banner">
+            {bannerSrc && <img src={bannerSrc} alt="" />}
+            <span className="cf-edit-chip">
+              <ImageIcon size={13} /> {bannerSrc ? 'Edit' : 'Add banner'}
+            </span>
+          </button>
+          <button type="button" className="cf-avatar pressable" style={avatar ? undefined : { background: hue }} onClick={() => setArt('avatar')} aria-label="Change picture">
+            {avatar ? <img src={avatar} alt="" /> : <span>{name.trim()[0]?.toUpperCase() ?? '?'}</span>}
+            <span className="cf-avatar-badge">
+              <ImageIcon size={11} />
+            </span>
+          </button>
+        </div>
 
-        {/* Details */}
-        <section className="edit-section">
-          <label className="field-label" htmlFor="ce-name">
-            Name
-          </label>
-          <input id="ce-name" className="sync-input" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
-          {name.trim().length < 3 && <div className="vis-hint">At least 3 characters.</div>}
-          <label className="field-label" htmlFor="ce-desc">
-            Description
-          </label>
-          <textarea id="ce-desc" className="sync-input" rows={3} maxLength={500} placeholder="What’s it about?" value={description} onChange={(e) => setDescription(e.target.value)} />
-        </section>
+        <FormGroup>
+          <FormInput label="Name" value={name} onChange={setName} maxLength={60} placeholder="e.g. Severance fans" />
+          <FormInput label="Description" value={description} onChange={setDescription} maxLength={500} placeholder="What’s it about? (optional)" multiline />
+        </FormGroup>
+        {name.trim().length > 0 && name.trim().length < 3 && <div className="fg-foot warn">Names need at least 3 characters.</div>}
 
-        {/* Category */}
-        <section className="edit-section">
-          <CommunityContentField value={contentTypes} onChange={setContentTypes} />
-          <CommunityLocationField value={place} onChange={setPlace} />
-        </section>
+        <FormGroup title="Details">
+          <FormRow label="Content" value={contentTypes.length === 2 ? 'TV Shows & Movies' : contentTypesLabel(contentTypes)} onClick={() => setDrawer('content')} />
+          <CommunityLocationField value={place} onChange={(v) => setPlace(v ?? { kind: 'global' })} />
+          <FormRow label="Privacy" value={visibility === 'public' ? 'Public' : 'Private'} onClick={() => setDrawer('privacy')} />
+        </FormGroup>
 
-        {/* Titles */}
-        <section className="edit-section">
-          <div className="edit-section-head">
-            <span className="field-label">Linked titles</span>
-            {titles.length < 25 && (
-              <button type="button" className="auth-link" onClick={() => setLinking(true)}>
-                <PlusIcon size={14} /> Link a title
-              </button>
-            )}
-          </div>
-          {titles.length === 0 ? (
-            <div className="vis-hint">No titles yet. Link the shows or movies this community is about.</div>
-          ) : (
-            <>
-              {titles.length > 1 && order && (
-                <div className="vis-choice" role="radiogroup" aria-label="Order of titles">
-                  <button type="button" role="radio" aria-checked={order === 'added'} className={`vis-opt pressable ${order === 'added' ? 'on' : ''}`} onClick={() => setOrder('added')}>
-                    Order added
-                  </button>
-                  <button type="button" role="radio" aria-checked={order === 'custom'} className={`vis-opt pressable ${order === 'custom' ? 'on' : ''}`} onClick={() => setOrder('custom')}>
-                    Custom order
-                  </button>
-                </div>
+        <FormGroup title="Titles" footer={editing ? 'Linked titles stay linked; you can add more.' : 'Optional. You can add more later; once created, linked titles stay linked.'}>
+          {shown.map((t) => (
+            <div key={t.ref} className="fg-title-row">
+              {t.poster ? <SmartImage src={t.poster} alt="" className="fg-title-poster" /> : <span className="fg-title-poster blank">{t.title.slice(0, 2).toUpperCase()}</span>}
+              <span className="fg-title-name">{t.title}</span>
+              {!editing && (
+                <button
+                  type="button"
+                  className="fg-title-x pressable"
+                  aria-label={`Remove ${t.title}`}
+                  onClick={() => {
+                    setTitles((ts) => ts.filter((x) => x.ref !== t.ref))
+                    setRefs((rs) => rs.filter((r) => r !== t.ref))
+                  }}
+                >
+                  ✕
+                </button>
               )}
-              {order === 'custom' && titles.length > 1 ? (
-                <>
-                  <div className="vis-hint">Drag the handles to set the order they appear in.</div>
-                  <RankReorder rows={refs.map((r) => ({ ref: r, title: byRef.get(r)?.title ?? r, poster: byRef.get(r)?.poster ?? undefined }))} onReorder={setRefs} />
-                </>
-              ) : (
-                <div className="edit-titles">
-                  {(order === 'custom' ? refs.map((r) => byRef.get(r)!).filter(Boolean) : titles).map((t) => (
-                    <div key={t.ref} className="edit-title-row">
-                      {t.poster ? <SmartImage src={t.poster} alt="" className="edit-title-poster" /> : <span className="edit-title-poster blank">{t.title.slice(0, 2).toUpperCase()}</span>}
-                      <span className="edit-title-name">{t.title}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="vis-hint">Linked titles stay linked; you can add more.</div>
-            </>
+            </div>
+          ))}
+          {titles.length < 25 && (
+            <button type="button" className="fg-row add pressable" onClick={() => setLinking(true)}>
+              <PlusIcon size={16} /> <span className="fg-row-label">Link a title</span>
+            </button>
           )}
-        </section>
+          {titles.length > 1 && <FormRow label="Order" value={order === 'custom' ? 'Custom' : 'Order added'} onClick={() => setDrawer('order')} />}
+        </FormGroup>
 
-        {/* Privacy */}
-        <section className="edit-section">
-          <div className="field-label">Privacy</div>
-          <div className="vis-choice" role="radiogroup" aria-label="Privacy">
-            <button type="button" role="radio" aria-checked={visibility === 'public'} className={`vis-opt pressable ${visibility === 'public' ? 'on' : ''}`} onClick={() => setVisibility('public')}>
-              Public
-            </button>
-            <button type="button" role="radio" aria-checked={visibility === 'private'} className={`vis-opt pressable ${visibility === 'private' ? 'on' : ''}`} onClick={() => setVisibility('private')}>
-              Private
-            </button>
-          </div>
-          <div className="vis-hint">
-            {visibility === 'public' ? 'Anyone can read the news and join. Chat is for members.' : 'Anyone can find it, but you approve who joins and only members see inside.'}
-          </div>
-        </section>
+        {!editing && (
+          <button className="welcome-primary pressable cf-submit" disabled={!valid || saving} onClick={() => void save()}>
+            {saving ? 'Creating…' : 'Create community'}
+          </button>
+        )}
         <div style={{ height: 24 }} />
       </div>
 
+      {drawer === 'content' && (
+        <ChoiceDrawer title="Content" multi options={CONTENT_OPTIONS} value={contentTypes} onChange={setContentTypes} onClose={() => setDrawer(null)} note="Pick one or both." />
+      )}
+      {drawer === 'privacy' && (
+        <ChoiceDrawer title="Privacy" options={PRIVACY_OPTIONS} value={[visibility]} onChange={(v) => setVisibility(v[0])} onClose={() => setDrawer(null)} />
+      )}
+      {drawer === 'order' && (
+        <ChoiceDrawer
+          title="Order of titles"
+          options={[
+            { key: 'added' as const, label: 'Order added', hint: 'Oldest link first' },
+            { key: 'custom' as const, label: 'Custom', hint: 'Arrange them yourself' },
+          ]}
+          value={[order]}
+          onChange={(v) => {
+            setOrder(v[0])
+            if (v[0] === 'custom') setTimeout(() => setDrawer('arrange'), 0)
+          }}
+          onClose={() => setDrawer(null)}
+        />
+      )}
+      {drawer === 'arrange' &&
+        createPortal(
+          <div className="sheet-backdrop" onClick={() => setDrawer(null)}>
+            <div className="sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="sheet-handle" />
+              <div className="sheet-title">Arrange titles</div>
+              <RankReorder rows={refs.map((r) => ({ ref: r, title: byRef.get(r)?.title ?? r, poster: byRef.get(r)?.poster ?? undefined }))} onReorder={setRefs} />
+              <button type="button" className="sync-btn primary pressable fg-done" onClick={() => setDrawer(null)}>
+                Done
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
       {art && (
         <ArtSheet
           kind={art}
@@ -297,13 +359,20 @@ function EditForm({ c, initialTitles, onDone }: { c: Community; initialTitles: C
           title="Link titles"
           isPicked={(ref) => titles.some((t) => t.ref === ref)}
           onToggle={async (ref, meta) => {
-            if (titles.some((t) => t.ref === ref)) return toast('Linked titles stay linked')
-            const r = await addCommunityTitles(c.id, [{ ref, title: meta.t, poster: meta.p, year: meta.y }])
-            if (!r.ok) return toast(r.code === 'not_set_up' ? 'Run 009_titles_lists_comments.sql in Supabase first' : 'Couldn’t link that title')
-            const t: CommunityTitle = { community_id: c.id, ref, title: meta.t, poster: meta.p ?? null, year: meta.y ?? null }
+            if (titles.some((t) => t.ref === ref)) {
+              if (editing) return toast('Linked titles stay linked')
+              setTitles((ts) => ts.filter((t) => t.ref !== ref))
+              setRefs((rs) => rs.filter((r) => r !== ref))
+              return
+            }
+            const t: CommunityTitle = { community_id: c?.id ?? '', ref, title: meta.t, poster: meta.p ?? null, year: meta.y ?? null }
+            if (editing) {
+              const r = await addCommunityTitles(c!.id, [{ ref, title: meta.t, poster: meta.p, year: meta.y }])
+              if (!r.ok) return toast('Couldn’t link that title')
+              toast(`Linked ${meta.t}`)
+            }
             setTitles((ts) => [...ts, t])
             setRefs((rs) => [...rs, ref])
-            toast(`Linked ${meta.t}`)
           }}
           onClose={() => setLinking(false)}
         />
@@ -313,8 +382,8 @@ function EditForm({ c, initialTitles, onDone }: { c: Community; initialTitles: C
 }
 
 /**
- * Change the picture or the banner: upload a photo, use one of the linked
- * titles' art (shown only when asked for), or remove it.
+ * Change the picture or the banner: use one of the linked titles' art (shown
+ * only when asked for), upload a photo, or remove it.
  */
 function ArtSheet({
   kind,
@@ -368,26 +437,25 @@ function ArtSheet({
         {step === 'menu' ? (
           <>
             <div className="sheet-title">Community {label}</div>
-            {titles.length > 0 && (
-              <button className="sheet-row" onClick={() => setStep('titles')}>
-                <span>
-                  <ImageIcon size={16} /> Use a linked title’s {kind === 'avatar' ? 'poster' : 'backdrop'}
-                </span>
-                <ChevronRight size={16} />
+            <div className="fg-card">
+              {titles.length > 0 && (
+                <button type="button" className="fg-row pressable" onClick={() => setStep('titles')}>
+                  <ImageIcon size={16} />
+                  <span className="fg-row-label">Use a linked title’s {kind === 'avatar' ? 'poster' : 'backdrop'}</span>
+                  <ChevronRight size={16} className="fg-row-chev" />
+                </button>
+              )}
+              <button type="button" className="fg-row pressable" onClick={() => input.current?.click()}>
+                <PlusIcon size={16} />
+                <span className="fg-row-label">Upload a photo</span>
               </button>
-            )}
-            <button className="sheet-row" onClick={() => input.current?.click()}>
-              <span>
-                <PlusIcon size={16} /> Upload a photo
-              </span>
-            </button>
-            {current && (
-              <button className="sheet-row danger" onClick={() => onPick({ full: null })}>
-                <span>
-                  <TrashIcon size={16} /> Remove {label}
-                </span>
-              </button>
-            )}
+              {current && (
+                <button type="button" className="fg-row danger pressable" onClick={() => onPick({ full: null })}>
+                  <TrashIcon size={16} />
+                  <span className="fg-row-label">Remove {label}</span>
+                </button>
+              )}
+            </div>
             <input ref={input} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => (void upload(e.target.files?.[0]), (e.target.value = ''))} />
           </>
         ) : (

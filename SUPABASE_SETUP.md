@@ -22,7 +22,7 @@ are safe to re-run and none restructure or delete library data):
 10. `supabase/010_community_title_order.sql` — owners/admins can set the order of a community's titles
 11. `supabase/011_community_discovery.sql` — community content and location categories, comment likes, and action-based ordering of your communities. Run this before deploying the corresponding app update. It does not read or change anyone's personal library.
 
-The city picker uses country-specific place lists generated from [GeoNames](https://www.geonames.org/export/) data. Only the selected country's list is fetched when the city picker opens; the rest of the app never loads the city database. To refresh the lists, download and extract `cities1000.zip` and `admin1CodesASCII.txt` from the GeoNames data export into one directory, then run `node scripts/build-community-cities.mjs <that-directory>`. GeoNames data is provided under a Creative Commons Attribution license; keep the GeoNames credit in the picker.
+The city picker uses country-specific place lists generated from [GeoNames](https://www.geonames.org/export/) data. Only the selected country's list is fetched when the city picker opens; the rest of the app never loads the city database. To refresh the lists, download and extract `cities1000.zip` and `admin1CodesASCII.txt` from the GeoNames data export into one directory, then run `node scripts/build-community-cities.mjs <that-directory>` and then `node scripts/build-city-index.mjs` (the worldwide city search index, `public/places/index.json`, loaded only when the location picker opens). GeoNames data is provided under a Creative Commons Attribution license; keep the GeoNames credit in the picker.
 
 ## Backups
 

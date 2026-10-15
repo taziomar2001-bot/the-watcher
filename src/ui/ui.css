@@ -2876,3 +2876,53 @@ body.modal-open .scroll-area { overflow: hidden !important; }
 .community-filter-sheet .vis-opt, .community-form .vis-opt, .edit-section .vis-opt { padding-left: 6px; padding-right: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .community-form .vis-choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
 textarea.sync-input { font-family: inherit; }
+
+/* ---- Grouped settings-style forms (create / edit community, filters) ---- */
+.cf { display: flex; flex-direction: column; gap: 18px; padding-top: 2px; }
+.fg { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fg-title { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-mute); padding: 0 6px; }
+.fg-foot { font-size: 12.5px; line-height: 1.4; color: var(--text-mute); padding: 0 6px; }
+.fg-foot.warn { color: var(--red); margin-top: -10px; }
+.fg-card { display: flex; flex-direction: column; border-radius: 14px; background: var(--surface); border: 1px solid var(--border-soft); overflow: hidden; min-width: 0; }
+.sheet .fg-card { background: var(--surface-2); border-color: transparent; }
+.fg-card > * + * { border-top: 1px solid var(--border-soft); }
+.fg-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 10px 14px; text-align: left; color: var(--text); background: transparent; }
+.fg-row > svg:first-child { color: var(--text-dim); flex: 0 0 auto; }
+.fg-row-label { font-size: 15px; font-weight: 600; color: var(--text); flex: 0 0 auto; }
+.fg-row-value { flex: 1; min-width: 0; text-align: right; font-size: 14.5px; color: var(--text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fg-row-chev { flex: 0 0 auto; color: var(--text-mute); margin-left: auto; }
+.fg-row-value + .fg-row-chev { margin-left: 0; }
+.fg-row.danger, .fg-row.danger .fg-row-label, .fg-row.danger svg { color: var(--red); }
+.fg-row.add, .fg-row.add .fg-row-label, .fg-row.add svg { color: var(--accent-text); }
+.fg-row.choice { justify-content: space-between; }
+.fg-choice-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.fg-choice-hint { font-size: 12.5px; color: var(--text-mute); line-height: 1.35; }
+.fg-check { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; border: 1.6px solid var(--border); display: grid; place-items: center; color: var(--accent-ink); }
+.fg-check.on { background: var(--accent); border-color: var(--accent); }
+.fg-done { width: 100%; justify-content: center; margin-top: 14px; }
+.fg-field { display: flex; flex-direction: column; gap: 2px; padding: 9px 14px 10px; }
+.fg-field-label { font-size: 12px; font-weight: 600; color: var(--text-mute); }
+.fg-input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 15.5px; padding: 2px 0; resize: none; }
+.fg-input::placeholder { color: var(--text-mute); opacity: .7; }
+.fg-field:focus-within .fg-field-label { color: var(--accent-text); }
+.fg-field-hint { font-size: 12px; color: var(--text-mute); }
+.fg-title-row { display: flex; align-items: center; gap: 12px; padding: 8px 14px; min-width: 0; }
+.fg-title-poster { flex: 0 0 auto; width: 28px; height: 42px; border-radius: 5px; overflow: hidden; display: grid; place-items: center; background: var(--surface-2); font-size: 10px; font-weight: 800; color: var(--text-mute); }
+.fg-title-poster img { width: 100%; height: 100%; object-fit: cover; }
+.fg-title-name { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fg-title-x { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%; color: var(--text-mute); font-size: 12px; }
+.header-action { font-size: 15.5px; font-weight: 800; color: var(--accent-text); padding: 6px 4px; }
+.header-action:disabled { color: var(--text-mute); opacity: .6; }
+.cf-look { position: relative; padding-bottom: 30px; }
+.cf-banner { position: relative; display: block; width: 100%; aspect-ratio: 3 / 1; border-radius: 16px; overflow: hidden; padding: 0; }
+.cf-banner img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cf-edit-chip { position: absolute; right: 8px; top: 8px; display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; border-radius: 99px; background: rgba(6, 8, 12, .6); color: #fff; font-size: 12px; font-weight: 700; backdrop-filter: blur(6px); }
+.cf-avatar { position: absolute; left: 14px; bottom: 0; width: 64px; height: 64px; border-radius: 18px; border: 3px solid var(--bg); padding: 0; display: grid; place-items: center; color: #fff; font-family: var(--font-display); font-size: 26px; font-weight: 800; }
+.cf-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 15px; }
+.cf-avatar-badge { position: absolute; right: -5px; bottom: -5px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--text); color: var(--bg); border: 2px solid var(--bg); }
+.cf-submit { width: 100%; height: 48px; font-size: 15.5px; }
+.filter-location { margin: 2px 0 4px; }
+.place-tip { padding: 14px 4px; }
+.place-country { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--border-soft); }
+.place-country .place-item { border-bottom: 0; flex: 1; min-width: 0; }
+.place-browse { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; height: 30px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--border); font-size: 12.5px; font-weight: 700; color: var(--text-dim); }

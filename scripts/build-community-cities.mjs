@@ -33,3 +33,4 @@ for (const [country, list] of byCountry) {
   total += list.length
 }
 console.log(`Generated ${total} verified places in ${byCountry.size} country files`)
+console.log("Now run: node scripts/build-city-index.mjs")
