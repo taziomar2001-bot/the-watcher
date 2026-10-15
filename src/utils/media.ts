@@ -30,3 +30,6 @@ export function toLibraryItem(m: Media): LibraryItem {
     genres: mv.genres?.length ? mv.genres : undefined,
   }
 }
+
+/** A sharper copy of a TMDB poster for large displays (no-op for other images). */
+export const largePoster = (url?: string) => (url ? url.replace('/t/p/w342/', '/t/p/w500/') : url)

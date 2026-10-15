@@ -9,7 +9,7 @@ import { useLibrary } from '../store/useLibrary'
 import { useTitleMeta, enrichTitles } from '../store/useTitleMeta'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { describe, fromMedia, lengthOf, libraryCandidates, type Candidate, type Genre, type PickFilters } from '../logic/pickFilters'
-import { toLibraryItem } from '../utils/media'
+import { largePoster, toLibraryItem } from '../utils/media'
 import { formatDuration } from '../utils/duration'
 import { useToast } from '../store/useToast'
 
@@ -153,7 +153,7 @@ export function RandomScreen() {
         ) : pick ? (
           <div className="rp-card pop">
             <button className="rp-poster-btn pressable" onClick={() => nav(`/${pick.type}/${pick.id}`)} aria-label={`Open ${pick.title}`}>
-              <SmartImage src={pick.poster} alt={pick.title} className="rp-poster" />
+              <SmartImage src={largePoster(pick.poster)} alt={pick.title} className="rp-poster" />
             </button>
             <div className="rp-info">
               <div className="rp-title">{pick.title}</div>

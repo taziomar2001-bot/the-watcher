@@ -40,11 +40,33 @@ export function movieStatus(id: string, watchedMovies: Record<string, true>): St
 export const RECENT_DAYS = 14
 export const RECENT_MS = RECENT_DAYS * 86_400_000
 
+// Watched episode ids look like "<showId>_s1e2". Counting them per show used to
+// scan every watched episode for every show (shows × episodes on each render);
+// instead, index each watched map once (it's replaced, never mutated, on change).
+const countIndex = new WeakMap<Record<string, true>, Map<string, number>>()
+function indexOf(watched: Record<string, true>): Map<string, number> {
+  let idx = countIndex.get(watched)
+  if (idx) return idx
+  idx = new Map()
+  for (const k in watched) {
+    const i = k.indexOf('_')
+    if (i <= 0) continue
+    const id = k.slice(0, i)
+    idx.set(id, (idx.get(id) ?? 0) + 1)
+  }
+  countIndex.set(watched, idx)
+  return idx
+}
+
 export function watchedCountForShow(showId: string, watched: Record<string, true>): number {
-  const prefix = showId + '_'
-  let n = 0
-  for (const k in watched) if (k.startsWith(prefix)) n++
-  return n
+  // Ids containing "_" can't come from the index; count those the slow way.
+  if (showId.includes('_')) {
+    const prefix = showId + '_'
+    let n = 0
+    for (const k in watched) if (k.startsWith(prefix)) n++
+    return n
+  }
+  return indexOf(watched).get(showId) ?? 0
 }
 
 /** Best watched count: max of imported aggregate `seen` and in-app episodes. */

@@ -45,15 +45,20 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: {
               cacheName: 'tmdb-images',
-              expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              // Big libraries show well over 500 posters.
+              expiration: { maxEntries: 2500, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
             },
           },
           {
             urlPattern: /^https:\/\/api\.themoviedb\.org\/.*/i,
-            handler: 'NetworkFirst',
+            // Show the last answer instantly and refresh it in the background.
+            // Answers older than 12h are never shown (the expiration check
+            // drops them), so new episodes appear within half a day at most.
+            handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: 'tmdb-api',
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 },
+              cacheName: 'tmdb-api-v2',
+              expiration: { maxEntries: 800, maxAgeSeconds: 60 * 60 * 12, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [200] },
             },
           },
         ],

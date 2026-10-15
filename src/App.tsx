@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { BottomNav } from './ui/BottomNav'
 import { ToastHost } from './components/ToastHost'
@@ -19,7 +19,6 @@ import { ensureUpcoming } from './logic/upcoming'
 
 const ONBOARDED_KEY = 'tw-onboarded'
 import { TVShowsScreen } from './screens/TVShowsScreen'
-import { TVCategoryScreen } from './screens/TVCategoryScreen'
 import { ShowScreen } from './screens/ShowScreen'
 import { SeasonScreen } from './screens/SeasonScreen'
 import { EpisodeScreen } from './screens/EpisodeScreen'
@@ -28,26 +27,8 @@ import { MovieScreen } from './screens/MovieScreen'
 import { UpComingScreen } from './screens/UpComingScreen'
 import { DiscoverScreen } from './screens/DiscoverScreen'
 import { useCommunityListSync } from './logic/communityLists'
-import { CommunityListScreen } from './screens/CommunityListsTab'
 import { ProfileScreen, ProfileListsScreen } from './screens/ProfileScreen'
-import { LibraryScreen } from './screens/LibraryScreen'
-import { ProfileTVLibraryScreen } from './screens/ProfileTVLibraryScreen'
-import { ProfileMoviesLibraryScreen } from './screens/ProfileMoviesLibraryScreen'
-import { ProfileTVDashboard } from './screens/ProfileTVDashboard'
-import { ProfileMoviesDashboard } from './screens/ProfileMoviesDashboard'
-import { ListScreen } from './screens/ListScreen'
-import { FavoritesScreen } from './screens/FavoritesScreen'
-import { LeaderboardScreen } from './screens/LeaderboardScreen'
-import { PublicProfileScreen } from './screens/PublicProfileScreen'
-import { StatsScreen } from './screens/StatsScreen'
-import { RandomScreen } from './screens/RandomScreen'
-import { MatchHomeScreen, MatchSessionScreen } from './screens/MatchScreen'
-import { SettingsScreen } from './screens/SettingsScreen'
-import { CommunitiesScreen } from './screens/CommunitiesScreen'
-import { CommunityScreen } from './screens/CommunityScreen'
 import { lastContentPath } from './logic/content'
-import { ConnectionsScreen } from './screens/ConnectionsScreen'
-import { PublicLibraryScreen } from './screens/PublicLibraryScreen'
 
 function readOnboarded(): boolean {
   try {
@@ -57,11 +38,68 @@ function readOnboarded(): boolean {
   }
 }
 
+// Screens opened less often load on demand (and are prefetched when idle),
+// so the app starts with a much smaller script.
+const loaders = {
+  TVCategoryScreen: () => import('./screens/TVCategoryScreen').then((m) => ({ default: m.TVCategoryScreen })),
+  CommunityListScreen: () => import('./screens/CommunityListsTab').then((m) => ({ default: m.CommunityListScreen })),
+  LibraryScreen: () => import('./screens/LibraryScreen').then((m) => ({ default: m.LibraryScreen })),
+  ProfileTVLibraryScreen: () => import('./screens/ProfileTVLibraryScreen').then((m) => ({ default: m.ProfileTVLibraryScreen })),
+  ProfileMoviesLibraryScreen: () => import('./screens/ProfileMoviesLibraryScreen').then((m) => ({ default: m.ProfileMoviesLibraryScreen })),
+  ProfileTVDashboard: () => import('./screens/ProfileTVDashboard').then((m) => ({ default: m.ProfileTVDashboard })),
+  ProfileMoviesDashboard: () => import('./screens/ProfileMoviesDashboard').then((m) => ({ default: m.ProfileMoviesDashboard })),
+  ListScreen: () => import('./screens/ListScreen').then((m) => ({ default: m.ListScreen })),
+  FavoritesScreen: () => import('./screens/FavoritesScreen').then((m) => ({ default: m.FavoritesScreen })),
+  LeaderboardScreen: () => import('./screens/LeaderboardScreen').then((m) => ({ default: m.LeaderboardScreen })),
+  PublicProfileScreen: () => import('./screens/PublicProfileScreen').then((m) => ({ default: m.PublicProfileScreen })),
+  StatsScreen: () => import('./screens/StatsScreen').then((m) => ({ default: m.StatsScreen })),
+  RandomScreen: () => import('./screens/RandomScreen').then((m) => ({ default: m.RandomScreen })),
+  SettingsScreen: () => import('./screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen })),
+  CommunitiesScreen: () => import('./screens/CommunitiesScreen').then((m) => ({ default: m.CommunitiesScreen })),
+  CommunityScreen: () => import('./screens/CommunityScreen').then((m) => ({ default: m.CommunityScreen })),
+  ConnectionsScreen: () => import('./screens/ConnectionsScreen').then((m) => ({ default: m.ConnectionsScreen })),
+  PublicLibraryScreen: () => import('./screens/PublicLibraryScreen').then((m) => ({ default: m.PublicLibraryScreen })),
+  MatchHomeScreen: () => import('./screens/MatchScreen').then((m) => ({ default: m.MatchHomeScreen })),
+  MatchSessionScreen: () => import('./screens/MatchScreen').then((m) => ({ default: m.MatchSessionScreen })),
+}
+const TVCategoryScreen = lazy(loaders.TVCategoryScreen)
+const CommunityListScreen = lazy(loaders.CommunityListScreen)
+const LibraryScreen = lazy(loaders.LibraryScreen)
+const ProfileTVLibraryScreen = lazy(loaders.ProfileTVLibraryScreen)
+const ProfileMoviesLibraryScreen = lazy(loaders.ProfileMoviesLibraryScreen)
+const ProfileTVDashboard = lazy(loaders.ProfileTVDashboard)
+const ProfileMoviesDashboard = lazy(loaders.ProfileMoviesDashboard)
+const ListScreen = lazy(loaders.ListScreen)
+const FavoritesScreen = lazy(loaders.FavoritesScreen)
+const LeaderboardScreen = lazy(loaders.LeaderboardScreen)
+const PublicProfileScreen = lazy(loaders.PublicProfileScreen)
+const StatsScreen = lazy(loaders.StatsScreen)
+const RandomScreen = lazy(loaders.RandomScreen)
+const SettingsScreen = lazy(loaders.SettingsScreen)
+const CommunitiesScreen = lazy(loaders.CommunitiesScreen)
+const CommunityScreen = lazy(loaders.CommunityScreen)
+const ConnectionsScreen = lazy(loaders.ConnectionsScreen)
+const PublicLibraryScreen = lazy(loaders.PublicLibraryScreen)
+const MatchHomeScreen = lazy(loaders.MatchHomeScreen)
+const MatchSessionScreen = lazy(loaders.MatchSessionScreen)
+function prefetchScreens() {
+  const run = () => Object.values(loaders).forEach((load) => void load().catch(() => {}))
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
+  if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 4000 })
+  else setTimeout(run, 2500)
+}
+
+/** Background work that reads the whole library. Kept in its own component so
+ *  a library change re-renders only this (it renders nothing), not the app. */
+function BackgroundSync() {
+  useStatsSync()
+  useCommunityListSync()
+  return null
+}
+
 export default function App() {
   const location = useLocation()
   useNavTracker()
-  useStatsSync()
-  useCommunityListSync()
   const syncStatus = useSync((s) => s.status)
   const showSyncGate = useSync((s) =>
     (s.status === 'signedIn' || s.status === 'busy') && s.mayShowLocal === false,
@@ -123,6 +161,7 @@ export default function App() {
   // browser. It's now an explicit, owner-only action in Settings, so fresh
   // visitors and new accounts start empty.
   useEffect(() => {
+    prefetchScreens()
     if (!USE_TMDB) return
     ensureUpcoming()
   }, [])
@@ -157,6 +196,8 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <BackgroundSync />
+      <Suspense fallback={<div className="scroll-area" />}>
       <Routes location={location}>
         <Route path="/" element={<Navigate to={lastContentPath()} replace />} />
         <Route path="/content" element={<Navigate to={lastContentPath()} replace />} />
@@ -196,6 +237,7 @@ export default function App() {
         <Route path="/people/:id/:tab" element={<ConnectionsScreen />} />
         <Route path="*" element={<Navigate to={lastContentPath()} replace />} />
       </Routes>
+      </Suspense>
       <BottomNav />
       <ToastHost />
       {showWelcome && <Welcome onSkip={dismissWelcome} />}

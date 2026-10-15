@@ -31,7 +31,12 @@ export interface UserTotals {
 
 /** Compute the signed-in user's totals the same way the Profile tab does. */
 export function useMyStats(): UserTotals {
-  const lib = useLibrary()
+  const lib = {
+    watchlistShows: useLibrary((s) => s.watchlistShows),
+    watchlistMovies: useLibrary((s) => s.watchlistMovies),
+    watchedMovies: useLibrary((s) => s.watchedMovies),
+    watchedEpisodes: useLibrary((s) => s.watchedEpisodes),
+  }
   const shows = useShowEntries()
   const movies = useMovieEntries()
   return useMemo(() => {

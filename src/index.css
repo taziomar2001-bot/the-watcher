@@ -291,7 +291,16 @@ input {
   }
 }
 .route-fade {
-  animation: fadeUp 260ms ease both;
+  /* Opacity only: cheap to animate, and the page is usable immediately. */
+  animation: routeIn 140ms ease-out both;
+}
+@keyframes routeIn {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

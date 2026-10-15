@@ -13,7 +13,9 @@ const KEY = import.meta.env.VITE_TMDB_KEY as string | undefined
 const API = 'https://api.themoviedb.org/3'
 const IMG = 'https://image.tmdb.org/t/p'
 
-const img = (path: string | null, size = 'w500') => (path ? `${IMG}/${size}${path}` : undefined)
+// Posters are shown at most ~170px wide in grids: w342 is sharp on 2× screens
+// at about half the download of w500 (the large pickers ask for w500).
+const img = (path: string | null, size = 'w342') => (path ? `${IMG}/${size}${path}` : undefined)
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 // Exponential backoff with jitter (capped) for transient failures.

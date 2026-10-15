@@ -1,3 +1,4 @@
+import { discardPending } from '../utils/deferredStorage'
 import { create } from 'zustand'
 import { supabase, SUPABASE_ENABLED, LIBRARY_TABLE } from '../data/supabase'
 import { useLibrary } from '../store/useLibrary'
@@ -383,6 +384,7 @@ export function forgetDeviceLibrary() {
 
 function clearLocalAccount() {
   try {
+    discardPending('the-watcher-library-v1')
     localStorage.removeItem('the-watcher-library-v1')
     localStorage.removeItem(META_KEY)
     localStorage.removeItem(LOCAL_OWNER_KEY)
@@ -579,21 +581,35 @@ async function reconcile() {
   }
 }
 
+// Comparing the whole library after every tap (a large JSON.stringify) made
+// taps feel slow, so the check runs once changes settle — and right away when
+// the app is hidden or closed, so an edit is always marked as unsynced.
+let changeTimer: ReturnType<typeof setTimeout> | undefined
+function checkForChanges() {
+  clearTimeout(changeTimer)
+  changeTimer = undefined
+  if (!currentUserId || applyingRemote) return
+  const st = useSync.getState()
+  // Only this account's own (visible) library can be edited.
+  if (!st.syncReady && !st.mayShowLocal) return
+  const j = JSON.stringify(snapshot())
+  if (j === lastJson) return
+  lastJson = j
+  const m = getMeta()
+  if (!m.dirty || m.userId !== currentUserId) setMeta({ ...m, userId: currentUserId, dirty: true })
+  if (!st.syncReady) return // offline: saved on this device, uploaded on reconnect
+  clearTimeout(pushTimer)
+  pushTimer = setTimeout(() => void pushNow(), 1500)
+}
+
 function subscribeChanges() {
   useLibrary.subscribe(() => {
     if (!currentUserId || applyingRemote) return
-    const st = useSync.getState()
-    // Only this account's own (visible) library can be edited.
-    if (!st.syncReady && !st.mayShowLocal) return
-    const j = JSON.stringify(snapshot())
-    if (j === lastJson) return
-    lastJson = j
-    const m = getMeta()
-    if (!m.dirty || m.userId !== currentUserId) setMeta({ ...m, userId: currentUserId, dirty: true })
-    if (!st.syncReady) return // offline: saved on this device, uploaded on reconnect
-    clearTimeout(pushTimer)
-    pushTimer = setTimeout(() => void pushNow(), 1500)
+    if (!changeTimer) changeTimer = setTimeout(checkForChanges, 350)
   })
+  const flushNow = () => changeTimer && checkForChanges()
+  window.addEventListener('pagehide', flushNow)
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushNow())
 }
 
 /** Call once on app start. Wires auth state → reconcile, and change → backup. */

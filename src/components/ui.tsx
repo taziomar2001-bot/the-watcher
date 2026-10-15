@@ -22,6 +22,7 @@ export function SmartImage({
           src={src}
           alt={alt}
           loading="lazy"
+          decoding="async"
           onLoad={() => setLoaded(true)}
           onError={() => (setLoaded(true), setBroken(true))}
           style={{ opacity: loaded ? 1 : 0 }}

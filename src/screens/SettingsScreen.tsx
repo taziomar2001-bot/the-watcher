@@ -1,3 +1,4 @@
+import { discardPending } from '../utils/deferredStorage'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AuthScreen } from '../ui/AuthScreen'
@@ -123,7 +124,8 @@ export function SettingsScreen() {
   const doDelete = async () => {
     if (!await sync.deleteCloudData()) return
     try {
-      localStorage.removeItem('the-watcher-library-v1')
+      discardPending('the-watcher-library-v1')
+    localStorage.removeItem('the-watcher-library-v1')
       localStorage.removeItem('tw-sync-meta')
       localStorage.removeItem('tw-onboarded')
       localStorage.removeItem('tw-pending-username')

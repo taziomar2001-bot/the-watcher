@@ -33,7 +33,17 @@ function useMovieCatalog() {
 
 /** All TV shows in the user's library, with derived status and recency. */
 export function useShowEntries(): TvEntry[] {
-  const lib = useLibrary()
+  // Subscribe only to what this needs, so unrelated edits don't recompute it.
+  const lib = {
+    watchlistShows: useLibrary((s) => s.watchlistShows),
+    libraryShows: useLibrary((s) => s.libraryShows),
+    favoriteShows: useLibrary((s) => s.favoriteShows),
+    stoppedShows: useLibrary((s) => s.stoppedShows),
+    watchedEpisodes: useLibrary((s) => s.watchedEpisodes),
+    lastWatched: useLibrary((s) => s.lastWatched),
+    followedAt: useLibrary((s) => s.followedAt),
+    addedAt: useLibrary((s) => s.addedAt),
+  }
   const catById = useShowCatalog()
   return useMemo(() => {
     const ids = new Set([
@@ -61,7 +71,15 @@ export function useShowEntries(): TvEntry[] {
 
 /** All movies in the user's library, with derived status and recency. */
 export function useMovieEntries(): MovieEntry[] {
-  const lib = useLibrary()
+  const lib = {
+    watchlistMovies: useLibrary((s) => s.watchlistMovies),
+    libraryMovies: useLibrary((s) => s.libraryMovies),
+    favoriteMovies: useLibrary((s) => s.favoriteMovies),
+    watchedMovies: useLibrary((s) => s.watchedMovies),
+    followedAt: useLibrary((s) => s.followedAt),
+    addedAt: useLibrary((s) => s.addedAt),
+    lastWatched: useLibrary((s) => s.lastWatched),
+  }
   const catById = useMovieCatalog()
   return useMemo(() => {
     const ids = new Set([

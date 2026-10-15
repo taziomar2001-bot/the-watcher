@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { deferredStorage } from '../utils/deferredStorage'
 import type { Show } from '../types'
 import { SEED_WATCHED_EPISODES } from '../data/mock'
 import { SUPABASE_ENABLED } from '../data/supabase'
@@ -516,7 +517,7 @@ export const useLibrary = create<LibraryState>()(
           return { watchedEpisodes: next }
         }),
     }),
-    { name: 'the-watcher-library-v1' },
+    { name: 'the-watcher-library-v1', storage: deferredStorage<LibraryState>() },
   ),
 )
 

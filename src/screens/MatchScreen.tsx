@@ -30,6 +30,7 @@ import {
   type Swipe,
 } from '../data/match'
 import type { Media, Movie, Show } from '../types'
+import { largePoster } from '../utils/media'
 import { RowsSkeleton } from '../ui/Skeletons'
 
 interface Card {
@@ -508,7 +509,7 @@ function SwipeCard({ card, under, watched, onDecide }: { card: Card; under?: boo
       }}
     >
       <div className="swipe-art">
-        <SmartImage src={card.poster} alt={card.title} className="swipe-poster" />
+        <SmartImage src={largePoster(card.poster)} alt={card.title} className="swipe-poster" />
         {!under && dx > 30 && <span className="swipe-stamp yes">WATCH</span>}
         {!under && dx < -30 && <span className="swipe-stamp no">PASS</span>}
       </div>

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { deferredStorage } from '../utils/deferredStorage'
 import { getTitleMeta, type TitleMeta } from '../data/tmdb'
 import { USE_TMDB } from '../data/catalog'
 
@@ -25,7 +26,7 @@ export const useTitleMeta = create<MetaState>()(
       total: 0,
       addMany: (entries) => set((s) => ({ meta: { ...s.meta, ...entries } })),
     }),
-    { name: 'tw-title-meta', partialize: (s) => ({ meta: s.meta }) },
+    { name: 'tw-title-meta', partialize: (s) => ({ meta: s.meta }), storage: deferredStorage<{ meta: Record<string, TitleMeta> }>(1500) },
   ),
 )
 
