@@ -3,12 +3,12 @@ import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { ProgressDot } from '../ui/primitives'
-import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, GripIcon, PeopleIcon } from '../components/Icons'
+import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, GripIcon, PeopleIcon, ImageIcon, EyeIcon, EyeOffIcon, MinusCircleIcon } from '../components/Icons'
 import { RankReorder } from '../ui/RankReorder'
 import { TitlePicker } from '../ui/TitlePicker'
 import { LinkListSheet } from '../ui/LinkListSheet'
 import { useLibrary, type ListKind } from '../store/useLibrary'
-import { listSummary, parseItemRef, resolveItem, type ResolvedItem } from '../logic/lists'
+import { kindLabel, listSummary, parseItemRef, resolveItem, type ResolvedItem } from '../logic/lists'
 import { unlinkEverywhere } from '../logic/communityLists'
 import { useMyCommunities } from '../logic/communityCache'
 import { useScrollMemory } from '../hooks/useScrollMemory'
@@ -66,6 +66,7 @@ export function ListScreen() {
     .filter(Boolean) as (ResolvedItem & { color?: ReturnType<typeof movieColor> })[]
 
   const ranked = !!list.ranked
+  const coverOf = list.cover ?? items.find((it) => it.poster)?.poster
   const linkedNames = (list.communities ?? []).map((cid) => mine?.find((c) => c.id === cid)).filter(Boolean)
 
   // Commit a new order of the resolvable items, appending any refs that don't
@@ -95,6 +96,20 @@ export function ListScreen() {
         <button className="icon-round pressable" onClick={() => setMenu(true)} aria-label="List options">
           <DotsIcon size={20} />
         </button>
+      </div>
+
+      <div className="page-pad list-head">
+        <button className="list-head-cover pressable" onClick={() => setCoverSheet(true)} aria-label="Choose a cover">
+          {coverOf ? <img src={coverOf} alt="" /> : <ImageIcon size={22} />}
+          <span className="list-head-cover-edit">
+            <EditIcon size={12} />
+          </span>
+        </button>
+        <div className="list-head-text">
+          <div className="list-head-kind">{kindLabel(kind)} list{ranked ? ' · Ranked' : ''}</div>
+          {list.remixOf && <div className="list-head-sub">Remix of {list.remixOf.name}{list.remixOf.by ? ` by ${list.remixOf.by}` : ''}</div>}
+          {!list.cover && items.length > 0 && <div className="list-head-sub">Cover: first title · tap to choose</div>}
+        </div>
       </div>
 
       {linkedNames.length > 0 && (
@@ -212,7 +227,7 @@ export function ListScreen() {
                 setMenu(false)
               }}
             >
-              <span><EditIcon size={16} /> {edit ? 'Done editing' : 'Remove titles'}</span>
+              <span><MinusCircleIcon size={16} /> {edit ? 'Done removing' : `Remove ${kindNoun(kind)}`}</span>
             </button>
             {ranked && (
               <button
@@ -234,7 +249,7 @@ export function ListScreen() {
               }}
             >
               <span>
-                <EditIcon size={16} /> {list.cover ? 'Change picture' : 'Add a picture'}
+                <ImageIcon size={16} /> {list.cover ? 'Change cover' : 'Choose a cover'}
               </span>
             </button>
             <button
@@ -245,7 +260,7 @@ export function ListScreen() {
                 setMenu(false)
               }}
             >
-              <span><EditIcon size={16} /> Rename list</span>
+              <span><EditIcon size={16} /> Rename</span>
             </button>
             <button
               className="sheet-row"
@@ -255,7 +270,7 @@ export function ListScreen() {
               }}
             >
               <span>
-                <EditIcon size={16} /> {list.visibility === 'public' ? 'Hide from my profile' : 'Show on my profile'}
+                {list.visibility === 'public' ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />} {list.visibility === 'public' ? 'Hide from my profile' : 'Show on my profile'}
               </span>
             </button>
             <button
@@ -322,17 +337,15 @@ export function ListScreen() {
           <div className="sheet-backdrop" onClick={() => setCoverSheet(false)}>
             <div className="sheet" onClick={(e) => e.stopPropagation()}>
               <div className="sheet-handle" />
-              <div className="sheet-title">List picture</div>
-              <button className="sheet-row" onClick={() => coverInput.current?.click()}>
-                <span>Upload a photo</span>
-              </button>
+              <div className="sheet-title">List cover</div>
+              {!items.some((it) => it.poster) && <div className="vis-hint" style={{ padding: '4px 4px 12px' }}>Add titles first — the cover is one of their posters.</div>}
               {items.some((it) => it.poster) && (
                 <>
-                  <div className="cover-pick-label">Or use a poster from this list</div>
+                  <div className="cover-pick-label">Pick one of the titles in this list</div>
                   <div className="cover-pick">
                     {items
                       .filter((it) => it.poster)
-                      .slice(0, 12)
+                      .slice(0, 30)
                       .map((it) => (
                         <button
                           key={it.ref}
@@ -356,7 +369,7 @@ export function ListScreen() {
                     setCoverSheet(false)
                   }}
                 >
-                  <span>Remove picture</span>
+                  <span>Use the first title automatically</span>
                 </button>
               )}
             </div>

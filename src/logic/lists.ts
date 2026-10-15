@@ -138,3 +138,13 @@ export function listSummary(list: Pick<CustomList, 'items'>): string {
 }
 
 export const kindLabel = (k?: ListKind) => LIST_KINDS.find((x) => x.key === (k ?? 'mixed'))!.label
+
+/** A list's cover: the one chosen, else the first item's poster. */
+export function listCover(list: Pick<CustomList, 'cover' | 'items' | 'meta'>, lib: Sources): string | undefined {
+  if (list.cover) return list.cover
+  for (const ref of list.items.slice(0, 20)) {
+    const p = resolveItem(ref, lib, list.meta)?.poster
+    if (p) return p
+  }
+  return undefined
+}

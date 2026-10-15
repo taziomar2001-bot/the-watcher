@@ -8,6 +8,8 @@ import { CommunityLists } from './CommunityListsTab'
 import { TitlePicker } from '../ui/TitlePicker'
 import { useCached } from '../utils/cache'
 import { ComposerBar } from '../ui/ComposerBar'
+import { RankReorder } from '../ui/RankReorder'
+import { getMovie, getShow } from '../data/catalog'
 import { SendIcon } from '../ui/SendIcon'
 import { fileToImage } from '../utils/image'
 import { Segmented } from '../ui/primitives'
@@ -20,7 +22,10 @@ import {
   REACTIONS,
   addCommunityTitles,
   communityTitles,
+  communityTitleOrder,
+  setTitleOrder,
   type CommunityTitle,
+  type TitleOrder,
   addComment,
   createPost,
   deleteComment,
@@ -324,7 +329,14 @@ export function CommunityScreen({ view }: { view?: 'members' }) {
           document.body,
         )}
 
-      {editing && <EditSheet c={c} onClose={() => setEditing(false)} onSaved={() => (setEditing(false), void load())} />}
+      {editing && (
+        <EditSheet
+          c={c}
+          titles={titles}
+          onClose={() => setEditing(false)}
+          onSaved={() => (setEditing(false), void load(), void titlesQ.reload())}
+        />
+      )}
 
       {confirm &&
         createPortal(
@@ -899,7 +911,27 @@ function Members({ c, me, onChanged }: { c: Community; me: Membership | null; on
 
 // ---------------------------------------------------------------- edit
 
-function EditSheet({ c, onClose, onSaved }: { c: Community; onClose: () => void; onSaved: () => void }) {
+function EditSheet({ c, titles, onClose, onSaved }: { c: Community; titles: CommunityTitle[]; onClose: () => void; onSaved: () => void }) {
+  const [order, setOrder] = useState<TitleOrder | undefined>()
+  const [refs, setRefs] = useState<string[]>(titles.map((t) => t.ref))
+  const [backdrops, setBackdrops] = useState<Record<string, string>>({})
+  useEffect(() => {
+    void communityTitleOrder(c.id).then(setOrder)
+    // Each linked title's backdrop, offered as a banner.
+    let alive = true
+    void Promise.all(
+      titles.map(async (t) => {
+        const [type, id] = t.ref.split(':')
+        const m = await (type === 'show' ? getShow(id) : getMovie(id)).catch(() => undefined)
+        return [t.ref, m?.backdrop] as const
+      }),
+    ).then((pairs) => alive && setBackdrops(Object.fromEntries(pairs.filter((p) => p[1]) as [string, string][])))
+    return () => {
+      alive = false
+    }
+  }, [c.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const byRef = new Map(titles.map((t) => [t.ref, t]))
+  const startOrder = useRef<string>(titles.map((t) => t.ref).join('|'))
   const toast = useToast((s) => s.show)
   const [name, setName] = useState(c.name)
   const [description, setDescription] = useState(c.description)
@@ -909,6 +941,10 @@ function EditSheet({ c, onClose, onSaved }: { c: Community; onClose: () => void;
     c.banner || c.banner_thumb ? { full: c.banner ?? null, thumb: c.banner_thumb ?? null } : undefined,
   )
   const [saving, setSaving] = useState(false)
+  const orderAtOpen = useRef<TitleOrder | undefined>(undefined)
+  useEffect(() => {
+    if (order && orderAtOpen.current === undefined) orderAtOpen.current = order
+  }, [order])
   const avatarInput = useRef<HTMLInputElement>(null)
   const bannerInput = useRef<HTMLInputElement>(null)
   const valid = name.trim().length >= 3
@@ -921,6 +957,13 @@ function EditSheet({ c, onClose, onSaved }: { c: Community; onClose: () => void;
       patch.banner_thumb = banner?.thumb ?? null
     }
     const r = await updateCommunity(c.id, patch)
+    if (r.ok && order && titles.length > 1) {
+      const changed = order === 'custom' ? refs.join('|') !== startOrder.current || orderAtOpen.current !== 'custom' : orderAtOpen.current !== 'added'
+      if (changed) {
+        const o = await setTitleOrder(c.id, order, order === 'custom' ? refs : undefined)
+        if (!o.ok) toast(o.code === 'not_set_up' ? 'Title order needs 010_community_title_order.sql' : 'Couldn’t save the title order')
+      }
+    }
     setSaving(false)
     if (r.ok) onSaved()
     else toast(patch.avatar !== undefined || patch.banner !== undefined ? 'Couldn’t save the pictures — run 007_community_images.sql in Supabase' : 'Couldn’t save changes')
@@ -971,6 +1014,40 @@ function EditSheet({ c, onClose, onSaved }: { c: Community; onClose: () => void;
         </div>
         <input ref={avatarInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => (void pick(e.target.files?.[0], 'avatar'), (e.target.value = ''))} />
         <input ref={bannerInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => (void pick(e.target.files?.[0], 'banner'), (e.target.value = ''))} />
+        {titles.some((t) => t.poster) && (
+          <>
+            <div className="field-label">Picture from a title</div>
+            <div className="art-pick">
+              {titles
+                .filter((t) => t.poster)
+                .map((t) => (
+                  <button key={t.ref} type="button" className={`art-pick-item poster pressable ${avatar === t.poster ? 'on' : ''}`} onClick={() => setAvatar(t.poster)} aria-label={`Use ${t.title} as the picture`}>
+                    <img src={t.poster!} alt="" />
+                  </button>
+                ))}
+            </div>
+          </>
+        )}
+        {Object.keys(backdrops).length > 0 && (
+          <>
+            <div className="field-label">Banner from a title</div>
+            <div className="art-pick">
+              {titles
+                .filter((t) => backdrops[t.ref])
+                .map((t) => (
+                  <button
+                    key={t.ref}
+                    type="button"
+                    className={`art-pick-item wide pressable ${banner?.full === backdrops[t.ref] ? 'on' : ''}`}
+                    onClick={() => setBanner({ full: backdrops[t.ref], thumb: backdrops[t.ref] })}
+                    aria-label={`Use ${t.title} as the banner`}
+                  >
+                    <img src={backdrops[t.ref]} alt="" />
+                  </button>
+                ))}
+            </div>
+          </>
+        )}
         <input className="sync-input" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
         <textarea className="sync-input" rows={3} maxLength={500} placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
         <div className="vis-choice">
@@ -981,6 +1058,28 @@ function EditSheet({ c, onClose, onSaved }: { c: Community; onClose: () => void;
             Private
           </button>
         </div>
+        {titles.length > 1 && order && (
+          <>
+            <div className="field-label">Order of titles</div>
+            <div className="vis-choice">
+              <button type="button" className={`vis-opt pressable ${order === 'added' ? 'on' : ''}`} onClick={() => setOrder('added')}>
+                Order added
+              </button>
+              <button type="button" className={`vis-opt pressable ${order === 'custom' ? 'on' : ''}`} onClick={() => setOrder('custom')}>
+                Custom order
+              </button>
+            </div>
+            {order === 'custom' && (
+              <>
+                <div className="vis-hint">Drag the handles to set the order they appear in.</div>
+                <RankReorder
+                  rows={refs.map((r) => ({ ref: r, title: byRef.get(r)?.title ?? r, poster: byRef.get(r)?.poster ?? undefined }))}
+                  onReorder={setRefs}
+                />
+              </>
+            )}
+          </>
+        )}
         <button type="submit" className="welcome-primary pressable" disabled={!valid || saving}>
           {saving ? 'Saving…' : 'Save'}
         </button>

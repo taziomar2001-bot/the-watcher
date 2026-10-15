@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight, ChevronLeft, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, PlusIcon, ListIcon } from '../components/Icons'
 import { NewListSheet } from '../ui/NewListSheet'
-import { kindLabel, listSummary } from '../logic/lists'
+import { kindLabel, listCover, listSummary } from '../logic/lists'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
 import { useMe, useMyProfile } from '../store/useMe'
@@ -61,7 +61,7 @@ export function ProfileScreen() {
   const tvShare = totalWatched > 0 ? tvMin / totalWatched : 0.5
   // How far through everything you follow you are, by time.
   const through = totalWatched + remainingTotal > 0 ? totalWatched / (totalWatched + remainingTotal) : 0
-  const covers = lib.lists.map((l) => l.cover).filter(Boolean).slice(0, 3) as string[]
+  const covers = lib.lists.map((l) => listCover(l, lib)).filter(Boolean).slice(0, 3) as string[]
 
   return (
     <div className="scroll-area route-fade">
@@ -218,7 +218,7 @@ export function ProfileListsScreen() {
         </button>
         {lists.map((l) => (
           <button key={l.id} className="list-row pressable" onClick={() => nav(`/list/${l.id}`)}>
-            <ListBadge cover={l.cover} ranked={l.ranked} />
+            <ListBadge cover={listCover(l, lib)} ranked={l.ranked} />
             <span className="list-row-text">
               <span className="list-row-name">{l.name}</span>
               <span className="list-row-sub">

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { SeasonCard } from '../ui/cards'
 import { DetailHero, ActionBar, ActionBtn, DetailTabs, useDetailTab } from '../ui/Detail'
 import { TitleComments, commentsLabel, useCommentCount } from '../ui/TitleComments'
 import { ProgressDot } from '../ui/primitives'
-import { HeartIcon, BellIcon, CheckIcon, PeopleIcon, PlusIcon, ListIcon } from '../components/Icons'
+import { HeartIcon, CheckIcon, PeopleIcon, PlusIcon, ListIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
 import { getShow } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
@@ -41,8 +42,9 @@ export function ShowScreen() {
   const lib = useLibrary()
   const toast = useToast((s) => s.show)
   const toggleFavorite = useToggleFavorite()
-  const [tab, setTab] = useDetailTab<'episodes' | 'about' | 'comments'>(`show:${id}`, 'episodes')
+  const [tab, setTab] = useDetailTab<'episodes' | 'about' | 'comments'>(`show:${id}`, 'about')
   const [listSheet, setListSheet] = useState(false)
+  const [statusSheet, setStatusSheet] = useState(false)
   const membership = useListMembership(`show:${id}`)
   const commentCount = useCommentCount(`show:${id}`)
 
@@ -83,7 +85,6 @@ export function ShowScreen() {
   const cls = classifyShow(item, lib.watchedEpisodes)
   const following = !!lib.watchlistShows[show.id]
   const fav = !!lib.favoriteShows[show.id]
-  const notify = !!lib.notifyShows[show.id]
   const stopped = !!lib.stoppedShows[show.id]
   const color = showColor(cls, stopped)
 
@@ -123,12 +124,18 @@ export function ShowScreen() {
           }}
         />
         <ActionBtn icon={<HeartIcon size={22} fill={fav ? 'currentColor' : 'none'} />} label="Favorite" on={fav} tone="red" onClick={() => toggleFavorite('show', show.id, toLibraryItem(show))} />
-        <ActionBtn icon={<BellIcon size={22} />} label={notify ? 'Notifying' : 'Notify'} on={notify} onClick={() => lib.toggleNotify(show.id)} />
         <ActionBtn icon={<ListIcon size={22} />} label={listCount ? `${listCount} list${listCount > 1 ? 's' : ''}` : 'Add to list'} on={listCount > 0} onClick={() => setListSheet(true)} />
         <ActionBtn
           icon={<PeopleIcon size={22} />}
           label="Community"
           onClick={() => nav(`/communities?topic=show:${show.id}`, { state: { topic: { type: 'show', id: show.id, title: show.title, poster: show.poster } } })}
+        />
+        <ActionBtn
+          icon={stopped ? <PauseIcon /> : <FlagIcon />}
+          label={stopped ? 'Stopped' : cls === 'finished' ? 'Completed' : 'Status'}
+          on={stopped || cls === 'finished'}
+          tone={cls === 'finished' && !stopped ? 'green' : undefined}
+          onClick={() => setStatusSheet(true)}
         />
       </ActionBar>
 
@@ -144,8 +151,8 @@ export function ShowScreen() {
 
       <DetailTabs
         tabs={[
-          { key: 'episodes', label: 'Episodes' },
           { key: 'about', label: 'About' },
+          { key: 'episodes', label: 'Episodes' },
           { key: 'comments', label: commentsLabel(commentCount) },
         ]}
         value={tab}
@@ -154,42 +161,6 @@ export function ShowScreen() {
 
       {tab === 'episodes' && (
         <>
-          <div className="detail-chips">
-            {cls !== 'finished' && !stopped && (
-              <button
-                className="action-pill tone-green pressable"
-                onClick={() => {
-                  lib.markAllPrevious(allReleasedIds)
-                  toast('Marked all released episodes watched')
-                }}
-              >
-                <CheckIcon size={15} /> Mark completed
-              </button>
-            )}
-            {stopped ? (
-              <button
-                className="action-pill pressable"
-                onClick={() => {
-                  lib.setStopped(show.id, false)
-                  toast('Resumed watching')
-                }}
-              >
-                Resume watching
-              </button>
-            ) : (
-              started && (
-                <button
-                  className="action-pill pressable"
-                  onClick={() => {
-                    lib.setStopped(show.id, true, toLibraryItem(show))
-                    toast('Marked as Stopped Watching')
-                  }}
-                >
-                  Stop watching
-                </button>
-              )
-            )}
-          </div>
           <div className="card-list">
             {show.seasons.map((s) => (
               <SeasonCard
@@ -231,6 +202,60 @@ export function ShowScreen() {
       {tab === 'comments' && <TitleComments target={ref} what={show.title} />}
 
       <div style={{ height: 20 }} />
+      {statusSheet &&
+        createPortal(
+          <div className="sheet-backdrop" onClick={() => setStatusSheet(false)}>
+            <div className="sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="sheet-handle" />
+              <div className="sheet-title">{show.title}</div>
+              {cls !== 'finished' && !stopped && (
+                <button
+                  className="sheet-row"
+                  onClick={() => {
+                    lib.markAllPrevious(allReleasedIds)
+                    setStatusSheet(false)
+                    toast('Marked all released episodes watched')
+                  }}
+                >
+                  <span>
+                    <CheckIcon size={16} /> Mark completed
+                  </span>
+                </button>
+              )}
+              {stopped ? (
+                <button
+                  className="sheet-row"
+                  onClick={() => {
+                    lib.setStopped(show.id, false)
+                    setStatusSheet(false)
+                    toast('Resumed watching')
+                  }}
+                >
+                  <span>
+                    <FlagIcon size={16} /> Resume watching
+                  </span>
+                </button>
+              ) : (
+                <button
+                  className="sheet-row"
+                  disabled={!started}
+                  style={!started ? { opacity: 0.45 } : undefined}
+                  onClick={() => {
+                    lib.setStopped(show.id, true, toLibraryItem(show))
+                    setStatusSheet(false)
+                    toast('Marked as Stopped Watching')
+                  }}
+                >
+                  <span>
+                    <PauseIcon size={16} /> Stop watching{!started ? ' (start watching first)' : ''}
+                  </span>
+                </button>
+              )}
+              {cls === 'finished' && !stopped && <div className="vis-hint" style={{ padding: '8px 4px' }}>You’ve watched every released episode.</div>}
+            </div>
+          </div>,
+          document.body,
+        )}
       {listSheet && <AddToListSheet itemRef={ref} meta={{ t: show.title, p: show.poster, y: show.firstAirYear }} onClose={() => setListSheet(false)} />}
     </div>
   )
@@ -251,4 +276,22 @@ function seasonColorOf(season: Season, watched: Record<string, true>) {
   const anyWatched = released.some((e) => watched[e.id])
   const allWatched = released.length > 0 && released.every((e) => watched[e.id])
   return seasonColor(allWatched, anyWatched)
+}
+
+function FlagIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 21V4" />
+      <path d="M5 4h11l-2 4 2 4H5" />
+    </svg>
+  )
+}
+
+function PauseIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M10 9v6M14 9v6" />
+    </svg>
+  )
 }

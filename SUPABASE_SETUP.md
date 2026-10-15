@@ -19,6 +19,7 @@ are safe to re-run and none restructure or delete library data):
 7. `supabase/007_community_images.sql` — community picture and banner
 8. `supabase/008_watch_together.sql` — Watch together sessions and swipes
 9. `supabase/009_titles_lists_comments.sql` — communities about several titles, lists shared in communities, comments on shows/seasons/episodes/movies, Watch together filters (copies each community's existing linked title; changes nothing else)
+10. `supabase/010_community_title_order.sql` — owners/admins can set the order of a community's titles
 
 ## Backups
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { resolveItem, parseItemRef } from './lists'
+import { resolveItem, parseItemRef, listCover } from './lists'
 import { useLibrary } from '../store/useLibrary'
 import { useShowEntries, useMovieEntries } from './useLibraryData'
 import { effectiveSeen } from './status'
@@ -162,7 +162,7 @@ export function useMyShowcase(): Showcase {
         name: l.name,
         kind: l.kind ?? 'mixed',
         ranked: !!l.ranked,
-        cover: l.cover,
+        cover: listCover(l, { libraryShows, libraryMovies }),
         items: l.items
           .slice(0, 250)
           .map((ref): ShowcaseItem | null => {

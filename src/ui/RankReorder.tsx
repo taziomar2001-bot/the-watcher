@@ -95,7 +95,7 @@ export function RankReorder({ rows, onReorder }: { rows: RankRow[]; onReorder: (
             <span className="reorder-rank">{i + 1}</span>
             <SmartImage src={row.poster} alt={row.title} className="reorder-poster" />
             <span className="reorder-title">{row.title}</span>
-            <button
+            <button type="button"
               className="reorder-handle"
               aria-label="Drag to reorder"
               onPointerDown={(e) => onPointerDown(e, ref)}

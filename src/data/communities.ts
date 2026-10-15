@@ -365,16 +365,36 @@ export interface CommunityTitle {
   title: string
   poster: string | null
   year: number | null
+  position?: number | null
 }
+export type TitleOrder = 'added' | 'custom'
 
 /** The titles a community is about. Falls back to its single topic before 009 runs. */
 export async function communityTitles(c: Community): Promise<CommunityTitle[]> {
   const legacy: CommunityTitle[] =
     c.topic_type && c.topic_id ? [{ community_id: c.id, ref: `${c.topic_type}:${c.topic_id}`, title: c.topic_title ?? '', poster: c.topic_poster, year: null }] : []
   if (!supabase) return legacy
-  const { data, error } = await supabase.from('community_titles').select('community_id,ref,title,poster,year').eq('community_id', c.id).order('added_at').limit(50)
-  if (error) return legacy
-  return (data as CommunityTitle[]) ?? []
+  let r = await supabase.from('community_titles').select('community_id,ref,title,poster,year,position').eq('community_id', c.id).order('added_at').limit(50)
+  if (r.error) r = (await supabase.from('community_titles').select('community_id,ref,title,poster,year').eq('community_id', c.id).order('added_at').limit(50)) as typeof r
+  if (r.error) return legacy
+  const rows = (r.data as CommunityTitle[]) ?? []
+  // 010: a custom order chosen by the owners/admins.
+  const { data: o } = await supabase.from('communities').select('title_order').eq('id', c.id).maybeSingle()
+  if ((o as { title_order?: TitleOrder } | null)?.title_order === 'custom')
+    rows.sort((a, b) => (a.position ?? 1e9) - (b.position ?? 1e9))
+  return rows
+}
+
+export async function communityTitleOrder(id: string): Promise<TitleOrder> {
+  if (!supabase) return 'added'
+  const { data, error } = await supabase.from('communities').select('title_order').eq('id', id).maybeSingle()
+  return error ? 'added' : ((data as { title_order?: TitleOrder } | null)?.title_order ?? 'added')
+}
+
+export async function setTitleOrder(id: string, mode: TitleOrder, refs?: string[]): Promise<Result<null>> {
+  if (!supabase) return { ok: false, code: 'disabled' }
+  const { error } = await supabase.rpc('set_community_title_order', { cid: id, p_mode: mode, p_refs: refs ?? null })
+  return error ? { ok: false, code: codeOf(error) } : { ok: true, value: null }
 }
 
 /** Owners/admins: link more titles. Titles can't be removed. */

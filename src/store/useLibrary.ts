@@ -22,6 +22,8 @@ export interface CustomList {
   /** Communities this list is linked to (shown in their Lists tab). */
   communities?: string[]
   updatedAt?: number
+  /** Made with "Remix" from a list shared in a community. */
+  remixOf?: { name: string; by?: string; community?: string }
 }
 
 /** "mixed" = shows and movies together (every list made before typed lists). */

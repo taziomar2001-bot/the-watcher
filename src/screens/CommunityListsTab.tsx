@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, DotsIcon, PlusIcon } from '../components/Icons'
+import { ChevronLeft, ChevronRight, DotsIcon, PlusIcon, OrderedListIcon, RemixIcon } from '../components/Icons'
 import { ListBadge } from '../ui/ListBadge'
 import { NewListSheet, type NewListDraft } from '../ui/NewListSheet'
 import { SnapshotList } from '../ui/SnapshotList'
-import { nameOf } from '../ui/social'
+import { nameOf, UserAvatar } from '../ui/social'
 import { useSync } from '../logic/sync'
 import { useLibrary, type ListKind, type RefMeta } from '../store/useLibrary'
+import { useMyCommunities } from '../logic/communityCache'
 import { useToast } from '../store/useToast'
 import { useCached } from '../utils/cache'
 import { getShow } from '../data/catalog'
@@ -98,7 +99,14 @@ export function CommunityLists({ c, me, titles }: { c: Community; me: Membership
 
   const row = (l: CommunityList) => (
     <button key={`${l.owner_id}/${l.list_id}`} className="list-row pressable" onClick={() => open(l)}>
-      <ListBadge cover={l.cover ?? undefined} ranked={l.ranked} />
+      <span className="cl-owner-avatar">
+        {l.owner ? <UserAvatar profile={l.owner} size={44} /> : <ListBadge ranked={l.ranked} />}
+        {l.ranked && (
+          <span className="cl-ranked-dot" aria-label="Ranked">
+            <OrderedListIcon size={10} />
+          </span>
+        )}
+      </span>
       <span className="list-row-text">
         <span className="list-row-name">{l.name}</span>
         <span className="list-row-sub">
@@ -175,7 +183,37 @@ export function CommunityListScreen() {
   const lid = decodeURIComponent(listId)
   const q = useCached<CommunityList | { missing: true }>(`cll:${id}:${owner}:${lid}`, async () => (await getCommunityList(id, owner, lid)) ?? { missing: true })
   const [menu, setMenu] = useState(false)
+  const [remixing, setRemixing] = useState(false)
+  const myId = useSync((s) => s.userId)
+  const addList = useLibrary((s) => s.addList)
+  const { list: mine } = useMyCommunities()
   const l = q.data && 'list_id' in q.data ? q.data : null
+  const member = (mine ?? []).some((c) => c.id === id && c.status === 'active')
+
+  /** Copy this list into my lists (ranked), share it here, then reorder it. */
+  const remix = async () => {
+    if (!l || remixing) return
+    setRemixing(true)
+    const meta: Record<string, RefMeta> = {}
+    for (const i of l.items) meta[i.r] = { t: i.t, ...(i.s ? { s: i.s } : {}), ...(i.p ? { p: i.p } : {}), ...(i.y ? { y: i.y } : {}) }
+    const by = l.owner ? nameOf(l.owner) : undefined
+    const newId = addList({
+      name: `${l.name} · my remix`.slice(0, 80),
+      kind: l.kind,
+      ranked: true,
+      visibility: 'public',
+      items: l.items.map((i) => i.r),
+      meta,
+      communities: [id],
+      remixOf: { name: l.name, by, community: id },
+    })
+    const created = useLibrary.getState().lists.find((x) => x.id === newId)!
+    const r = await pushListTo(id, created)
+    setRemixing(false)
+    if (!r.ok) toast('Saved to your lists — it’ll be shared here once you’re back online')
+    else toast('Remixed — drag to make it yours')
+    nav(`/list/${newId}?reorder=1`)
+  }
   return (
     <div className="scroll-area route-fade">
       <div className="app-header">
@@ -213,11 +251,23 @@ export function CommunityListScreen() {
         </div>
       ) : (
         <>
-          {l.owner && (
-            <button className="page-pad cl-owner pressable" onClick={() => nav(`/u/${l.owner_id}`)}>
-              See {nameOf(l.owner)}’s profile ›
-            </button>
-          )}
+          <div className="page-pad cl-view-head">
+            {l.owner && (
+              <button className="cl-by pressable" onClick={() => nav(l.owner_id === myId ? '/profile' : `/u/${l.owner_id}`)}>
+                <UserAvatar profile={l.owner} size={32} />
+                <span>
+                  <b>{l.owner_id === myId ? 'You' : nameOf(l.owner)}</b>
+                  {l.owner.username && <span className="cl-by-handle">@{l.owner.username}</span>}
+                </span>
+              </button>
+            )}
+            {member && l.owner_id !== myId && l.items.length > 0 && (
+              <button className="follow-btn primary pressable cl-remix" disabled={remixing} onClick={() => void remix()}>
+                <RemixIcon size={16} /> {remixing ? 'Remixing…' : 'Remix'}
+              </button>
+            )}
+          </div>
+          {member && l.owner_id !== myId && <div className="page-pad vis-hint cl-remix-hint">Remix copies this list to your lists and this community so you can rank it your way.</div>}
           <SnapshotList items={l.items.map((i) => ({ ref: i.r, title: i.t, sub: i.s, poster: i.p }))} ranked={l.ranked} episodes={l.kind === 'episodes'} />
         </>
       )}
