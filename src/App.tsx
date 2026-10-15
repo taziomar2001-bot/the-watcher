@@ -56,6 +56,7 @@ const loaders = {
   RandomScreen: () => import('./screens/RandomScreen').then((m) => ({ default: m.RandomScreen })),
   SettingsScreen: () => import('./screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen })),
   CommunitiesScreen: () => import('./screens/CommunitiesScreen').then((m) => ({ default: m.CommunitiesScreen })),
+  CommunitiesDiscoverScreen: () => import('./screens/CommunitiesDiscoverScreen').then((m) => ({ default: m.CommunitiesDiscoverScreen })),
   CommunityScreen: () => import('./screens/CommunityScreen').then((m) => ({ default: m.CommunityScreen })),
   ConnectionsScreen: () => import('./screens/ConnectionsScreen').then((m) => ({ default: m.ConnectionsScreen })),
   PublicLibraryScreen: () => import('./screens/PublicLibraryScreen').then((m) => ({ default: m.PublicLibraryScreen })),
@@ -77,6 +78,7 @@ const StatsScreen = lazy(loaders.StatsScreen)
 const RandomScreen = lazy(loaders.RandomScreen)
 const SettingsScreen = lazy(loaders.SettingsScreen)
 const CommunitiesScreen = lazy(loaders.CommunitiesScreen)
+const CommunitiesDiscoverScreen = lazy(loaders.CommunitiesDiscoverScreen)
 const CommunityScreen = lazy(loaders.CommunityScreen)
 const ConnectionsScreen = lazy(loaders.ConnectionsScreen)
 const PublicLibraryScreen = lazy(loaders.PublicLibraryScreen)
@@ -202,6 +204,7 @@ export default function App() {
         <Route path="/" element={<Navigate to={lastContentPath()} replace />} />
         <Route path="/content" element={<Navigate to={lastContentPath()} replace />} />
         <Route path="/communities" element={<CommunitiesScreen />} />
+        <Route path="/communities/discover" element={<CommunitiesDiscoverScreen />} />
         <Route path="/settings" element={<SettingsScreen />} />
         <Route path="/profile/stats" element={<StatsScreen />} />
         <Route path="/profile/lists" element={<ProfileListsScreen />} />

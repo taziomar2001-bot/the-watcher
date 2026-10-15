@@ -45,15 +45,20 @@ import {
   setPinned,
   subscribeMessages,
   toggleReaction,
+  toggleCommentLike,
   updateCommunity,
   type Comment,
   type Community,
+  type CommunityContentType,
   type Member,
   type Membership,
   type Message,
   type ModAction,
   type Post,
 } from '../data/communities'
+import { communityLocation, contentTypesLabel, validCommunityLocation, type CommunityLocation } from '../logic/communityTaxonomy'
+import { CommunityContentField } from '../ui/CommunityContentField'
+import { CommunityLocationField } from '../ui/CommunityLocationField'
 
 type Tab = 'news' | 'chat' | 'lists'
 const tabMem: Record<string, Tab> = {}
@@ -199,6 +204,9 @@ export function CommunityScreen({ view }: { view?: 'members' }) {
             {me?.role && active && me.role !== 'member' ? ` · You’re ${me.role === 'owner' ? 'the owner' : 'an admin'}` : ''}
           </div>
         </div>
+      </div>
+      <div className="community-tags community-detail-tags page-pad">
+        <span>{contentTypesLabel(c.content_types)}</span><span>{communityLocation(c)}</span>
       </div>
       {c.description && <p className="community-desc">{c.description}</p>}
 
@@ -597,6 +605,13 @@ function Comments({ post, isMember, isMod, onCount }: { post: Post; isMember: bo
           <div key={cm.id} className="comment">
             <b>{cm.author ? nameOf(cm.author) : 'Member'}</b> {cm.body}
             <span className="post-time"> · {ago(cm.created_at)}</span>
+            {isMember && <button className={`comment-like pressable ${cm.likedByMe ? 'on' : ''}`}
+              aria-label={`${cm.likedByMe ? 'Unlike' : 'Like'} comment`}
+              aria-pressed={cm.likedByMe}
+              onClick={async () => {
+                if (await toggleCommentLike(cm, post.community_id)) void load()
+                else toast('Couldn’t like this comment')
+              }}>♥{cm.likeCount ? ` ${cm.likeCount}` : ''}</button>}
             {(isMod || cm.author_id === me) && (
               <button className="comment-del" aria-label="Delete comment" onClick={async () => ((await deleteComment(cm.id)) ? load() : toast('Couldn’t delete'))}>
                 ✕
@@ -936,6 +951,12 @@ function EditSheet({ c, titles, onClose, onSaved }: { c: Community; titles: Comm
   const [name, setName] = useState(c.name)
   const [description, setDescription] = useState(c.description)
   const [visibility, setVisibility] = useState(c.visibility)
+  const [contentTypes, setContentTypes] = useState<CommunityContentType[]>(c.content_types ?? ['show', 'movie'])
+  const [communityPlace, setCommunityPlace] = useState<CommunityLocation>({
+    kind: c.location_kind ?? 'global', countryCode: c.location_country_code ?? undefined,
+    countryName: c.location_country_name ?? undefined, city: c.location_city ?? undefined,
+    adminName: c.location_admin_name ?? undefined, placeId: c.location_place_id ?? undefined,
+  })
   const [avatar, setAvatar] = useState<string | null | undefined>(c.avatar)
   const [banner, setBanner] = useState<{ full: string | null; thumb: string | null } | undefined>(
     c.banner || c.banner_thumb ? { full: c.banner ?? null, thumb: c.banner_thumb ?? null } : undefined,
@@ -947,10 +968,19 @@ function EditSheet({ c, titles, onClose, onSaved }: { c: Community; titles: Comm
   }, [order])
   const avatarInput = useRef<HTMLInputElement>(null)
   const bannerInput = useRef<HTMLInputElement>(null)
-  const valid = name.trim().length >= 3
+  const valid = name.trim().length >= 3 && contentTypes.length > 0 && validCommunityLocation(communityPlace)
   const save = async () => {
     setSaving(true)
-    const patch: Parameters<typeof updateCommunity>[1] = { name: name.trim(), description: description.trim(), visibility }
+    const patch: Parameters<typeof updateCommunity>[1] = {
+      name: name.trim(), description: description.trim(), visibility,
+      content_types: contentTypes,
+      location_kind: communityPlace.kind,
+      location_country_code: communityPlace.kind === 'global' ? null : communityPlace.countryCode ?? null,
+      location_country_name: communityPlace.kind === 'global' ? null : communityPlace.countryName ?? null,
+      location_city: communityPlace.kind === 'city' ? communityPlace.city ?? null : null,
+      location_admin_name: communityPlace.kind === 'city' ? communityPlace.adminName ?? null : null,
+      location_place_id: communityPlace.kind === 'city' ? communityPlace.placeId ?? null : null,
+    }
     if (avatar !== c.avatar) patch.avatar = avatar ?? null
     if ((banner?.full ?? null) !== (c.banner ?? null)) {
       patch.banner = banner?.full ?? null
@@ -1050,6 +1080,8 @@ function EditSheet({ c, titles, onClose, onSaved }: { c: Community; titles: Comm
         )}
         <input className="sync-input" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
         <textarea className="sync-input" rows={3} maxLength={500} placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <CommunityContentField value={contentTypes} onChange={setContentTypes} />
+        <CommunityLocationField value={communityPlace} onChange={setCommunityPlace} />
         <div className="vis-choice">
           <button type="button" className={`vis-opt pressable ${visibility === 'public' ? 'on' : ''}`} onClick={() => setVisibility('public')}>
             Public

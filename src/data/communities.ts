@@ -8,6 +8,8 @@ import type { SocialProfile } from './social'
 
 export type CommunityRole = 'owner' | 'admin' | 'member'
 export type MemberStatus = 'active' | 'pending' | 'banned'
+export type CommunityContentType = 'show' | 'movie'
+export type CommunityLocationKind = 'global' | 'country' | 'city'
 
 export interface Community {
   id: string
@@ -20,6 +22,13 @@ export interface Community {
   topic_poster: string | null
   member_count: number
   created_at: string
+  content_types?: CommunityContentType[]
+  location_kind?: CommunityLocationKind
+  location_country_code?: string | null
+  location_country_name?: string | null
+  location_city?: string | null
+  location_admin_name?: string | null
+  location_place_id?: number | null
   avatar?: string | null
   banner_thumb?: string | null
   banner?: string | null
@@ -28,6 +37,11 @@ export interface Community {
 export interface Membership {
   role: CommunityRole
   status: MemberStatus
+}
+
+export interface MyCommunity extends Community, Membership {
+  joined_at: string
+  last_interacted_at: string | null
 }
 
 export interface Member extends Membership {
@@ -56,6 +70,8 @@ export interface Comment {
   body: string
   created_at: string
   author?: SocialProfile
+  likeCount: number
+  likedByMe: boolean
 }
 
 export interface Message {
@@ -71,9 +87,16 @@ export const REACTIONS = ['👍', '❤️', '😂', '😮', '🔥'] as const
 const BASE_COLS = 'id,name,description,visibility,topic_type,topic_id,topic_title,topic_poster,member_count,created_at'
 // Pictures come from 007_community_images.sql; until it runs, queries fall back.
 const C_COLS = BASE_COLS + ',avatar,banner_thumb'
+const DISCOVERY_COLS = C_COLS + ',content_types,location_kind,location_country_code,location_country_name,location_city,location_admin_name,location_place_id'
 let imagesAvailable = true
+let discoveryAvailable = true
 
 async function selectCommunities<T>(run: (cols: string) => PromiseLike<{ data: T | null; error: { code?: string; message?: string } | null }>, extra = '') {
+  if (discoveryAvailable) {
+    const r = await run(DISCOVERY_COLS + extra)
+    if (!r.error || !/content_types|location_kind|location_country/i.test(r.error.message ?? '')) return r
+    discoveryAvailable = false
+  }
   if (imagesAvailable) {
     const r = await run(C_COLS + extra)
     if (!r.error || !/avatar|banner/.test(r.error.message ?? '')) return r
@@ -95,7 +118,7 @@ function codeOf(error: { message?: string; code?: string } | null): string {
   const m = error?.message ?? ''
   for (const c of ['not_allowed', 'banned', 'owner_cannot_leave', 'too_many_communities', 'not_found', 'not_a_member', 'not_on_yourself'])
     if (m.includes(c)) return c
-  if (error?.code === '42P01' || error?.code === 'PGRST205' || error?.code === 'PGRST202' || /does not exist|schema cache/i.test(m)) return 'not_set_up'
+  if (error?.code === '42P01' || error?.code === '42703' || error?.code === 'PGRST205' || error?.code === 'PGRST202' || /does not exist|schema cache/i.test(m)) return 'not_set_up'
   return 'error'
 }
 
@@ -111,20 +134,29 @@ export async function profilesByIds(ids: string[]): Promise<Map<string, SocialPr
 // ---------------------------------------------------------------- browse
 
 /** Communities I belong to (active) or asked to join (pending), with my role. */
-export async function myCommunities(): Promise<Result<(Community & Membership)[]>> {
+export async function myCommunities(): Promise<Result<MyCommunity[]>> {
   if (!supabase) return { ok: false, code: 'disabled' }
   const uid = await myId()
   if (!uid) return { ok: true, value: [] }
-  const { data: mem, error } = await supabase.from('community_members').select('community_id,role,status').eq('user_id', uid).neq('status', 'banned')
+  let { data: mem, error } = await supabase.from('community_members').select('community_id,role,status,joined_at,last_interacted_at').eq('user_id', uid).neq('status', 'banned')
+  if (error && /last_interacted_at/i.test(error.message)) {
+    const fallback = await supabase.from('community_members').select('community_id,role,status,joined_at').eq('user_id', uid).neq('status', 'banned')
+    mem = fallback.data as typeof mem
+    error = fallback.error
+  }
   if (error) return { ok: false, code: codeOf(error) }
-  const rows = (mem as { community_id: string; role: CommunityRole; status: MemberStatus }[]) ?? []
+  const rows = (mem as { community_id: string; role: CommunityRole; status: MemberStatus; joined_at: string; last_interacted_at?: string | null }[]) ?? []
   if (rows.length === 0) return { ok: true, value: [] }
   const { data: cs, error: e2 } = await selectCommunities<Community[]>((cols) => supabase!.from('communities').select(cols).in('id', rows.map((r) => r.community_id)) as never)
   if (e2) return { ok: false, code: codeOf(e2) }
   const byId = new Map(rows.map((r) => [r.community_id, r]))
-  const value = ((cs as Community[]) ?? [])
-    .map((c) => ({ ...c, role: byId.get(c.id)!.role, status: byId.get(c.id)!.status }))
-    .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'active' ? -1 : 1))
+  const value: MyCommunity[] = ((cs as Community[]) ?? [])
+    .map((c) => ({ ...c, role: byId.get(c.id)!.role, status: byId.get(c.id)!.status,
+      joined_at: byId.get(c.id)!.joined_at, last_interacted_at: byId.get(c.id)!.last_interacted_at ?? null }))
+    .sort((a, b) => (a.status === b.status
+      ? Math.max(Date.parse(b.last_interacted_at ?? b.joined_at), Date.parse(b.joined_at))
+        - Math.max(Date.parse(a.last_interacted_at ?? a.joined_at), Date.parse(a.joined_at)) || a.name.localeCompare(b.name)
+      : a.status === 'active' ? -1 : 1))
   return { ok: true, value }
 }
 
@@ -140,6 +172,34 @@ export async function findCommunities(q: string, topic?: { type: string; id: str
   })
   if (error) return { ok: false, code: codeOf(error) }
   return { ok: true, value: (data as Community[]) ?? [] }
+}
+
+export interface CommunityDiscoveryFilters {
+  contentType?: CommunityContentType
+  location?: { kind: CommunityLocationKind; countryCode?: string; countryName?: string; city?: string; adminName?: string; placeId?: number }
+}
+
+/** Browse every community in pages; filters are applied by the database. */
+export async function discoverCommunities(
+  q: string,
+  filters: CommunityDiscoveryFilters,
+  offset: number,
+): Promise<Result<{ items: Community[]; hasMore: boolean }>> {
+  if (!supabase) return { ok: false, code: 'disabled' }
+  const term = q.trim().replace(/[^\p{L}\p{N}\s'-]/gu, ' ').trim()
+  const pageSize = 24
+  const { data, error } = await selectCommunities<Community[]>((cols) => {
+    let query = supabase!.from('communities').select(cols).order('member_count', { ascending: false }).range(offset, offset + pageSize)
+    if (term) query = query.or(`name.ilike.%${term}%,description.ilike.%${term}%,topic_title.ilike.%${term}%,location_country_name.ilike.%${term}%,location_city.ilike.%${term}%`)
+    if (filters.contentType) query = query.contains('content_types', [filters.contentType])
+    if (filters.location?.kind === 'global') query = query.eq('location_kind', 'global')
+    if (filters.location?.countryCode) query = query.eq('location_country_code', filters.location.countryCode)
+    if (filters.location?.kind === 'city' && filters.location.placeId) query = query.eq('location_place_id', filters.location.placeId)
+    return query as never
+  })
+  if (error) return { ok: false, code: codeOf(error) }
+  const rows = (data as Community[]) ?? []
+  return { ok: true, value: { items: rows.slice(0, pageSize), hasMore: rows.length > pageSize } }
 }
 
 export async function getCommunity(id: string): Promise<Result<{ community: Community; me: Membership | null }>> {
@@ -163,9 +223,11 @@ export async function createCommunity(input: {
   description: string
   visibility: 'public' | 'private'
   topic?: { type: 'show' | 'movie'; id: string; title: string; poster?: string }
+  contentTypes: CommunityContentType[]
+  location: { kind: CommunityLocationKind; countryCode?: string; countryName?: string; city?: string; adminName?: string; placeId?: number }
 }): Promise<Result<string>> {
   if (!supabase) return { ok: false, code: 'disabled' }
-  const { data, error } = await supabase.rpc('create_community', {
+  const { data, error } = await supabase.rpc('create_community_v2', {
     p_name: input.name,
     p_description: input.description,
     p_visibility: input.visibility,
@@ -173,6 +235,13 @@ export async function createCommunity(input: {
     p_topic_id: input.topic?.id ?? null,
     p_topic_title: input.topic?.title ?? null,
     p_topic_poster: input.topic?.poster ?? null,
+    p_content_types: input.contentTypes,
+    p_location_kind: input.location.kind,
+    p_country_code: input.location.countryCode ?? null,
+    p_country_name: input.location.countryName ?? null,
+    p_city: input.location.city ?? null,
+    p_admin_name: input.location.adminName ?? null,
+    p_place_id: input.location.placeId ?? null,
   })
   if (error) return { ok: false, code: codeOf(error) }
   return { ok: true, value: data as string }
@@ -200,7 +269,8 @@ export async function moderateMember(id: string, userId: string, action: ModActi
 
 export async function updateCommunity(
   id: string,
-  patch: Partial<Pick<Community, 'name' | 'description' | 'visibility' | 'avatar' | 'banner' | 'banner_thumb'>>,
+  patch: Partial<Pick<Community, 'name' | 'description' | 'visibility' | 'avatar' | 'banner' | 'banner_thumb' |
+    'content_types' | 'location_kind' | 'location_country_code' | 'location_country_name' | 'location_city' | 'location_admin_name' | 'location_place_id'>>,
 ): Promise<Result<null>> {
   if (!supabase) return { ok: false, code: 'disabled' }
   const { error } = await supabase.from('communities').update(patch).eq('id', id)
@@ -291,10 +361,30 @@ export async function toggleReaction(post: Post, emoji: string): Promise<boolean
 
 export async function listComments(postId: string): Promise<Comment[]> {
   if (!supabase) return []
+  const uid = await myId()
   const { data } = await supabase.from('community_comments').select('id,post_id,author_id,body,created_at').eq('post_id', postId).order('created_at').limit(200)
-  const rows = (data as Comment[]) ?? []
-  const profs = await profilesByIds(rows.map((r) => r.author_id))
-  return rows.map((r) => ({ ...r, author: profs.get(r.author_id) }))
+  const rows = (data as Omit<Comment, 'likeCount' | 'likedByMe'>[]) ?? []
+  const [profs, likes] = await Promise.all([
+    profilesByIds(rows.map((r) => r.author_id)),
+    rows.length ? supabase.from('community_comment_likes').select('comment_id,user_id').in('comment_id', rows.map((r) => r.id)) : Promise.resolve({ data: [] }),
+  ])
+  const counts = new Map<string, number>()
+  const mine = new Set<string>()
+  for (const like of (likes.data as { comment_id: string; user_id: string }[]) ?? []) {
+    counts.set(like.comment_id, (counts.get(like.comment_id) ?? 0) + 1)
+    if (like.user_id === uid) mine.add(like.comment_id)
+  }
+  return rows.map((r) => ({ ...r, author: profs.get(r.author_id), likeCount: counts.get(r.id) ?? 0, likedByMe: mine.has(r.id) }))
+}
+
+export async function toggleCommentLike(comment: Comment, communityId: string): Promise<boolean> {
+  if (!supabase) return false
+  const uid = await myId()
+  if (!uid) return false
+  const { error } = comment.likedByMe
+    ? await supabase.from('community_comment_likes').delete().eq('comment_id', comment.id).eq('user_id', uid)
+    : await supabase.from('community_comment_likes').insert({ comment_id: comment.id, community_id: communityId, user_id: uid })
+  return !error
 }
 
 export async function addComment(post: Post, body: string): Promise<boolean> {

@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { PeopleIcon, PlusIcon, ChevronRight } from '../components/Icons'
+import { PlusIcon, ChevronRight, SearchIcon, FilterIcon } from '../components/Icons'
 import { SmartImage } from '../components/ui'
 import { SearchField, SectionHeader } from '../ui/primitives'
 import { useSync } from '../logic/sync'
 import { useToast } from '../store/useToast'
-import { addCommunityTitles, communitiesForTitle, createCommunity, findCommunities, type Community } from '../data/communities'
+import { addCommunityTitles, communitiesForTitle, createCommunity, type Community, type CommunityContentType, type CommunityDiscoveryFilters } from '../data/communities'
 import { useMyCommunities } from '../logic/communityCache'
+import { communityLocation, communitySearchText, contentTypesLabel, matchesCommunityFilters, validCommunityLocation, type CommunityLocation } from '../logic/communityTaxonomy'
 import { useCached } from '../utils/cache'
-import { useDebounced } from '../hooks/useAsync'
 import { TitlePicker } from '../ui/TitlePicker'
+import { CommunityLocationField } from '../ui/CommunityLocationField'
+import { CommunityContentField } from '../ui/CommunityContentField'
+import { CommunityFilterSheet, type MyCommunityRoleFilter } from '../ui/CommunityFilterSheet'
 
 export interface TopicDraft {
   type: 'show' | 'movie'
@@ -19,8 +22,6 @@ export interface TopicDraft {
   poster?: string
   year?: number
 }
-
-const mem = { q: '' }
 
 const HUES = ['#2a8fc0', '#7b5cd6', '#c0612a', '#2aa676', '#c03a5a', '#4a6bd6', '#b08a1e']
 export function communityHue(id: string) {
@@ -58,6 +59,7 @@ export function CommunityCard({ c, badge }: { c: Community; badge?: string }) {
             {c.member_count.toLocaleString()} member{c.member_count === 1 ? '' : 's'}
             {c.topic_title ? ` · ${c.topic_title}` : ''}
           </span>
+          <span className="community-tags"><span>{contentTypesLabel(c.content_types)}</span><span>{communityLocation(c)}</span></span>
           {c.description && <span className="community-card-desc">{c.description}</span>}
         </span>
       </span>
@@ -77,94 +79,97 @@ export function CommunityRow({ c, right }: { c: Community; right?: React.ReactNo
           {c.member_count.toLocaleString()} member{c.member_count === 1 ? '' : 's'}
           {c.topic_title ? ` · ${c.topic_title}` : ''}
         </span>
+        <span className="community-tags"><span>{contentTypesLabel(c.content_types)}</span><span>{communityLocation(c)}</span></span>
       </span>
       {right ?? <ChevronRight size={20} className="user-chevron" />}
     </button>
   )
 }
 
-/** Communities tab: yours, discover/search, filter by title, and create. */
+/** Communities home: a focused entry to discovery and recently active groups. */
 export function CommunitiesScreen() {
   const nav = useNavigate()
   const location = useLocation()
   const [params, setParams] = useSearchParams()
   const signedIn = useSync((s) => s.status === 'signedIn')
-  const [q, setQState] = useState(mem.q)
-  const setQ = (v: string) => ((mem.q = v), setQState(v))
   const [creating, setCreating] = useState<TopicDraft | null | false>(false)
-  const dq = useDebounced(q, 300)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const [filters, setFilters] = useState<CommunityDiscoveryFilters>({})
+  const [role, setRole] = useState<MyCommunityRoleFilter>('all')
+  const [filterOpen, setFilterOpen] = useState(false)
 
-  // ?topic=show:1396 (from a show/movie page); title/poster ride along in state.
+  // Title deep links still show the groups connected to that title.
   const topicParam = params.get('topic')
   const stateTopic = (location.state as { topic?: TopicDraft } | null)?.topic
   const topic: TopicDraft | undefined = topicParam
     ? stateTopic ?? { type: topicParam.split(':')[0] as 'show' | 'movie', id: topicParam.split(':')[1], title: '' }
     : undefined
-
-  // Cached copies show instantly; fresh data swaps in quietly.
   const { list: mine, error: mineError, reload: reloadMine } = useMyCommunities()
-  const foundKey = !signedIn ? null : topicParam ? `about:${topicParam}` : `find:${dq.trim().toLowerCase()}`
   const foundQ = useCached<Community[] | { error: string }>(
-    foundKey,
+    signedIn && topicParam ? `about:${topicParam}` : null,
     async () => {
-      const r = topicParam ? await communitiesForTitle(topicParam) : await findCommunities(dq)
+      const r = await communitiesForTitle(topicParam!)
       if (r.ok) return r.value
       return r.code === 'not_set_up' ? { error: 'not_set_up' } : undefined
     },
-    { persist: !dq.trim(), keepPrevious: true },
   )
   const found = Array.isArray(foundQ.data) ? foundQ.data : undefined
-  const error = mineError === 'not_set_up' || (foundQ.data && !Array.isArray(foundQ.data)) ? 'not_set_up' : foundQ.failed && !found ? 'error' : undefined
+  const error = mineError === 'not_set_up' || (foundQ.data && !Array.isArray(foundQ.data))
+    ? 'not_set_up' : mineError || foundQ.failed ? 'error' : undefined
   useEffect(() => {
     if (creating === false) void reloadMine()
   }, [creating]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const myStatus = new Map((mine ?? []).map((c) => [c.id, c]))
-  const discover = found ?? []
   const badgeFor = (c: Community) => {
     const m = myStatus.get(c.id)
     if (!m) return undefined
     return m.status === 'pending' ? 'Requested' : m.role === 'owner' ? 'Owner' : m.role === 'admin' ? 'Admin' : 'Joined'
   }
+  const active = (mine ?? []).filter((c) => c.status === 'active')
+  const pending = (mine ?? []).filter((c) => c.status === 'pending')
+  const term = q.trim().toLocaleLowerCase()
+  const visible = active.filter((c) => (role === 'all' || c.role === role) &&
+    matchesCommunityFilters(c, filters) && (!term || communitySearchText(c).includes(term)))
+  const hasFilters = !!filters.contentType || !!filters.location || role !== 'all'
 
   return (
     <div className="scroll-area route-fade">
-      <div className="app-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="app-header community-home-header">
         <div>
           <h1>Communities</h1>
           <div className="sub">Groups for the shows and films you love</div>
         </div>
         {signedIn && !error && (
-          <button className="icon-round pressable" onClick={() => setCreating(topic ?? null)} aria-label="Create a community">
-            <PlusIcon size={20} />
-          </button>
+          <div className="header-icons">
+            {!topic && <button className="icon-round pressable" onClick={() => setSearchOpen((open) => !open)}
+              aria-label={searchOpen ? 'Close your community search' : 'Search your communities'}>
+              <SearchIcon size={20} />
+            </button>}
+            <button className="icon-round pressable" onClick={() => setCreating(topic ?? null)} aria-label="Create a community">
+              <PlusIcon size={20} />
+            </button>
+          </div>
         )}
       </div>
 
       {!signedIn ? (
         <Empty title="Sign in to join communities" sub="Communities are for Watcher members. Sign in or create an account in Settings." />
       ) : error === 'not_set_up' ? (
-        <Empty title="Communities aren’t switched on yet" sub="Run supabase/006_communities.sql in Supabase to turn them on." />
+        <Empty title="Communities aren’t switched on yet" sub="Run the community SQL steps in Supabase to turn them on." />
       ) : error ? (
         <Empty title="Couldn’t load communities" sub="Check your connection and try again." />
       ) : topic ? (
         <>
           <div className="page-pad topic-banner">
-            <span>
-              Communities about <b>{topic.title || 'this title'}</b>
-            </span>
-            <button className="auth-link" onClick={() => setParams({}, { replace: true })}>
-              See all
-            </button>
+            <span>Communities about <b>{topic.title || 'this title'}</b></span>
+            <button className="auth-link" onClick={() => setParams({}, { replace: true })}>See all</button>
           </div>
           <div className="page-pad">
-            {found === undefined ? (
-              <CardSkeletons n={2} />
-            ) : found.length === 0 ? (
-              <Empty title="No communities yet" sub="Start the first one for this title." />
-            ) : (
-              found.map((c) => <CommunityCard key={c.id} c={c} badge={badgeFor(c)} />)
-            )}
+            {found === undefined ? <CardSkeletons n={2} /> :
+              found.length === 0 ? <Empty title="No communities yet" sub="Start the first one for this title." /> :
+                found.map((c) => <CommunityCard key={c.id} c={c} badge={badgeFor(c)} />)}
             <button className="sync-btn primary full pressable" style={{ marginTop: 10 }} onClick={() => setCreating(topic)}>
               Start a community{topic.title ? ` for ${topic.title}` : ''}
             </button>
@@ -172,67 +177,48 @@ export function CommunitiesScreen() {
         </>
       ) : (
         <>
-          <div className="page-pad" style={{ paddingBottom: 6 }}>
-            <SearchField value={q} onChange={setQ} placeholder="Search communities" />
+          <div className="page-pad">
+            <button className="community-discover-hero pressable" onClick={() => nav('/communities/discover')}>
+              <span className="community-discover-overline">FIND YOUR PEOPLE</span>
+              <span className="community-discover-title">Discover <ChevronRight size={29} /></span>
+              <span className="community-discover-sub">Explore every community</span>
+            </button>
           </div>
-
-          {mine === undefined && found === undefined ? (
-            <div className="page-pad">
-              <RowSkeletons n={2} />
-              <CardSkeletons n={3} />
+          <SectionHeader title="Your communities" />
+          {searchOpen && (
+            <div className="page-pad community-search-controls">
+              <SearchField value={q} onChange={setQ} placeholder="Search your communities" />
+              <button className={`icon-round pressable ${hasFilters ? 'has-filters' : ''}`}
+                onClick={() => setFilterOpen(true)} aria-label="Filter your communities">
+                <FilterIcon size={20} />
+              </button>
             </div>
-          ) : (
-          <>
-          {!q && (mine?.length ?? 0) > 0 && (
+          )}
+          <div className="page-pad">
+            {mine === undefined ? <CardSkeletons n={2} /> :
+              active.length === 0 ? (
+                <Empty title="No communities yet" sub="Discover a group or create one of your own." />
+              ) : visible.length === 0 ? (
+                <Empty title="No matches" sub="Try another search or clear the filters." />
+              ) : visible.map((c) => <CommunityCard key={c.id} c={c} badge={badgeFor(c)} />)}
+          </div>
+          {pending.length > 0 && !searchOpen && (
             <>
-              <SectionHeader title="Yours" />
+              <SectionHeader title="Requests" />
               <div className="page-pad">
-                {mine!.map((c) => (
-                  <CommunityRow
-                    key={c.id}
-                    c={c}
-                    right={
-                      c.status === 'pending' ? (
-                        <span className="lock-chip">Requested</span>
-                      ) : c.role !== 'member' ? (
-                        <span className="lock-chip">{c.role === 'owner' ? 'Owner' : 'Admin'}</span>
-                      ) : undefined
-                    }
-                  />
-                ))}
+                {pending.map((c) => <CommunityCard key={c.id} c={c} badge="Requested" />)}
               </div>
             </>
-          )}
-
-          <SectionHeader title={q ? 'Results' : 'Discover'} />
-          <div className="page-pad">
-            {found === undefined ? (
-              <CardSkeletons n={3} />
-            ) : discover.length === 0 ? (
-              q ? (
-                <Empty title="No communities found" sub="Try another name, or start one." />
-              ) : (
-                <div className="empty">
-                  <div className="soon-icon">
-                    <PeopleIcon size={30} />
-                  </div>
-                  <div className="empty-title">No communities yet</div>
-                  <div className="empty-sub">Start one for a show, a film, or anything you watch with friends.</div>
-                  <button className="sync-btn primary pressable" style={{ marginTop: 14 }} onClick={() => setCreating(null)}>
-                    Start a community
-                  </button>
-                </div>
-              )
-            ) : (
-              discover.map((c) => <CommunityCard key={c.id} c={c} badge={badgeFor(c)} />)
-            )}
-          </div>
-          </>
           )}
         </>
       )}
       <div style={{ height: 24 }} />
-
+      {filterOpen && <CommunityFilterSheet filters={filters} role={role}
+        onApply={(next, nextRole) => {
+          setFilters(next)
+          setRole(nextRole ?? 'all')
+          setFilterOpen(false)
+        }} onClose={() => setFilterOpen(false)} />}
       {creating !== false && (
         <CreateCommunitySheet
           topic={creating ?? undefined}
@@ -297,15 +283,17 @@ function CreateCommunitySheet({ topic, onClose, onCreated }: { topic?: TopicDraf
   const [name, setName] = useState(topic?.title ? `${topic.title} fans` : '')
   const [description, setDescription] = useState('')
   const [visibility, setVisibility] = useState<'public' | 'private'>('public')
+  const [contentTypes, setContentTypes] = useState<CommunityContentType[]>(topic ? [topic.type] : ['show', 'movie'])
+  const [communityPlace, setCommunityPlace] = useState<CommunityLocation>({ kind: 'global' })
   const [titles, setTitles] = useState<TopicDraft[]>(topic ? [topic] : [])
   const [picking, setPicking] = useState(false)
   const [saving, setSaving] = useState(false)
-  const valid = name.trim().length >= 3 && name.trim().length <= 60
+  const valid = name.trim().length >= 3 && name.trim().length <= 60 && contentTypes.length > 0 && validCommunityLocation(communityPlace)
 
   const submit = async () => {
     if (!valid || saving) return
     setSaving(true)
-    const r = await createCommunity({ name: name.trim(), description: description.trim(), visibility, topic: titles[0] })
+    const r = await createCommunity({ name: name.trim(), description: description.trim(), visibility, topic: titles[0], contentTypes, location: communityPlace })
     if (r.ok && titles.length) {
       await addCommunityTitles(
         r.value,
@@ -350,6 +338,8 @@ function CreateCommunitySheet({ topic, onClose, onCreated }: { topic?: TopicDraf
         <div className="field-label">About these titles</div>
         <TitleChips titles={titles} onRemove={(t) => setTitles((ts) => ts.filter((x) => x !== t))} onAdd={() => setPicking(true)} />
         <div className="vis-hint">Optional. Owners and admins can add more later; linked titles can’t be removed.</div>
+        <CommunityContentField value={contentTypes} onChange={setContentTypes} />
+        <CommunityLocationField value={communityPlace} onChange={setCommunityPlace} />
         <div className="vis-choice">
           <button type="button" className={`vis-opt pressable ${visibility === 'public' ? 'on' : ''}`} onClick={() => setVisibility('public')}>
             Public
