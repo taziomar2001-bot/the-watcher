@@ -290,3 +290,22 @@ export function CloudIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
     </svg>
   )
 }
+
+export function EyeOffIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth} {...p}>
+      <path d="M3 3l18 18" />
+      <path d="M10.6 5.1A10.5 10.5 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-3.2 4.1M6.3 6.3A17.4 17.4 0 0 0 2.5 12S6 19 12 19a9.6 9.6 0 0 0 4.4-1.1" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </svg>
+  )
+}
+
+export function ReplyIcon({ size = 24, strokeWidth = 1.8, ...p }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={strokeWidth} {...p}>
+      <path d="M9 14L4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5V20" />
+    </svg>
+  )
+}

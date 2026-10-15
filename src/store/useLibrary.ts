@@ -9,11 +9,28 @@ export interface CustomList {
   name: string
   description?: string
   visibility: 'public' | 'private'
-  kind: 'shows' | 'movies' | 'mixed'
-  items: string[] // typed refs: "show:ID" | "movie:ID" — order = rank order when ranked
+  kind: ListKind
+  // Typed refs (see logic/lists.ts): "show:ID" | "movie:ID" | "season:SHOW:N" |
+  // "episode:SHOW:S:E". Order = rank order when ranked.
+  items: string[]
   cover?: string
   createdAt?: number
   ranked?: boolean // when true, items are ordered and shown with a rank badge
+  /** Display snapshot per ref (title, show name, poster) — needed for seasons and
+   *  episodes, and for titles that aren't in the library. */
+  meta?: Record<string, RefMeta>
+  /** Communities this list is linked to (shown in their Lists tab). */
+  communities?: string[]
+  updatedAt?: number
+}
+
+/** "mixed" = shows and movies together (every list made before typed lists). */
+export type ListKind = 'mixed' | 'shows' | 'seasons' | 'episodes' | 'movies'
+export interface RefMeta {
+  t: string // title
+  s?: string // show name (seasons / episodes)
+  p?: string // poster / still
+  y?: number // year
 }
 
 /** Build/parse a typed list-membership ref so shows & movies never collide. */
@@ -104,6 +121,7 @@ interface LibraryState {
   setListCover: (id: string, cover?: string) => void
   deleteList: (id: string) => void
   removeFromList: (listId: string, ref: string) => void
+  setListCommunities: (listId: string, communities: string[]) => void
   reorderList: (listId: string, items: string[]) => void
   markEpisodeWatched: (epId: string, watched: boolean) => void
   markAllPrevious: (epIds: string[]) => void
@@ -111,8 +129,8 @@ interface LibraryState {
   markMovieWatched: (id: string, watched: boolean, item?: LibraryItem) => void
   setStopped: (id: string, stopped: boolean, item?: LibraryItem) => void
   followShow: (id: string, item?: LibraryItem) => void
-  addList: (list: Omit<CustomList, 'id'>) => void
-  addToList: (listId: string, mediaId: string) => void
+  addList: (list: Omit<CustomList, 'id'>) => string
+  addToList: (listId: string, ref: string, meta?: RefMeta) => void
   applyImportedShows: (entries: ImportedShow[]) => void
   applyImportedMovies: (entries: LibraryItem[]) => void
   importMovies: (entries: ImportedMovie[]) => void
@@ -192,7 +210,7 @@ const seed = demoMode ? sampleSeed : emptySeed
 
 export const useLibrary = create<LibraryState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...seed,
       movieRatings: {},
       episodeRatings: {},
@@ -292,12 +310,19 @@ export const useLibrary = create<LibraryState>()(
       deleteList: (id) => set((s) => ({ lists: s.lists.filter((l) => l.id !== id) })),
       removeFromList: (listId, ref) =>
         set((s) => ({
-          lists: s.lists.map((l) => (l.id === listId ? { ...l, items: l.items.filter((r) => r !== ref) } : l)),
+          lists: s.lists.map((l) => {
+            if (l.id !== listId) return l
+            const meta = l.meta && ref in l.meta ? { ...l.meta } : l.meta
+            if (meta && meta !== l.meta) delete meta[ref]
+            return { ...l, items: l.items.filter((r) => r !== ref), meta, updatedAt: Date.now() }
+          }),
         })),
+      setListCommunities: (listId, communities) =>
+        set((s) => ({ lists: s.lists.map((l) => (l.id === listId ? { ...l, communities: communities.length ? communities : undefined } : l)) })),
       // Replace a list's item order wholesale (used by ranked-list reordering).
       reorderList: (listId, items) =>
         set((s) => ({
-          lists: s.lists.map((l) => (l.id === listId ? { ...l, items } : l)),
+          lists: s.lists.map((l) => (l.id === listId ? { ...l, items, updatedAt: Date.now() } : l)),
         })),
       // Watching an episode implies following the parent show (spec §11).
       markEpisodeWatched: (epId, watched) =>
@@ -392,12 +417,17 @@ export const useLibrary = create<LibraryState>()(
         set((s) => ({ libraryShows: { ...s.libraryShows, [id]: { ...s.libraryShows[id], ...patch } } })),
       patchLibraryMovie: (id, patch) =>
         set((s) => ({ libraryMovies: { ...s.libraryMovies, [id]: { ...s.libraryMovies[id], ...patch } } })),
-      addList: (list) =>
-        set((s) => ({ lists: [...s.lists, { ...list, id: `list_${Date.now()}_${s.lists.length}`, createdAt: Date.now() }] })),
-      addToList: (listId, mediaId) =>
+      addList: (list) => {
+        const id = `list_${Date.now()}_${get().lists.length}`
+        set((s) => ({ lists: [...s.lists, { ...list, id, createdAt: Date.now(), updatedAt: Date.now() }] }))
+        return id
+      },
+      addToList: (listId, ref, meta) =>
         set((s) => ({
           lists: s.lists.map((l) =>
-            l.id === listId && !l.items.includes(mediaId) ? { ...l, items: [...l.items, mediaId] } : l,
+            l.id === listId && !l.items.includes(ref)
+              ? { ...l, items: [...l.items, ref], meta: meta ? { ...l.meta, [ref]: meta } : l.meta, updatedAt: Date.now() }
+              : l,
           ),
         })),
 

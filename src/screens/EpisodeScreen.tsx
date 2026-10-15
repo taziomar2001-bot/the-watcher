@@ -1,8 +1,11 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { SmartImage } from '../components/ui'
-import { StarRating } from '../ui/StarRating'
-import { ChevronLeft, ChevronRight, CheckIcon } from '../components/Icons'
+import { ChevronLeft, ChevronRight, CheckIcon, ListIcon, PeopleIcon } from '../components/Icons'
+import { DetailHero, ActionBar, ActionBtn, DetailTabs, useDetailTab } from '../ui/Detail'
+import { TitleComments, commentsLabel, useCommentCount } from '../ui/TitleComments'
+import { AddToListSheet, useListMembership } from '../ui/AddToList'
+import { RatingCard } from './MovieScreen'
+import { episodeRef } from '../logic/lists'
 import { useAsync } from '../hooks/useAsync'
 import { getShow } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
@@ -25,6 +28,11 @@ export function EpisodeScreen() {
   const toast = useToast((s) => s.show)
   const goUp = useUpNavigation()
   const touch = useRef<{ x: number; y: number } | null>(null)
+  const epKey = episodeRef(id, Number(season), Number(number))
+  const [tab, setTab] = useDetailTab<'about' | 'comments'>(epKey, 'about')
+  const [listSheet, setListSheet] = useState(false)
+  const membership = useListMembership(epKey)
+  const commentCount = useCommentCount(epKey)
 
   if (!show && loadError) return <ErrorState page onRetry={reload} />
   if (!show)
@@ -87,91 +95,96 @@ export function EpisodeScreen() {
     else goTo(prev)
   }
 
+  const ref = episodeRef(id, Number(season), ep.number)
+
   return (
     <div className="scroll-area route-fade" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div className="detail-hero" style={{ height: 220 }}>
-        <SmartImage src={ep.still ?? show.backdrop} alt={ep.title} />
-        <div className="detail-hero-scrim" />
-        {/* Deterministic hierarchical Back: always to the season that contains
-            the currently-viewed episode, regardless of prior swipes. */}
-        <button
-          className="icon-btn-float"
-          style={{ left: 14 }}
-          onClick={() => goUp(`/show/${id}/season/${season}`)}
-          aria-label="Back to season"
-        >
-          <ChevronLeft size={22} />
-        </button>
-      </div>
-
-      <div className="page-pad" style={{ paddingTop: 14 }}>
-        <div className="episode-eyebrow">
-          {show.title} · S{pad(Number(season))} · E{pad(ep.number)}
-        </div>
-        <h1 className="detail-title" style={{ marginTop: 4 }}>
-          {ep.title}
-        </h1>
-        <div className="detail-sub" style={{ marginTop: 6 }}>
-          {[ep.airDate ? shortDate(ep.airDate) : null, ep.runtime ? `${ep.runtime} min` : null].filter(Boolean).join('  ·  ')}
-        </div>
-        <div className="detail-scores">
+      {/* Deterministic hierarchical Back: always to the season that contains
+          the currently-viewed episode, regardless of prior swipes. */}
+      <DetailHero
+        still
+        backdrop={ep.still ?? show.backdrop}
+        title={ep.title}
+        onBack={() => goUp(`/show/${id}/season/${season}`)}
+        backLabel="Back to season"
+        eyebrow={
+          <button className="dh-up" onClick={() => goUp(`/show/${id}/season/${season}`)}>
+            {show.title} · S{pad(Number(season))} E{pad(ep.number)}
+          </button>
+        }
+        meta={[ep.airDate ? shortDate(ep.airDate) : null, ep.runtime ? `${ep.runtime} min` : null].filter(Boolean).join(' · ')}
+      >
+        <div className="dh-scores">
           <PublicScore value={ep.communityRating} votes={ep.communityVotes} />
+          {rating != null && <span className="dh-mine">{rating} ★ you</span>}
         </div>
-      </div>
+      </DetailHero>
 
-      <div className="detail-actions">
-        <button
-          className={`action-pill tone-green pressable ${isWatched ? 'active' : ''}`}
+      <ActionBar>
+        <ActionBtn
+          icon={<CheckIcon size={22} />}
+          label={isWatched ? 'Watched' : 'Mark watched'}
+          on={isWatched}
+          tone="green"
           onClick={() => {
             mark(ep.id, !isWatched)
             if (!isWatched) toast('Marked watched')
           }}
-        >
-          <CheckIcon size={15} /> {isWatched ? 'Watched' : 'Mark watched'}
-        </button>
-      </div>
+        />
+        <ActionBtn icon={<ListIcon size={22} />} label={membership ? `${membership} list${membership > 1 ? 's' : ''}` : 'Add to list'} on={membership > 0} onClick={() => setListSheet(true)} />
+        <ActionBtn
+          icon={<PeopleIcon size={22} />}
+          label="Community"
+          onClick={() => nav(`/communities?topic=show:${show.id}`, { state: { topic: { type: 'show', id: show.id, title: show.title, poster: show.poster } } })}
+        />
+      </ActionBar>
 
-      {/* Personal rating (independent of watched status) */}
-      <div className="rating-card">
-        <div className="rating-split">
-          <div>
-            <div className="rating-card-label">
-              Your rating
-              {rating != null && <span className="rating-card-value" style={{ marginLeft: 8 }}>{rating} ★</span>}
-            </div>
-            <StarRating value={rating} onChange={(v) => setEpisodeRating(ep.id, v)} />
+      <DetailTabs
+        tabs={[
+          { key: 'about', label: 'About' },
+          { key: 'comments', label: commentsLabel(commentCount) },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+
+      {tab === 'about' && (
+        <div className="about">
+          <RatingCard
+            value={rating}
+            onChange={(v) => setEpisodeRating(ep.id, v)}
+            publicValue={ep.communityRating}
+            publicVotes={ep.communityVotes}
+            hint="Tap a star to rate this episode"
+          />
+          {ep.overview && <p className="detail-overview">{ep.overview}</p>}
+          <div className="ep-nav">
+            <button className="ep-nav-btn pressable" disabled={!prev} onClick={() => goTo(prev)}>
+              <ChevronLeft size={18} />
+              <span className="ep-nav-text">
+                <span className="ep-nav-label">Previous</span>
+                {prev && <span className="ep-nav-title">{prev.title}</span>}
+              </span>
+            </button>
+            <button className="ep-nav-btn right pressable" disabled={!next} onClick={() => goTo(next)}>
+              <span className="ep-nav-text">
+                <span className="ep-nav-label">Next</span>
+                {next && <span className="ep-nav-title">{next.title}</span>}
+              </span>
+              <ChevronRight size={18} />
+            </button>
           </div>
-          {ep.communityRating ? (
-            <div className="rating-public">
-              <div className="rating-public-label">Everyone</div>
-              <PublicScore value={ep.communityRating} votes={ep.communityVotes} compact />
-            </div>
-          ) : null}
         </div>
-        <div className="rating-card-hint">
-          {rating != null ? 'Tap the same star again to remove your rating' : 'Tap a star to rate this episode'}
-        </div>
-      </div>
-
-      {ep.overview && <p className="detail-overview">{ep.overview}</p>}
-
-      <div className="ep-nav">
-        <button className="ep-nav-btn pressable" disabled={!prev} onClick={() => goTo(prev)}>
-          <ChevronLeft size={18} />
-          <span className="ep-nav-text">
-            <span className="ep-nav-label">Previous</span>
-            {prev && <span className="ep-nav-title">{prev.title}</span>}
-          </span>
-        </button>
-        <button className="ep-nav-btn right pressable" disabled={!next} onClick={() => goTo(next)}>
-          <span className="ep-nav-text">
-            <span className="ep-nav-label">Next</span>
-            {next && <span className="ep-nav-title">{next.title}</span>}
-          </span>
-          <ChevronRight size={18} />
-        </button>
-      </div>
+      )}
+      {tab === 'comments' && <TitleComments target={ref} what={`${show.title} S${pad(Number(season))}E${pad(ep.number)}`} />}
       <div style={{ height: 24 }} />
+      {listSheet && (
+        <AddToListSheet
+          itemRef={ref}
+          meta={{ t: ep.title, s: show.title, p: ep.still ?? show.backdrop ?? show.poster, y: ep.airDate ? Number(ep.airDate.slice(0, 4)) : undefined }}
+          onClose={() => setListSheet(false)}
+        />
+      )}
     </div>
   )
 }

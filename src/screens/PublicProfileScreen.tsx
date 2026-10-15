@@ -13,9 +13,11 @@ import {
 } from '../data/social'
 import { useSync } from '../logic/sync'
 import { compositionLabel } from '../logic/stats'
+import { listSummary } from '../logic/lists'
 import { formatDuration as hm } from '../utils/duration'
 import { ListBadge } from '../ui/ListBadge'
 import { FollowButton, UserAvatar, nameOf } from '../ui/social'
+import { ProfileSkeleton } from '../ui/Skeletons'
 
 function Header({ title }: { title: string }) {
   const nav = useNavigate()
@@ -80,9 +82,7 @@ export function PublicProfileScreen() {
     return (
       <div className="scroll-area route-fade">
         <Header title="Profile" />
-        <div className="empty">
-          <div className="empty-sub">Loading…</div>
-        </div>
+        <ProfileSkeleton />
       </div>
     )
 
@@ -229,14 +229,13 @@ export function PublicProfileScreen() {
           )}
 
           {(showcase?.lists ?? []).map((l) => {
-            const shows = l.items.filter((i) => i.type === 'show').length
             return (
               <button key={l.id} className="list-row pressable" onClick={() => nav(`/u/${profile.id}/list/${l.id}`)}>
                 <ListBadge cover={l.cover} ranked={l.ranked} />
                 <span className="list-row-text">
                   <span className="list-row-name">{l.name}</span>
                   <span className="list-row-sub">
-                    {compositionLabel(l.items.length - shows, shows)}
+                    {listSummary({ items: l.items.map((i) => i.ref ?? `${i.type}:${i.id}`) })}
                     {l.ranked ? ' · Ranked' : ''}
                   </span>
                 </span>

@@ -6,6 +6,7 @@ import { UserRow } from '../ui/social'
 import { acceptFollower, listFollowConnections, listPendingRequests, removeFollower, type SocialProfile } from '../data/social'
 import { useSync } from '../logic/sync'
 import { useToast } from '../store/useToast'
+import { RowsSkeleton } from '../ui/Skeletons'
 
 type Tab = 'followers' | 'following' | 'requests'
 
@@ -66,9 +67,7 @@ export function ConnectionsScreen() {
 
       <div className="page-pad">
         {people === undefined ? (
-          <div className="empty">
-            <div className="empty-sub">Loading…</div>
-          </div>
+          <RowsSkeleton n={6} />
         ) : people.length === 0 ? (
           <div className="empty">
             <div className="empty-sub">

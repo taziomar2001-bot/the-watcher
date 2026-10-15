@@ -8,6 +8,7 @@ import { getLeaderboard, type LeaderMetric, type LeaderRow, type ProfileStats } 
 import { useSync } from '../logic/sync'
 import { useMyStats } from '../logic/stats'
 import { formatDuration as hm } from '../utils/duration'
+import { RowsSkeleton } from '../ui/Skeletons'
 
 const METRICS: { key: LeaderMetric; label: string; value: (s: ProfileStats) => number; format: (n: number) => string }[] = [
   { key: 'minutes_watched', label: 'Total time watched', value: (s) => s.minutes_watched, format: hm },
@@ -114,8 +115,8 @@ export function LeaderboardScreen() {
           )}
 
           {rows === undefined ? (
-            <div className="empty">
-              <div className="empty-sub">Loading…</div>
+            <div className="page-pad">
+              <RowsSkeleton n={8} h={62} />
             </div>
           ) : rows === null ? (
             <div className="empty">

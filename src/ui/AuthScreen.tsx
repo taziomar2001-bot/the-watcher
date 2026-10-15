@@ -1,3 +1,4 @@
+import { Wordmark } from './Wordmark'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSync } from '../logic/sync'
@@ -73,7 +74,7 @@ export function AuthScreen({
       )}
       <div className="welcome-inner">
         <div className="welcome-brand">
-          <div className="welcome-logo">W</div>
+          <Wordmark size={40} />
           <h1 className="welcome-title">{title}</h1>
           {(mode === 'in' || mode === 'up') && (
             <p className="welcome-tag">{note ?? 'Track what you watch, on every device, with friends.'}</p>

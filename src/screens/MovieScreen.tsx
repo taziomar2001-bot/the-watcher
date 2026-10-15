@@ -1,11 +1,13 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { SmartImage } from '../components/ui'
-import { ActionPill } from '../ui/cards'
+import { DetailHero, ActionBar, ActionBtn, DetailTabs, useDetailTab } from '../ui/Detail'
+import { TitleComments, commentsLabel, useCommentCount } from '../ui/TitleComments'
+import { Fact } from './ShowScreen'
+import { formatDuration } from '../utils/duration'
 import { ProgressDot } from '../ui/primitives'
 import { StarRating } from '../ui/StarRating'
-import { AddToListButton } from '../ui/AddToList'
-import { ChevronLeft, ChevronRight, HeartIcon, PeopleIcon } from '../components/Icons'
+import { AddToListSheet, useListMembership } from '../ui/AddToList'
+import { HeartIcon, PeopleIcon, PlusIcon, CheckIcon, ListIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
 import { getMovie, daysUntil } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
@@ -24,6 +26,10 @@ export function MovieScreen() {
   const lib = useLibrary()
   const toast = useToast((s) => s.show)
   const toggleFavorite = useToggleFavorite()
+  const [tab, setTab] = useDetailTab<'about' | 'comments'>(`movie:${id}`, 'about')
+  const [listSheet, setListSheet] = useState(false)
+  const membership = useListMembership(`movie:${id}`)
+  const commentCount = useCommentCount(`movie:${id}`)
 
   // Cache genres so the Profile movie dashboard can build a genre breakdown.
   useEffect(() => {
@@ -44,109 +50,145 @@ export function MovieScreen() {
   const fav = !!lib.favoriteMovies[movie.id]
   const days = daysUntil(movie.releaseDate)
 
+  const ref = `movie:${movie.id}`
+  const status = days > 0 ? `Releases in ${days} day${days === 1 ? '' : 's'}` : watched ? 'Watched' : following ? 'On your watchlist' : null
+
   return (
     <div className="scroll-area route-fade">
-      <div className="detail-hero">
-        <SmartImage src={movie.backdrop} alt={movie.title} />
-        <div className="detail-hero-scrim" />
-        <button className="icon-btn-float" style={{ left: 14 }} onClick={() => nav(-1)} aria-label="Back">
-          <ChevronLeft size={22} />
-        </button>
-      </div>
-
-      <div className="detail-headrow">
-        <SmartImage src={movie.poster} alt={movie.title} className="detail-poster" />
-        <div className="detail-headinfo">
-          <h1 className="detail-title">{movie.title}</h1>
-          <div className="detail-sub">
-            {[movie.year, movie.runtime ? `${movie.runtime} min` : null, movie.director].filter(Boolean).join('  ·  ')}
-          </div>
-          <div className="detail-scores">
-            <PublicScore value={movie.communityRating} votes={movie.communityVotes} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-            <ProgressDot color={movieColor(watched, isUnreleased(movie.releaseDate))} />
-            <span style={{ fontSize: 13, color: 'var(--text-mute)' }}>
-              {days > 0 ? `Releases in ${days} days` : watched ? 'Watched' : 'Not watched'}
-            </span>
-          </div>
+      <DetailHero
+        backdrop={movie.backdrop}
+        poster={movie.poster}
+        title={movie.title}
+        onBack={() => nav(-1)}
+        meta={[movie.year, movie.runtime ? formatDuration(movie.runtime) : null, movie.director].filter(Boolean).join(' · ')}
+      >
+        <div className="dh-scores">
+          <PublicScore value={movie.communityRating} votes={movie.communityVotes} />
+          {lib.movieRatings[movie.id] != null && <span className="dh-mine">{lib.movieRatings[movie.id]} ★ you</span>}
         </div>
-      </div>
+        {status && (
+          <div className="dh-status">
+            <ProgressDot color={movieColor(watched, isUnreleased(movie.releaseDate))} /> {status}
+          </div>
+        )}
+      </DetailHero>
 
-      <div className="detail-actions">
-        <ActionPill
-          label={following ? 'Following' : 'Follow'}
-          icon={following ? 'check' : 'plus'}
-          active={following}
+      <ActionBar>
+        <ActionBtn
+          icon={following ? <CheckIcon size={22} /> : <PlusIcon size={22} />}
+          label={following ? 'On watchlist' : 'Watchlist'}
+          on={following}
+          tone="gold"
           onClick={() => {
             lib.toggleWatchlistMovie(movie.id, toLibraryItem(movie))
-            toast(following ? 'Unfollowed' : 'Following')
+            toast(following ? 'Removed from watchlist' : 'Added to watchlist')
           }}
         />
-        <ActionPill
-          label={watched ? 'Watched' : 'Mark watched'}
-          icon="check"
+        <ActionBtn
+          icon={<EyeIcon />}
+          label={watched ? 'Watched' : 'Watch'}
+          on={watched}
           tone="green"
-          active={watched}
           onClick={() => {
             lib.markMovieWatched(movie.id, !watched, toLibraryItem(movie))
             if (!watched) toast('Marked watched')
           }}
         />
-        <button className={`action-pill pressable ${fav ? 'active' : ''}`} onClick={() => toggleFavorite('movie', movie.id, toLibraryItem(movie))}>
-          <HeartIcon size={15} fill={fav ? '#ff5964' : 'none'} /> Favorite
-        </button>
-        <AddToListButton type="movie" id={movie.id} />
-      </div>
+        <ActionBtn icon={<HeartIcon size={22} fill={fav ? 'currentColor' : 'none'} />} label="Favorite" on={fav} tone="red" onClick={() => toggleFavorite('movie', movie.id, toLibraryItem(movie))} />
+        <ActionBtn icon={<ListIcon size={22} />} label={membership ? `${membership} list${membership > 1 ? 's' : ''}` : 'Add to list'} on={membership > 0} onClick={() => setListSheet(true)} />
+        <ActionBtn
+          icon={<PeopleIcon size={22} />}
+          label="Community"
+          onClick={() => nav(`/communities?topic=movie:${movie.id}`, { state: { topic: { type: 'movie', id: movie.id, title: movie.title, poster: movie.poster } } })}
+        />
+      </ActionBar>
 
-      <button
-        className="community-link pressable"
-        onClick={() =>
-          nav(`/communities?topic=movie:${movie.id}`, { state: { topic: { type: 'movie', id: movie.id, title: movie.title, poster: movie.poster } } })
-        }
-      >
-        <PeopleIcon size={16} /> Communities about this film
-        <ChevronRight size={18} />
-      </button>
+      <DetailTabs
+        tabs={[
+          { key: 'about', label: 'About' },
+          { key: 'comments', label: commentsLabel(commentCount) },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
-      {/* Personal rating (independent of watched status) */}
-      <div className="rating-card">
-        <div className="rating-split">
-          <div>
-            <div className="rating-card-label">
-              Your rating
-              {lib.movieRatings[movie.id] != null && <span className="rating-card-value" style={{ marginLeft: 8 }}>{lib.movieRatings[movie.id]} ★</span>}
+      {tab === 'about' && (
+        <div className="about">
+          <RatingCard
+            value={lib.movieRatings[movie.id]}
+            onChange={(v) => lib.setMovieRating(movie.id, v)}
+            publicValue={movie.communityRating}
+            publicVotes={movie.communityVotes}
+            hint="Tap a star to rate — rating is separate from watched"
+          />
+          {movie.overview && <p className="detail-overview">{movie.overview}</p>}
+          {movie.genres.length > 0 && (
+            <div className="genre-row">
+              {movie.genres.map((g) => (
+                <span key={g} className="genre-chip">
+                  {g}
+                </span>
+              ))}
             </div>
-            <StarRating value={lib.movieRatings[movie.id]} onChange={(v) => lib.setMovieRating(movie.id, v)} />
-          </div>
-          {movie.communityRating ? (
-            <div className="rating-public">
-              <div className="rating-public-label">Everyone</div>
-              <PublicScore value={movie.communityRating} votes={movie.communityVotes} compact />
-            </div>
-          ) : null}
-        </div>
-        <div className="rating-card-hint">
-          {lib.movieRatings[movie.id] != null ? 'Tap the same star again to remove your rating' : 'Tap a star to rate — rating is separate from watched'}
-        </div>
-      </div>
-
-      {movie.overview && <p className="detail-overview">{movie.overview}</p>}
-      {movie.genres.length > 0 && (
-        <div className="genre-row">
-          {movie.genres.map((g) => (
-            <span key={g} className="genre-chip">
-              {g}
-            </span>
-          ))}
+          )}
+          <dl className="facts">
+            {movie.director && <Fact k="Director" v={movie.director} />}
+            {movie.cast && movie.cast.length > 0 && <Fact k="Starring" v={movie.cast.slice(0, 4).join(', ')} />}
+            {movie.releaseDate && <Fact k="Release date" v={shortDate(movie.releaseDate)} />}
+            {movie.runtime ? <Fact k="Runtime" v={formatDuration(movie.runtime)} /> : null}
+            {movie.platforms.length > 0 && <Fact k="Where to watch" v={movie.platforms.join(', ')} />}
+          </dl>
         </div>
       )}
-      {movie.releaseDate && (
-        <div className="detail-progress">
-          <span style={{ color: 'var(--text-mute)', fontSize: 14 }}>Release date · {shortDate(movie.releaseDate)}</span>
-        </div>
-      )}
+      {tab === 'comments' && <TitleComments target={ref} what={movie.title} />}
+
       <div style={{ height: 20 }} />
+      {listSheet && <AddToListSheet itemRef={ref} meta={{ t: movie.title, p: movie.poster, y: movie.year }} onClose={() => setListSheet(false)} />}
     </div>
+  )
+}
+
+/** Your 1–5 stars next to everyone's score. */
+export function RatingCard({
+  value,
+  onChange,
+  publicValue,
+  publicVotes,
+  hint,
+}: {
+  value?: number
+  onChange: (v: number) => void
+  publicValue?: number
+  publicVotes?: number
+  hint: string
+}) {
+  return (
+    <div className="rating-card">
+      <div className="rating-split">
+        <div>
+          <div className="rating-card-label">
+            Your rating
+            {value != null && <span className="rating-card-value" style={{ marginLeft: 8 }}>{value} ★</span>}
+          </div>
+          <StarRating value={value} onChange={onChange} />
+        </div>
+        {publicValue ? (
+          <div className="rating-public">
+            <div className="rating-public-label">Everyone</div>
+            <PublicScore value={publicValue} votes={publicVotes} compact />
+          </div>
+        ) : null}
+      </div>
+      <div className="rating-card-hint">{value != null ? 'Tap the same star again to remove your rating' : hint}</div>
+    </div>
+  )
+}
+
+function EyeIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
   )
 }

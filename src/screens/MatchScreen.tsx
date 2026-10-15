@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft } from '../components/Icons'
 import { SmartImage } from '../components/ui'
-import { Segmented } from '../ui/primitives'
+import { PickFilterBar } from '../ui/PickFilters'
+import { useTitleMeta, enrichTitles } from '../store/useTitleMeta'
+import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
+import * as PICK from '../logic/pickFilters'
+import { describe, lengthOf, libraryCandidates, type PickFilters } from '../logic/pickFilters'
 import { PublicScore } from '../ui/PublicScore'
 import { nameOf } from '../ui/social'
 import { useSync } from '../logic/sync'
@@ -21,10 +25,12 @@ import {
   seeded,
   swipe,
   watchSession,
+  type DeckItem,
   type MatchSession,
   type Swipe,
 } from '../data/match'
 import type { Media, Movie, Show } from '../types'
+import { RowsSkeleton } from '../ui/Skeletons'
 
 interface Card {
   id: string
@@ -51,7 +57,7 @@ const ERRORS: Record<string, string> = {
   code_not_found: 'No open session with that code',
   session_full: 'That session already has two people',
   too_many_sessions: 'Too many sessions started — try again later',
-  not_set_up: 'Watch together isn’t switched on yet (run 008_watch_together.sql)',
+  not_set_up: 'This needs the latest database update (run 009_titles_lists_comments.sql)',
 }
 
 function Header({ title, sub }: { title: string; sub?: string }) {
@@ -78,25 +84,35 @@ export function MatchHomeScreen() {
   const signedIn = useSync((s) => s.status === 'signedIn')
   const [mode, setMode] = useState<'home' | 'setup'>('home')
   const [code, setCode] = useState('')
-  const [kind, setKind] = useState<'movie' | 'show'>('movie')
+  const [f, setF] = useState<PickFilters>({ kind: 'movie', source: 'anything', genre: null, length: 'any' })
   const [genres, setGenres] = useState<{ id: number; name: string }[]>([])
-  const [genre, setGenre] = useState<{ id: number; name: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [resume, setResume] = useState<MatchSession | null>(null)
+  const lib = useLibrary()
+  const meta = useTitleMeta((s) => s.meta)
+  const enriching = useTitleMeta((s) => s.running)
+  const shows = useShowEntries()
+  const movies = useMovieEntries()
+  const own = useMemo(
+    () => (f.source !== 'anything' ? libraryCandidates(f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta) : null),
+    [f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta],
+  )
+  useEffect(() => {
+    if (own?.unknown.length) void enrichTitles(own.unknown)
+  }, [own?.unknown.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (signedIn) latestOpenSession().then(setResume)
   }, [signedIn])
   useEffect(() => {
     let alive = true
-    setGenre(null)
-    genreList(kind)
+    genreList(f.kind)
       .then((g) => alive && setGenres(g))
       .catch(() => alive && setGenres([]))
     return () => {
       alive = false
     }
-  }, [kind])
+  }, [f.kind])
 
   if (!signedIn)
     return (
@@ -110,8 +126,15 @@ export function MatchHomeScreen() {
     )
 
   const start = async () => {
+    const len = lengthOf(f.kind, f.length)
+    let deck: DeckItem[] | undefined
+    if (own) {
+      if (own.items.length === 0) return toast('Nothing in your watchlist matches — loosen a filter')
+      const shuffled = [...own.items].sort(() => Math.random() - 0.5).slice(0, 500)
+      deck = shuffled.map((c) => ({ id: c.id, title: c.title, poster: c.poster, year: c.year }))
+    }
     setBusy(true)
-    const r = await createSession(kind, genre ?? undefined)
+    const r = await createSession(f.kind, f.genre ?? undefined, { min: len.min, max: len.max, source: f.source, deck })
     setBusy(false)
     if (!r.ok) return toast(ERRORS[r.code] ?? 'Couldn’t start a session')
     nav(`/discover/match/${r.id}`, { replace: true })
@@ -170,24 +193,11 @@ export function MatchHomeScreen() {
         </div>
       ) : (
         <div className="page-pad picker-controls">
-          <Segmented
-            options={[
-              { key: 'movie', label: 'Movies' },
-              { key: 'show', label: 'TV shows' },
-            ]}
-            value={kind}
-            onChange={setKind}
-          />
-          {genres.length > 0 && (
-            <div className="genre-chips">
-              <button className={`toggle-pill pressable ${!genre ? 'active' : ''}`} onClick={() => setGenre(null)}>
-                Any genre
-              </button>
-              {genres.map((g) => (
-                <button key={g.id} className={`toggle-pill pressable ${genre?.id === g.id ? 'active' : ''}`} onClick={() => setGenre(g)}>
-                  {g.name}
-                </button>
-              ))}
+          <PickFilterBar value={f} onChange={setF} genres={genres} sourceNote="Your friend will swipe through the titles from your watchlist that match." />
+          {own && (
+            <div className="pf-count" role="status">
+              {own.items.length.toLocaleString()} title{own.items.length === 1 ? '' : 's'} from your watchlist
+              {own.unknown.length > 0 && enriching ? ' · checking lengths…' : ''}
             </div>
           )}
           <button className="welcome-primary pressable" disabled={busy} onClick={() => void start()}>
@@ -236,11 +246,19 @@ export function MatchSessionScreen() {
     if (otherId) profilesByIds([otherId]).then((m) => setPartner(m.get(otherId) ?? null))
   }, [otherId])
 
+  const range = session && (session.min_len || session.max_len) ? { min: session.min_len ?? undefined, max: session.max_len ?? undefined } : undefined
+  // A "from my watchlist" session: the host's chosen titles are the deck.
+  useEffect(() => {
+    if (!session?.deck || deck.length) return
+    setDeck(session.deck.map((d) => ({ id: d.id, title: d.title, poster: d.poster, year: d.year, genres: [] })))
+    setPageOrder([])
+  }, [session?.deck]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Same deck on both phones: page order shuffled by the session's seed.
   useEffect(() => {
-    if (!session || pageOrder) return
+    if (!session || pageOrder || session.deck) return
     const genre = session.genre_id ? { id: session.genre_id, name: session.genre_name ?? '' } : undefined
-    discoverPage(session.kind, 1, genre)
+    discoverPage(session.kind, 1, genre, range) // eslint-disable-line react-hooks/exhaustive-deps
       .then((first) => {
         const n = Math.min(first.totalPages, 12)
         const rng = seeded(session.seed)
@@ -264,7 +282,7 @@ export function MatchSessionScreen() {
     loadingPage.current = true
     try {
       const genre = session.genre_id ? { id: session.genre_id, name: session.genre_name ?? '' } : undefined
-      const res = await discoverPage(session.kind, pageOrder[pagesLoaded], genre)
+      const res = await discoverPage(session.kind, pageOrder[pagesLoaded], genre, range)
       setDeck((d) => {
         const have = new Set(d.map((c) => c.id))
         return [...d, ...res.items.map(toCard).filter((c) => !have.has(c.id))]
@@ -275,7 +293,7 @@ export function MatchSessionScreen() {
     } finally {
       loadingPage.current = false
     }
-  }, [session, pageOrder, pagesLoaded])
+  }, [session, pageOrder, pagesLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (session?.status === 'active' && remaining.length < 6) void loadMore()
   }, [session?.status, remaining.length, loadMore])
@@ -312,8 +330,8 @@ export function MatchSessionScreen() {
     return (
       <div className="scroll-area route-fade">
         <Header title="Watch together" />
-        <div className="empty">
-          <div className="empty-sub">Loading…</div>
+        <div className="page-pad">
+          <RowsSkeleton n={1} h={360} />
         </div>
       </div>
     )
@@ -331,7 +349,8 @@ export function MatchSessionScreen() {
       </div>
     )
 
-  const what = `${session.genre_name ? session.genre_name + ' ' : ''}${session.kind === 'movie' ? 'movies' : 'TV shows'}`
+  const lenKey = lengthOfRange(session.kind, session.min_len, session.max_len)
+  const what = describe({ kind: session.kind, source: session.source ?? 'anything', genre: session.genre_name ? { id: session.genre_id ?? 0, name: session.genre_name } : null, length: lenKey })
 
   if (session.status === 'waiting' || !session.guest_id) {
     const share = async () => {
@@ -407,7 +426,7 @@ export function MatchSessionScreen() {
         ) : (
           <div className="empty">
             <div className="empty-title">{pageOrder && pagesLoaded >= pageOrder.length ? 'You’ve seen everything' : 'Loading titles…'}</div>
-            {pageOrder && pagesLoaded >= pageOrder.length && <div className="empty-sub">Start a new session with a different genre for more.</div>}
+            {pageOrder && pagesLoaded >= pageOrder.length && <div className="empty-sub">Start a new session with different filters for more.</div>}
           </div>
         )}
       </div>
@@ -488,9 +507,11 @@ function SwipeCard({ card, under, watched, onDecide }: { card: Card; under?: boo
         setDx(0)
       }}
     >
-      <SmartImage src={card.poster} alt={card.title} className="swipe-poster" />
-      {!under && dx > 30 && <span className="swipe-stamp yes">WATCH</span>}
-      {!under && dx < -30 && <span className="swipe-stamp no">PASS</span>}
+      <div className="swipe-art">
+        <SmartImage src={card.poster} alt={card.title} className="swipe-poster" />
+        {!under && dx > 30 && <span className="swipe-stamp yes">WATCH</span>}
+        {!under && dx < -30 && <span className="swipe-stamp no">PASS</span>}
+      </div>
       <div className="swipe-info">
         <div className="pick-title">
           {card.title}
@@ -501,4 +522,9 @@ function SwipeCard({ card, under, watched, onDecide }: { card: Card; under?: boo
       </div>
     </div>
   )
+}
+
+function lengthOfRange(kind: 'movie' | 'show', min?: number | null, max?: number | null): string {
+  if (!min && !max) return 'any'
+  return PICK.LENGTHS[kind].find((l) => (l.min ?? null) === (min ?? null) && (l.max ?? null) === (max ?? null))?.key ?? 'any'
 }

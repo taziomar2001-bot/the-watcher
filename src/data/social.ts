@@ -37,14 +37,17 @@ const FULL_STAT_COLS = BASE_STAT_COLS + ',shows_followed,movies_followed,tv_minu
 /** A title someone chose to show on their profile (favorites / public lists). */
 export interface ShowcaseItem {
   id: string
-  type: 'show' | 'movie'
+  type: 'show' | 'movie' | 'season' | 'episode'
   title: string
   poster?: string
   year?: number
+  ref?: string // typed list ref (seasons / episodes); absent on older showcases
+  sub?: string // show name for seasons / episodes
 }
 export interface ShowcaseList {
   id: string
   name: string
+  kind?: 'mixed' | 'shows' | 'seasons' | 'episodes' | 'movies'
   ranked?: boolean
   cover?: string
   items: ShowcaseItem[]

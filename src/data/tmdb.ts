@@ -420,10 +420,18 @@ export async function genreList(kind: 'movie' | 'show'): Promise<{ id: number; n
 }
 
 /** One page of well-known titles (≥ 150 votes), most popular first. */
-export async function discoverPage(kind: 'movie' | 'show', page: number, genreId?: number): Promise<{ items: Media[]; totalPages: number }> {
+export async function discoverPage(
+  kind: 'movie' | 'show',
+  page: number,
+  genreId?: number,
+  len?: { min?: number; max?: number },
+): Promise<{ items: Media[]; totalPages: number }> {
   const tv = kind === 'show'
   const params: Record<string, string | number> = { sort_by: 'popularity.desc', 'vote_count.gte': 150, page, include_adult: 'false' }
   if (genreId) params.with_genres = genreId
+  // Movie runtime, or episode runtime for TV.
+  if (len?.min) params['with_runtime.gte'] = len.min
+  if (len?.max) params['with_runtime.lte'] = len.max
   const [data, gm] = await Promise.all([
     api<{ results: unknown[]; total_pages: number }>(tv ? '/discover/tv' : '/discover/movie', params),
     genreMap(tv ? 'tv' : 'movie'),

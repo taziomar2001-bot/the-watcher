@@ -20,7 +20,7 @@ export default defineConfig({
     },
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'The Watcher',
         short_name: 'Watcher',
@@ -34,7 +34,7 @@ export default defineConfig({
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

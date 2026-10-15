@@ -1,32 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft } from '../components/Icons'
 import { SmartImage } from '../components/ui'
-import { Segmented } from '../ui/primitives'
 import { PublicScore } from '../ui/PublicScore'
+import { PickFilterBar } from '../ui/PickFilters'
 import { discoverPage, genreList } from '../data/catalog'
-import { useLibrary, type LibraryItem } from '../store/useLibrary'
-import { useTitleMeta } from '../store/useTitleMeta'
+import { useLibrary } from '../store/useLibrary'
+import { useTitleMeta, enrichTitles } from '../store/useTitleMeta'
+import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
+import { describe, fromMedia, lengthOf, libraryCandidates, type Candidate, type Genre, type PickFilters } from '../logic/pickFilters'
 import { toLibraryItem } from '../utils/media'
+import { formatDuration } from '../utils/duration'
 import { useToast } from '../store/useToast'
-import type { Media, Movie, Show } from '../types'
 
-type Kind = 'movie' | 'show'
-type Source = 'anything' | 'watchlist'
-interface Pick {
-  id: string
-  type: Kind
-  title: string
-  poster?: string
-  year?: number
-  score?: number
-  votes?: number
-  genres: string[]
-  overview?: string
-  media?: Media
-}
-const mem: { kind: Kind; source: Source; genre: { id: number; name: string } | null } = { kind: 'movie', source: 'anything', genre: null }
-
+const mem: { f: PickFilters } = { f: { kind: 'movie', source: 'anything', genre: null, length: 'any' } }
 const rand = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)]
 
 /** "What should I watch?" — draws a random title matching what you asked for. */
@@ -35,70 +22,58 @@ export function RandomScreen() {
   const toast = useToast((s) => s.show)
   const lib = useLibrary()
   const meta = useTitleMeta((s) => s.meta)
-  const [kind, setKindState] = useState<Kind>(mem.kind)
-  const [source, setSourceState] = useState<Source>(mem.source)
-  const [genre, setGenreState] = useState(mem.genre)
-  const [genres, setGenres] = useState<{ id: number; name: string }[]>([])
-  const [pick, setPick] = useState<Pick | null>(null)
+  const enriching = useTitleMeta((s) => s.running)
+  const shows = useShowEntries()
+  const movies = useMovieEntries()
+  const [f, setF] = useState<PickFilters>(mem.f)
+  const [genres, setGenres] = useState<Genre[]>([])
+  const [pick, setPick] = useState<Candidate | null>(null)
   const [spinning, setSpinning] = useState<string | undefined>()
   const [drawing, setDrawing] = useState(false)
   const [empty, setEmpty] = useState(false)
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
 
-  const setKind = (k: Kind) => {
-    mem.kind = k
-    mem.genre = null
-    setKindState(k)
-    setGenreState(null)
+  const change = (next: PickFilters) => {
+    mem.f = next
+    setF(next)
     setPick(null)
+    setEmpty(false)
   }
-  const setSource = (s: Source) => ((mem.source = s), setSourceState(s), setPick(null))
-  const setGenre = (g: { id: number; name: string } | null) => ((mem.genre = g), setGenreState(g), setPick(null))
 
   useEffect(() => {
     let alive = true
-    genreList(kind)
+    genreList(f.kind)
       .then((g) => alive && setGenres(g))
       .catch(() => alive && setGenres([]))
     return () => {
       alive = false
     }
-  }, [kind])
+  }, [f.kind])
   useEffect(() => () => clearInterval(timer.current), [])
 
-  const watched = (type: Kind, id: string) => (type === 'movie' ? !!lib.watchedMovies[id] : !!lib.lastWatched[id])
-  const fromMedia = (m: Media): Pick => ({
-    id: m.id,
-    type: m.type,
-    title: m.title,
-    poster: m.poster,
-    year: m.type === 'movie' ? (m as Movie).year : (m as Show).firstAirYear,
-    score: m.communityRating,
-    votes: m.communityVotes,
-    genres: m.genres,
-    overview: m.overview,
-    media: m,
-  })
-  const fromItem = (it: LibraryItem, type: Kind): Pick => {
-    const f = meta[`${type}:${it.id}`]
-    return { id: it.id, type, title: it.title, poster: it.poster, year: it.year ?? f?.y, score: f?.v, genres: it.genres ?? f?.g ?? [] }
-  }
+  // Library picks with a length filter need each title's length: fetch the
+  // missing facts in the background (cached on this device).
+  const fromLibrary = f.source !== 'anything'
+  const lib_ = useMemo(
+    () => (fromLibrary ? libraryCandidates(f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta) : null),
+    [fromLibrary, f, shows, movies, lib.watchlistMovies, lib.watchedEpisodes, meta],
+  )
+  useEffect(() => {
+    if (lib_?.unknown.length) void enrichTitles(lib_.unknown)
+  }, [lib_?.unknown.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const candidates = async (): Promise<Pick[]> => {
-    if (source === 'watchlist') {
-      const ids = Object.keys(kind === 'movie' ? lib.watchlistMovies : lib.watchlistShows)
-      const items = ids
-        .map((id) => (kind === 'movie' ? lib.libraryMovies[id] : lib.libraryShows[id]))
-        .filter((it): it is LibraryItem => !!it && !watched(kind, it.id))
-        .map((it) => fromItem(it, kind))
-      return genre ? items.filter((p) => p.genres.includes(genre.name)) : items
-    }
-    const first = await discoverPage(kind, 1, genre ?? undefined)
+  const seen = (c: Candidate) => (c.type === 'movie' ? !!lib.watchedMovies[c.id] : !!lib.lastWatched[c.id])
+
+  const candidates = async (): Promise<Candidate[]> => {
+    if (lib_) return lib_.items
+    const len = lengthOf(f.kind, f.length)
+    const range = len.key === 'any' ? undefined : { min: len.min, max: len.max }
+    const first = await discoverPage(f.kind, 1, f.genre ?? undefined, range)
     const pages = Math.min(first.totalPages, 15)
     for (let attempt = 0; attempt < 4; attempt++) {
       const page = attempt === 3 ? 1 : 1 + Math.floor(Math.random() * pages)
-      const res = page === 1 ? first : await discoverPage(kind, page, genre ?? undefined)
-      const fresh = res.items.filter((m) => !watched(kind, m.id)).map(fromMedia)
+      const res = page === 1 ? first : await discoverPage(f.kind, page, f.genre ?? undefined, range)
+      const fresh = res.items.map((m) => ({ ...fromMedia(m), media: m })).filter((c) => !seen(c))
       if (fresh.length) return fresh
     }
     return []
@@ -108,7 +83,7 @@ export function RandomScreen() {
     if (drawing) return
     setDrawing(true)
     setEmpty(false)
-    let pool: Pick[] = []
+    let pool: Candidate[] = []
     try {
       pool = await candidates()
     } catch {
@@ -144,12 +119,13 @@ export function RandomScreen() {
     else lib.toggleWatchlistShow(pick.id, item)
     if (!following) toast(`Following ${pick.title}`)
   }
+  const runtime = pick ? pick.runtime ?? meta[`${pick.type}:${pick.id}`]?.r : undefined
 
   return (
     <div className="scroll-area route-fade">
       <div className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button className="pressable" onClick={() => nav(-1)} aria-label="Back" style={{ color: 'var(--text-dim)' }}>
+          <button className="pressable" onClick={() => nav(-1)} aria-label="Back">
             <ChevronLeft size={26} />
           </button>
           <div>
@@ -159,63 +135,40 @@ export function RandomScreen() {
         </div>
       </div>
 
-      <div className="page-pad picker-controls">
-        <Segmented
-          options={[
-            { key: 'movie', label: 'Movie' },
-            { key: 'show', label: 'TV show' },
-          ]}
-          value={kind}
-          onChange={setKind}
-        />
-        <div className="genre-chips" role="radiogroup" aria-label="Pick from">
-          {(
-            [
-              ['anything', 'Anything'],
-              ['watchlist', 'From my watchlist'],
-            ] as const
-          ).map(([k, label]) => (
-            <button key={k} role="radio" aria-checked={source === k} className={`toggle-pill pressable ${source === k ? 'active' : ''}`} onClick={() => setSource(k)}>
-              {label}
-            </button>
-          ))}
-        </div>
-        {genres.length > 0 && (
-          <div className="genre-chips" role="listbox" aria-label="Genre">
-            <button className={`toggle-pill pressable ${!genre ? 'active' : ''}`} onClick={() => setGenre(null)}>
-              Any genre
-            </button>
-            {genres.map((g) => (
-              <button key={g.id} className={`toggle-pill pressable ${genre?.id === g.id ? 'active' : ''}`} onClick={() => setGenre(g)}>
-                {g.name}
-              </button>
-            ))}
+      <div className="page-pad">
+        <PickFilterBar value={f} onChange={change} genres={genres} />
+        {lib_ && (
+          <div className="pf-count" role="status">
+            {lib_.items.length.toLocaleString()} title{lib_.items.length === 1 ? '' : 's'} match
+            {lib_.unknown.length > 0 && enriching ? ' · checking lengths…' : ''}
           </div>
         )}
       </div>
 
-      <div className="page-pad">
+      <div className="page-pad rp-stage">
         {spinning !== undefined || drawing ? (
-          <div className="pick-card spinning">
-            <SmartImage src={spinning} alt="" className="pick-poster" />
+          <div className="rp-card spinning">
+            <SmartImage src={spinning} alt="" className="rp-poster" />
           </div>
         ) : pick ? (
-          <div className="pick-card pop">
-            <button className="pick-poster-btn pressable" onClick={() => nav(`/${pick.type}/${pick.id}`)}>
-              <SmartImage src={pick.poster} alt={pick.title} className="pick-poster" />
+          <div className="rp-card pop">
+            <button className="rp-poster-btn pressable" onClick={() => nav(`/${pick.type}/${pick.id}`)} aria-label={`Open ${pick.title}`}>
+              <SmartImage src={pick.poster} alt={pick.title} className="rp-poster" />
             </button>
-            <div className="pick-info">
-              <div className="pick-title">{pick.title}</div>
-              <div className="pick-meta">
-                {[pick.year, pick.genres.slice(0, 2).join(', ')].filter(Boolean).join(' · ')}
+            <div className="rp-info">
+              <div className="rp-title">{pick.title}</div>
+              <div className="rp-meta">
+                {[pick.year, pick.genres.slice(0, 2).join(', '), runtime ? (pick.type === 'show' ? `${runtime} min episodes` : formatDuration(runtime)) : null]
+                  .filter(Boolean)
+                  .join(' · ')}
               </div>
               <PublicScore value={pick.score} votes={pick.votes} />
-              {pick.overview && <p className="pick-overview">{pick.overview}</p>}
-              <div className="pick-actions">
+              {pick.overview && <p className="rp-overview">{pick.overview}</p>}
+              <div className="rp-actions">
                 <button className="follow-btn primary pressable" onClick={() => nav(`/${pick.type}/${pick.id}`)}>
                   Open
                 </button>
-                <button className={`follow-btn pressable ${following ? '' : ''}`} onClick={follow}>
+                <button className="follow-btn pressable" onClick={follow}>
                   {following ? 'Following' : 'Follow'}
                 </button>
               </div>
@@ -224,25 +177,22 @@ export function RandomScreen() {
         ) : empty ? (
           <div className="empty">
             <div className="empty-title">Nothing to pick from</div>
-            <div className="empty-sub">
-              {source === 'watchlist'
-                ? `No unwatched ${kind === 'movie' ? 'movies' : 'shows'} in your watchlist${genre ? ` for ${genre.name}` : ''}. Try “Anything”.`
-                : 'Try another genre.'}
-            </div>
+            <div className="empty-sub">No {describe(f)} {fromLibrary ? 'left to watch' : 'found'}. Try loosening a filter.</div>
           </div>
         ) : (
           <div className="pick-placeholder">
             <div className="pick-dice" aria-hidden="true">
               🎲
             </div>
-            <div className="empty-sub">Choose what you’re in the mood for, then draw.</div>
+            <div className="empty-sub">Set what you’re in the mood for, then draw.</div>
           </div>
         )}
+      </div>
+      <div className="rp-draw">
         <button className="welcome-primary pressable draw-btn" disabled={drawing} onClick={() => void draw()}>
           {pick ? 'Draw again' : 'Draw'}
         </button>
       </div>
-      <div style={{ height: 24 }} />
     </div>
   )
 }

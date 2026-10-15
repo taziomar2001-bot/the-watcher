@@ -1,15 +1,17 @@
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
-import { ProgressDot, SearchField } from '../ui/primitives'
-import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, CheckIcon, GripIcon } from '../components/Icons'
+import { ProgressDot } from '../ui/primitives'
+import { ChevronLeft, DotsIcon, TrashIcon, EditIcon, PlusIcon, GripIcon, PeopleIcon } from '../components/Icons'
 import { RankReorder } from '../ui/RankReorder'
-import { useLibrary, parseRef, listRef } from '../store/useLibrary'
-import { compositionLabel, countRefs } from '../logic/stats'
+import { TitlePicker } from '../ui/TitlePicker'
+import { LinkListSheet } from '../ui/LinkListSheet'
+import { useLibrary, type ListKind } from '../store/useLibrary'
+import { listSummary, parseItemRef, resolveItem, type ResolvedItem } from '../logic/lists'
+import { unlinkEverywhere } from '../logic/communityLists'
+import { useMyCommunities } from '../logic/communityCache'
 import { useScrollMemory } from '../hooks/useScrollMemory'
-import { useAsync } from '../hooks/useAsync'
-import { search as searchCatalog } from '../data/catalog'
 import { toLibraryItem } from '../utils/media'
 import { fileToImage } from '../utils/image'
 import { classifyShow, showColor, movieColor, isUnreleased } from '../logic/status'
@@ -24,13 +26,14 @@ export function ListScreen() {
   const [renaming, setRenaming] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
   const [adding, setAdding] = useState(false)
-  const [q, setQ] = useState('')
-  const { data: results } = useAsync(() => (q.trim() ? searchCatalog(q) : Promise.resolve([])), [q])
+  const [linking, setLinking] = useState(false)
   const [edit, setEdit] = useState(false)
-  const [reordering, setReordering] = useState(false)
+  const [params] = useSearchParams()
+  const [reordering, setReordering] = useState(() => params.get('reorder') === '1')
   const [name, setName] = useState(list?.name ?? '')
   const [coverSheet, setCoverSheet] = useState(false)
   const coverInput = useRef<HTMLInputElement>(null)
+  const { list: mine } = useMyCommunities()
 
   if (!list)
     return (
@@ -49,28 +52,30 @@ export function ListScreen() {
       </div>
     )
 
+  const kind = list.kind ?? 'mixed'
   const items = list.items
     .map((ref) => {
-      const { type, id: mid } = parseRef(ref)
-      const item = type === 'show' ? lib.libraryShows[mid] : lib.libraryMovies[mid]
-      if (!item) return null
-      const color =
-        type === 'show'
-          ? showColor(classifyShow(item, lib.watchedEpisodes), !!lib.stoppedShows[mid])
-          : movieColor(!!lib.watchedMovies[mid], isUnreleased(item.releaseDate))
-      return { ref, type, id: mid, poster: item.poster, title: item.title, color }
+      const r = resolveItem(ref, lib, list.meta)
+      if (!r) return null
+      const p = parseItemRef(ref)
+      let color: ReturnType<typeof movieColor> | undefined
+      if (p.type === 'show' && lib.libraryShows[p.id]) color = showColor(classifyShow(lib.libraryShows[p.id], lib.watchedEpisodes), !!lib.stoppedShows[p.id])
+      else if (p.type === 'movie' && lib.libraryMovies[p.id]) color = movieColor(!!lib.watchedMovies[p.id], isUnreleased(lib.libraryMovies[p.id].releaseDate))
+      return { ...r, color }
     })
-    .filter(Boolean) as { ref: string; type: 'show' | 'movie'; id: string; poster?: string; title: string; color: ReturnType<typeof movieColor> }[]
+    .filter(Boolean) as (ResolvedItem & { color?: ReturnType<typeof movieColor> })[]
 
   const ranked = !!list.ranked
+  const linkedNames = (list.communities ?? []).map((cid) => mine?.find((c) => c.id === cid)).filter(Boolean)
 
   // Commit a new order of the resolvable items, appending any refs that don't
-  // resolve to a library item (rare) so nothing is silently dropped.
+  // resolve (rare) so nothing is silently dropped.
   const reorderResolved = (refs: string[]) => {
     const resolvable = new Set(items.map((it) => it.ref))
     const leftovers = list.items.filter((r) => !resolvable.has(r))
     lib.reorderList(list.id, [...refs, ...leftovers])
   }
+  const open = (it: ResolvedItem) => (edit ? lib.removeFromList(list.id, it.ref) : nav(it.link))
 
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>
@@ -82,7 +87,8 @@ export function ListScreen() {
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 24, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</h1>
             <div className="sub">
-              {compositionLabel(countRefs(list.items).movies, countRefs(list.items).shows)} · {list.visibility === 'public' ? 'On your profile' : 'Only you'}
+              {listSummary(list)}
+              {ranked ? ' · Ranked' : ''} · {list.visibility === 'public' ? 'On your profile' : 'Only you'}
             </div>
           </div>
         </div>
@@ -90,6 +96,23 @@ export function ListScreen() {
           <DotsIcon size={20} />
         </button>
       </div>
+
+      {linkedNames.length > 0 && (
+        <div className="page-pad list-linked">
+          <PeopleIcon size={14} />
+          <span>
+            Shared in{' '}
+            {linkedNames.map((c, i) => (
+              <span key={c!.id}>
+                {i > 0 ? ', ' : ''}
+                <button className="auth-link inline" onClick={() => nav(`/c/${c!.id}?tab=lists`)}>
+                  {c!.name}
+                </button>
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
 
       {reordering && (
         <div className="reorder-banner">
@@ -103,22 +126,44 @@ export function ListScreen() {
       {items.length === 0 ? (
         <div className="empty">
           <div className="empty-title">This list is empty</div>
-          <div className="empty-sub">Use the ••• menu to add shows and movies</div>
+          <div className="empty-sub">Add {kindNoun(kind)} to get started</div>
+          <button className="sync-btn primary pressable" style={{ marginTop: 14 }} onClick={() => setAdding(true)}>
+            <PlusIcon size={15} /> Add {kindNoun(kind)}
+          </button>
         </div>
       ) : reordering ? (
-        <RankReorder
-          rows={items.map((it) => ({ ref: it.ref, poster: it.poster, title: it.title }))}
-          onReorder={reorderResolved}
-        />
+        <RankReorder rows={items.map((it) => ({ ref: it.ref, poster: it.poster, title: it.sub && it.type !== 'episode' ? `${it.title} · ${it.sub}` : it.type === 'episode' ? `${it.sub} · ${it.title}` : it.title }))} onReorder={reorderResolved} />
+      ) : kind === 'episodes' ? (
+        <div className="page-pad ep-list">
+          {items.map((it, i) => (
+            <button key={it.ref} className="ep-list-row pressable" onClick={() => open(it)}>
+              {ranked && !edit && <span className="ep-rank">{i + 1}</span>}
+              <span className="ep-list-still">
+                <SmartImage src={it.poster} alt="" />
+                {edit && (
+                  <span className="poster-remove">
+                    <TrashIcon size={16} />
+                  </span>
+                )}
+              </span>
+              <span className="ep-list-text">
+                <span className="ep-list-title">{it.title}</span>
+                <span className="ep-list-sub">{it.sub}</span>
+              </span>
+            </button>
+          ))}
+        </div>
       ) : (
         <div className="poster-grid">
           {items.map((it, i) => (
             <div key={it.ref} className="poster-thumb" style={{ width: 'auto' }}>
-              <div className="poster-thumb-art" onClick={() => (edit ? lib.removeFromList(list.id, it.ref) : nav(`/${it.type}/${it.id}`))}>
+              <div className="poster-thumb-art" onClick={() => open(it)}>
                 <SmartImage src={it.poster} alt={it.title} />
-                <span className="poster-thumb-dot">
-                  <ProgressDot color={it.color} size={11} />
-                </span>
+                {it.color && (
+                  <span className="poster-thumb-dot">
+                    <ProgressDot color={it.color} size={11} />
+                  </span>
+                )}
                 {ranked && !edit && <span className="rank-badge">{i + 1}</span>}
                 {edit && (
                   <span className="poster-remove">
@@ -126,9 +171,10 @@ export function ListScreen() {
                   </span>
                 )}
               </div>
-              <div className="poster-thumb-title" onClick={() => (edit ? lib.removeFromList(list.id, it.ref) : nav(`/${it.type}/${it.id}`))}>
+              <div className="poster-thumb-title" onClick={() => open(it)}>
                 {it.title}
               </div>
+              {it.type === 'season' && it.sub && <div className="poster-thumb-sub">{it.sub}</div>}
             </div>
           ))}
         </div>
@@ -147,7 +193,16 @@ export function ListScreen() {
                 setMenu(false)
               }}
             >
-              <span><PlusIcon size={16} /> Add titles</span>
+              <span><PlusIcon size={16} /> Add {kindNoun(kind)}</span>
+            </button>
+            <button
+              className="sheet-row"
+              onClick={() => {
+                setLinking(true)
+                setMenu(false)
+              }}
+            >
+              <span><PeopleIcon size={16} /> Share in a community</span>
             </button>
             <button
               className="sheet-row"
@@ -315,7 +370,7 @@ export function ListScreen() {
             <div className="sheet-handle" />
             <div className="confirm-title">Delete “{list.name}”?</div>
             <div className="confirm-body">
-              This removes the list only. Your follows, watched status, ratings, and favorites are not affected.
+              This removes the list only{list.communities?.length ? ' (and its copy in communities)' : ''}. Your follows, watched status, ratings, and favorites are not affected.
             </div>
             <div className="confirm-actions">
               <button className="sync-btn ghost pressable" onClick={() => setConfirmDel(false)}>
@@ -324,6 +379,7 @@ export function ListScreen() {
               <button
                 className="sync-btn danger pressable"
                 onClick={() => {
+                  void unlinkEverywhere(list)
                   lib.deleteList(list.id)
                   nav(-1)
                 }}
@@ -336,57 +392,26 @@ export function ListScreen() {
         document.body,
       )}
 
-      {adding && createPortal(
-        <div className="picker-backdrop">
-          <div className="picker">
-            <div className="picker-head">
-              <span className="picker-title">Add titles</span>
-              <button className="settings-close pressable" onClick={() => setAdding(false)} aria-label="Close">
-                ✕
-              </button>
-            </div>
-            <div className="picker-search">
-              <SearchField value={q} onChange={setQ} placeholder="Search movies & TV shows" autoFocus />
-            </div>
-            <div className="picker-body">
-              {!q.trim() ? (
-                <div className="empty compact">
-                  <div className="empty-sub">Search to add shows or movies to this list</div>
-                </div>
-              ) : (
-                (results ?? []).map((m) => {
-                  const ref = listRef(m.type, m.id)
-                  const inList = list.items.includes(ref)
-                  return (
-                    <button
-                      key={ref}
-                      className="pick-row pressable"
-                      onClick={() => {
-                        if (inList) lib.removeFromList(list.id, ref)
-                        else {
-                          lib.addToList(list.id, ref)
-                          if (m.type === 'show') lib.patchLibraryShow(m.id, toLibraryItem(m))
-                          else lib.patchLibraryMovie(m.id, toLibraryItem(m))
-                        }
-                      }}
-                    >
-                      <SmartImage src={m.poster} alt={m.title} className="pick-poster" />
-                      <span className="pick-info">
-                        <span className="pick-title">{m.title}</span>
-                        <span className="pick-sub">{m.type === 'show' ? 'TV' : 'Film'}</span>
-                      </span>
-                      <span className={`pick-check ${inList ? 'on' : ''}`}>
-                        {inList ? <CheckIcon size={16} /> : <PlusIcon size={16} />}
-                      </span>
-                    </button>
-                  )
-                })
-              )}
-            </div>
-          </div>
-        </div>,
-        document.body,
+      {adding && (
+        <TitlePicker
+          kind={kind}
+          title={`Add ${kindNoun(kind)}`}
+          isPicked={(ref) => list.items.includes(ref)}
+          onToggle={(ref, meta, media) => {
+            if (list.items.includes(ref)) return lib.removeFromList(list.id, ref)
+            lib.addToList(list.id, ref, meta)
+            if (media) {
+              if (media.type === 'show') lib.patchLibraryShow(media.id, toLibraryItem(media))
+              else lib.patchLibraryMovie(media.id, toLibraryItem(media))
+            }
+          }}
+          onClose={() => setAdding(false)}
+        />
       )}
+      {linking && <LinkListSheet list={list} onClose={() => setLinking(false)} />}
     </div>
   )
 }
+
+export const kindNoun = (k: ListKind) =>
+  k === 'mixed' ? 'titles' : k === 'shows' ? 'shows' : k === 'movies' ? 'movies' : k === 'seasons' ? 'seasons' : 'episodes'

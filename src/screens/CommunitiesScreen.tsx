@@ -6,13 +6,18 @@ import { SmartImage } from '../components/ui'
 import { SearchField, SectionHeader } from '../ui/primitives'
 import { useSync } from '../logic/sync'
 import { useToast } from '../store/useToast'
-import { createCommunity, findCommunities, myCommunities, type Community, type Membership } from '../data/communities'
+import { addCommunityTitles, communitiesForTitle, createCommunity, findCommunities, type Community } from '../data/communities'
+import { useMyCommunities } from '../logic/communityCache'
+import { useCached } from '../utils/cache'
+import { useDebounced } from '../hooks/useAsync'
+import { TitlePicker } from '../ui/TitlePicker'
 
 export interface TopicDraft {
   type: 'show' | 'movie'
   id: string
   title: string
   poster?: string
+  year?: number
 }
 
 const mem = { q: '' }
@@ -86,10 +91,8 @@ export function CommunitiesScreen() {
   const signedIn = useSync((s) => s.status === 'signedIn')
   const [q, setQState] = useState(mem.q)
   const setQ = (v: string) => ((mem.q = v), setQState(v))
-  const [mine, setMine] = useState<(Community & Membership)[] | undefined>()
-  const [found, setFound] = useState<Community[] | undefined>()
-  const [error, setError] = useState<string>()
   const [creating, setCreating] = useState<TopicDraft | null | false>(false)
+  const dq = useDebounced(q, 300)
 
   // ?topic=show:1396 (from a show/movie page); title/poster ride along in state.
   const topicParam = params.get('topic')
@@ -98,34 +101,23 @@ export function CommunitiesScreen() {
     ? stateTopic ?? { type: topicParam.split(':')[0] as 'show' | 'movie', id: topicParam.split(':')[1], title: '' }
     : undefined
 
+  // Cached copies show instantly; fresh data swaps in quietly.
+  const { list: mine, error: mineError, reload: reloadMine } = useMyCommunities()
+  const foundKey = !signedIn ? null : topicParam ? `about:${topicParam}` : `find:${dq.trim().toLowerCase()}`
+  const foundQ = useCached<Community[] | { error: string }>(
+    foundKey,
+    async () => {
+      const r = topicParam ? await communitiesForTitle(topicParam) : await findCommunities(dq)
+      if (r.ok) return r.value
+      return r.code === 'not_set_up' ? { error: 'not_set_up' } : undefined
+    },
+    { persist: !dq.trim(), keepPrevious: true },
+  )
+  const found = Array.isArray(foundQ.data) ? foundQ.data : undefined
+  const error = mineError === 'not_set_up' || (foundQ.data && !Array.isArray(foundQ.data)) ? 'not_set_up' : foundQ.failed && !found ? 'error' : undefined
   useEffect(() => {
-    if (!signedIn) return
-    let alive = true
-    myCommunities().then((r) => {
-      if (!alive) return
-      if (r.ok) setMine(r.value)
-      else setError(r.code)
-    })
-    return () => {
-      alive = false
-    }
-  }, [signedIn, creating])
-
-  useEffect(() => {
-    if (!signedIn) return
-    let alive = true
-    const t = setTimeout(() => {
-      findCommunities(topic ? '' : q, topic ? { type: topic.type, id: topic.id } : undefined).then((r) => {
-        if (!alive) return
-        if (r.ok) setFound(r.value)
-        else setError(r.code)
-      })
-    }, q ? 300 : 0)
-    return () => {
-      alive = false
-      clearTimeout(t)
-    }
-  }, [q, signedIn, topicParam])
+    if (creating === false) void reloadMine()
+  }, [creating]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const myStatus = new Map((mine ?? []).map((c) => [c.id, c]))
   const discover = found ?? []
@@ -167,7 +159,7 @@ export function CommunitiesScreen() {
           </div>
           <div className="page-pad">
             {found === undefined ? (
-              <Empty sub="Loading…" />
+              <CardSkeletons n={2} />
             ) : found.length === 0 ? (
               <Empty title="No communities yet" sub="Start the first one for this title." />
             ) : (
@@ -184,6 +176,13 @@ export function CommunitiesScreen() {
             <SearchField value={q} onChange={setQ} placeholder="Search communities" />
           </div>
 
+          {mine === undefined && found === undefined ? (
+            <div className="page-pad">
+              <RowSkeletons n={2} />
+              <CardSkeletons n={3} />
+            </div>
+          ) : (
+          <>
           {!q && (mine?.length ?? 0) > 0 && (
             <>
               <SectionHeader title="Yours" />
@@ -208,7 +207,7 @@ export function CommunitiesScreen() {
           <SectionHeader title={q ? 'Results' : 'Discover'} />
           <div className="page-pad">
             {found === undefined ? (
-              <Empty sub="Loading…" />
+              <CardSkeletons n={3} />
             ) : discover.length === 0 ? (
               q ? (
                 <Empty title="No communities found" sub="Try another name, or start one." />
@@ -228,6 +227,8 @@ export function CommunitiesScreen() {
               discover.map((c) => <CommunityCard key={c.id} c={c} badge={badgeFor(c)} />)
             )}
           </div>
+          </>
+          )}
         </>
       )}
       <div style={{ height: 24 }} />
@@ -246,6 +247,42 @@ export function CommunitiesScreen() {
   )
 }
 
+export function CardSkeletons({ n }: { n: number }) {
+  return (
+    <>
+      {Array.from({ length: n }, (_, i) => (
+        <div key={i} className="community-card skeleton-card" aria-hidden="true">
+          <span className="community-card-banner skeleton" />
+          <span className="community-card-body">
+            <span className="community-avatar card skeleton" />
+            <span className="community-row-text">
+              <span className="skeleton" style={{ display: 'block', width: '55%', height: 15 }} />
+              <span className="skeleton" style={{ display: 'block', width: '35%', height: 11, marginTop: 7 }} />
+              <span className="skeleton" style={{ display: 'block', width: '80%', height: 11, marginTop: 7 }} />
+            </span>
+          </span>
+        </div>
+      ))}
+    </>
+  )
+}
+
+export function RowSkeletons({ n }: { n: number }) {
+  return (
+    <>
+      {Array.from({ length: n }, (_, i) => (
+        <div key={i} className="community-row skeleton-card" aria-hidden="true">
+          <span className="community-avatar skeleton" />
+          <span className="community-row-text">
+            <span className="skeleton" style={{ display: 'block', width: '50%', height: 14 }} />
+            <span className="skeleton" style={{ display: 'block', width: '30%', height: 11, marginTop: 6 }} />
+          </span>
+        </div>
+      ))}
+    </>
+  )
+}
+
 function Empty({ title, sub }: { title?: string; sub?: string }) {
   return (
     <div className="empty">
@@ -260,18 +297,41 @@ function CreateCommunitySheet({ topic, onClose, onCreated }: { topic?: TopicDraf
   const [name, setName] = useState(topic?.title ? `${topic.title} fans` : '')
   const [description, setDescription] = useState('')
   const [visibility, setVisibility] = useState<'public' | 'private'>('public')
-  const [linkTopic, setLinkTopic] = useState(!!topic)
+  const [titles, setTitles] = useState<TopicDraft[]>(topic ? [topic] : [])
+  const [picking, setPicking] = useState(false)
   const [saving, setSaving] = useState(false)
   const valid = name.trim().length >= 3 && name.trim().length <= 60
 
   const submit = async () => {
     if (!valid || saving) return
     setSaving(true)
-    const r = await createCommunity({ name: name.trim(), description: description.trim(), visibility, topic: linkTopic ? topic : undefined })
+    const r = await createCommunity({ name: name.trim(), description: description.trim(), visibility, topic: titles[0] })
+    if (r.ok && titles.length) {
+      await addCommunityTitles(
+        r.value,
+        titles.map((t) => ({ ref: `${t.type}:${t.id}`, title: t.title, poster: t.poster, year: t.year })),
+      )
+    }
     setSaving(false)
     if (r.ok) onCreated(r.value)
     else toast(r.code === 'too_many_communities' ? 'You can own up to 10 communities' : 'Couldn’t create the community')
   }
+
+  if (picking)
+    return (
+      <TitlePicker
+        kind="mixed"
+        title="Link titles"
+        isPicked={(ref) => titles.some((t) => `${t.type}:${t.id}` === ref)}
+        onToggle={(ref, meta) => {
+          const [type, id] = ref.split(':') as ['show' | 'movie', string]
+          setTitles((ts) =>
+            ts.some((t) => t.type === type && t.id === id) ? ts.filter((t) => !(t.type === type && t.id === id)) : ts.length >= 25 ? ts : [...ts, { type, id, title: meta.t, poster: meta.p, year: meta.y }],
+          )
+        }}
+        onClose={() => setPicking(false)}
+      />
+    )
 
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
@@ -287,14 +347,9 @@ function CreateCommunitySheet({ topic, onClose, onCreated }: { topic?: TopicDraf
         <div className="sheet-title">New community</div>
         <input className="sync-input" placeholder="Name" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
         <textarea className="sync-input" placeholder="What’s it about? (optional)" maxLength={500} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-        {topic && (
-          <button type="button" className="settings-switch-row" onClick={() => setLinkTopic((v) => !v)}>
-            <span>Linked to {topic.title || 'this title'}</span>
-            <span className={`switch ${linkTopic ? 'on' : ''}`}>
-              <span className="switch-knob" />
-            </span>
-          </button>
-        )}
+        <div className="field-label">About these titles</div>
+        <TitleChips titles={titles} onRemove={(t) => setTitles((ts) => ts.filter((x) => x !== t))} onAdd={() => setPicking(true)} />
+        <div className="vis-hint">Optional. Owners and admins can add more later; linked titles can’t be removed.</div>
         <div className="vis-choice">
           <button type="button" className={`vis-opt pressable ${visibility === 'public' ? 'on' : ''}`} onClick={() => setVisibility('public')}>
             Public
@@ -305,7 +360,7 @@ function CreateCommunitySheet({ topic, onClose, onCreated }: { topic?: TopicDraf
         </div>
         <div className="vis-hint">
           {visibility === 'public'
-            ? 'Anyone can read announcements and join. Chat is for members.'
+            ? 'Anyone can read the news and join. Chat is for members.'
             : 'Anyone can find it, but you approve who joins and only members see inside.'}
         </div>
         <button type="submit" className="welcome-primary pressable" disabled={!valid || saving}>
@@ -314,5 +369,39 @@ function CreateCommunitySheet({ topic, onClose, onCreated }: { topic?: TopicDraf
       </form>
     </div>,
     document.body,
+  )
+}
+
+/** Linked titles as poster chips. `onRemove` only for titles not saved yet. */
+export function TitleChips({
+  titles,
+  onRemove,
+  onAdd,
+  locked,
+}: {
+  titles: TopicDraft[]
+  onRemove?: (t: TopicDraft) => void
+  onAdd?: () => void
+  locked?: (t: TopicDraft) => boolean
+}) {
+  return (
+    <div className="title-chips">
+      {titles.map((t) => (
+        <span key={`${t.type}:${t.id}`} className="title-chip">
+          <SmartImage src={t.poster} alt="" className="title-chip-poster" />
+          <span className="title-chip-name">{t.title || 'Untitled'}</span>
+          {onRemove && !locked?.(t) && (
+            <button type="button" className="title-chip-x" aria-label={`Remove ${t.title}`} onClick={() => onRemove(t)}>
+              ✕
+            </button>
+          )}
+        </span>
+      ))}
+      {onAdd && (
+        <button type="button" className="title-chip add pressable" onClick={onAdd}>
+          <PlusIcon size={14} /> Add a title
+        </button>
+      )}
+    </div>
   )
 }

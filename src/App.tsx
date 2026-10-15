@@ -27,7 +27,9 @@ import { MoviesScreen } from './screens/MoviesScreen'
 import { MovieScreen } from './screens/MovieScreen'
 import { UpComingScreen } from './screens/UpComingScreen'
 import { DiscoverScreen } from './screens/DiscoverScreen'
-import { ProfileScreen } from './screens/ProfileScreen'
+import { useCommunityListSync } from './logic/communityLists'
+import { CommunityListScreen } from './screens/CommunityListsTab'
+import { ProfileScreen, ProfileListsScreen } from './screens/ProfileScreen'
 import { LibraryScreen } from './screens/LibraryScreen'
 import { ProfileTVLibraryScreen } from './screens/ProfileTVLibraryScreen'
 import { ProfileMoviesLibraryScreen } from './screens/ProfileMoviesLibraryScreen'
@@ -59,6 +61,7 @@ export default function App() {
   const location = useLocation()
   useNavTracker()
   useStatsSync()
+  useCommunityListSync()
   const syncStatus = useSync((s) => s.status)
   const showSyncGate = useSync((s) =>
     (s.status === 'signedIn' || s.status === 'busy') && s.mayShowLocal === false,
@@ -160,7 +163,10 @@ export default function App() {
         <Route path="/communities" element={<CommunitiesScreen />} />
         <Route path="/settings" element={<SettingsScreen />} />
         <Route path="/profile/stats" element={<StatsScreen />} />
+        <Route path="/profile/lists" element={<ProfileListsScreen />} />
         <Route path="/c/:id" element={<CommunityScreen />} />
+        <Route path="/c/:id/members" element={<CommunityScreen view="members" />} />
+        <Route path="/c/:id/l/:owner/:listId" element={<CommunityListScreen />} />
         <Route path="/tv" element={<TVShowsScreen />} />
         <Route path="/tv/category/:key" element={<TVCategoryScreen />} />
         <Route path="/show/:id" element={<ShowScreen />} />

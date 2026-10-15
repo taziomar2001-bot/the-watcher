@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { resolveItem, parseItemRef } from './lists'
 import { useLibrary } from '../store/useLibrary'
 import { useShowEntries, useMovieEntries } from './useLibraryData'
 import { effectiveSeen } from './status'
 import { useSync } from './sync'
 import { pushMyStats, pushMyShowcase, type Showcase, type ShowcaseItem } from '../data/social'
-import { parseRef, type LibraryItem } from '../store/useLibrary'
+import type { LibraryItem } from '../store/useLibrary'
 
 // Shared watch-time assumptions (kept in one place so Profile, public profiles
 // and the Leaderboard all agree).
@@ -159,13 +160,20 @@ export function useMyShowcase(): Showcase {
       .map((l) => ({
         id: l.id,
         name: l.name,
+        kind: l.kind ?? 'mixed',
         ranked: !!l.ranked,
         cover: l.cover,
         items: l.items
           .slice(0, 250)
-          .map((ref) => {
-            const { type, id } = parseRef(ref)
-            return toShowcaseItem(type, id, type === 'show' ? libraryShows[id] : libraryMovies[id])
+          .map((ref): ShowcaseItem | null => {
+            const r = resolveItem(ref, { libraryShows, libraryMovies }, l.meta)
+            if (!r) return null
+            const x: ShowcaseItem = { id: parseItemRef(ref).id, type: r.type, title: r.title, poster: r.poster, year: r.year }
+            if (r.type === 'season' || r.type === 'episode') {
+              x.ref = ref
+              if (r.sub) x.sub = r.sub
+            }
+            return x
           })
           .filter((x): x is ShowcaseItem => !!x),
       }))

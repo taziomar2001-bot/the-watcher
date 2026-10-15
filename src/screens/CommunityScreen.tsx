@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, DotsIcon } from '../components/Icons'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ChevronLeft, DotsIcon, PeopleIcon, PlusIcon } from '../components/Icons'
+import { SmartImage } from '../components/ui'
 import { CommunityAvatar, communityHue } from './CommunitiesScreen'
+import { CommunityLists } from './CommunityListsTab'
+import { TitlePicker } from '../ui/TitlePicker'
+import { useCached } from '../utils/cache'
+import { ComposerBar } from '../ui/ComposerBar'
 import { SendIcon } from '../ui/SendIcon'
 import { fileToImage } from '../utils/image'
 import { Segmented } from '../ui/primitives'
@@ -10,8 +15,12 @@ import { UserAvatar, nameOf } from '../ui/social'
 import { useSync } from '../logic/sync'
 import { useToast } from '../store/useToast'
 import type { SocialProfile } from '../data/social'
+import { RowsSkeleton } from '../ui/Skeletons'
 import {
   REACTIONS,
+  addCommunityTitles,
+  communityTitles,
+  type CommunityTitle,
   addComment,
   createPost,
   deleteComment,
@@ -41,7 +50,7 @@ import {
   type Post,
 } from '../data/communities'
 
-type Tab = 'announcements' | 'chat' | 'members'
+type Tab = 'news' | 'chat' | 'lists'
 const tabMem: Record<string, Tab> = {}
 
 function ago(iso: string): string {
@@ -59,26 +68,36 @@ const MOD_ERRORS: Record<string, string> = {
   banned: 'You can’t join this community',
 }
 
-export function CommunityScreen() {
+type CData = { community: Community; me: Membership | null } | { missing: true }
+
+/** Shown instantly from the last copy, refreshed in the background. */
+function useCommunity(id: string, signedIn: boolean) {
+  const uid = useSync((s) => s.userId)
+  const q = useCached<CData>(signedIn ? `c:${uid}:${id}` : null, async () => {
+    const r = await getCommunity(id)
+    if (r.ok) return r.value
+    return r.code === 'not_found' ? { missing: true } : undefined
+  })
+  const value = q.data && 'community' in q.data ? q.data : q.data ? null : q.failed ? null : undefined
+  return { data: value, reload: q.reload, failed: q.failed }
+}
+
+export function CommunityScreen({ view }: { view?: 'members' }) {
   const nav = useNavigate()
   const { id = '' } = useParams()
+  const [params] = useSearchParams()
   const toast = useToast((s) => s.show)
   const signedIn = useSync((s) => s.status === 'signedIn')
-  const [data, setData] = useState<{ community: Community; me: Membership | null } | null | undefined>()
-  const [tab, setTabState] = useState<Tab>(tabMem[id] ?? 'announcements')
+  const { data, reload: load, failed } = useCommunity(id, signedIn)
+  const [tab, setTabState] = useState<Tab>((params.get('tab') as Tab) || tabMem[id] || 'news')
   const setTab = (t: Tab) => ((tabMem[id] = t), setTabState(t))
   const [menu, setMenu] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [addingTitles, setAddingTitles] = useState(false)
   const [confirm, setConfirm] = useState<null | 'leave' | 'delete'>(null)
   const [busy, setBusy] = useState(false)
-
-  const load = useCallback(async () => {
-    const r = await getCommunity(id)
-    setData(r.ok ? r.value : null)
-  }, [id])
-  useEffect(() => {
-    if (signedIn) void load()
-  }, [load, signedIn])
+  const titlesQ = useCached<CommunityTitle[]>(data ? `ct:${id}` : null, async () => (data ? communityTitles(data.community) : undefined))
+  const titles = titlesQ.data ?? []
 
   if (!signedIn)
     return (
@@ -90,18 +109,21 @@ export function CommunityScreen() {
     )
   if (data === undefined)
     return (
-      <Shell title="Community">
-        <div className="empty">
-          <div className="empty-sub">Loading…</div>
-        </div>
+      <Shell title="">
+        <CommunitySkeleton />
       </Shell>
     )
   if (data === null)
     return (
       <Shell title="Community">
         <div className="empty">
-          <div className="empty-title">Community not found</div>
-          <div className="empty-sub">It may have been deleted.</div>
+          <div className="empty-title">{failed ? 'Couldn’t load this community' : 'Community not found'}</div>
+          <div className="empty-sub">{failed ? 'Check your connection and try again.' : 'It may have been deleted.'}</div>
+          {failed && (
+            <button className="sync-btn primary pressable" style={{ marginTop: 14 }} onClick={() => void load()}>
+              Try again
+            </button>
+          )}
         </div>
       </Shell>
     )
@@ -111,6 +133,13 @@ export function CommunityScreen() {
   const isMod = active && (me!.role === 'owner' || me!.role === 'admin')
   const isOwner = active && me!.role === 'owner'
   const canRead = c.visibility === 'public' || active
+
+  if (view === 'members')
+    return (
+      <Shell title="Members" sub={c.name}>
+        {canRead ? <Members c={c} me={me} onChanged={load} /> : <div className="private-card"><div className="private-card-title">Members are visible to members</div></div>}
+      </Shell>
+    )
 
   const join = async () => {
     setBusy(true)
@@ -139,11 +168,19 @@ export function CommunityScreen() {
     <Shell
       title={c.name}
       right={
-        active ? (
-          <button className="icon-round pressable" onClick={() => setMenu(true)} aria-label="Community options">
-            <DotsIcon size={20} />
-          </button>
-        ) : undefined
+        <span className="header-icons">
+          {canRead && (
+            <button className="icon-round members-btn pressable" onClick={() => nav(`/c/${c.id}/members`)} aria-label={`Members (${c.member_count})`}>
+              <PeopleIcon size={19} />
+              <span className="members-count">{compact(c.member_count)}</span>
+            </button>
+          )}
+          {active && (
+            <button className="icon-round pressable" onClick={() => setMenu(true)} aria-label="Community options">
+              <DotsIcon size={20} />
+            </button>
+          )}
+        </span>
       }
     >
       <div className="community-banner" style={{ background: `linear-gradient(135deg, ${communityHue(c.id)}, color-mix(in srgb, ${communityHue(c.id)} 35%, #0e1318))` }}>
@@ -156,14 +193,34 @@ export function CommunityScreen() {
             {c.visibility === 'private' ? 'Private' : 'Public'} · {c.member_count.toLocaleString()} member{c.member_count === 1 ? '' : 's'}
             {me?.role && active && me.role !== 'member' ? ` · You’re ${me.role === 'owner' ? 'the owner' : 'an admin'}` : ''}
           </div>
-          {c.topic_title && c.topic_type && c.topic_id && (
-            <button className="community-topic pressable" onClick={() => nav(`/${c.topic_type}/${c.topic_id}`)}>
-              About {c.topic_title} ›
-            </button>
-          )}
         </div>
       </div>
       {c.description && <p className="community-desc">{c.description}</p>}
+
+      {(titles.length > 0 || isMod) && (
+        <div className="community-titles" aria-label="About">
+          {titles.map((t) => (
+            <button key={t.ref} className="ctitle pressable" onClick={() => nav(`/${t.ref.split(':')[0]}/${t.ref.split(':')[1]}`)}>
+              {t.poster ? (
+                <SmartImage src={t.poster} alt="" className="ctitle-poster" />
+              ) : (
+                <span className="ctitle-poster blank" aria-hidden="true">
+                  {t.title.slice(0, 2).toUpperCase()}
+                </span>
+              )}
+              <span className="ctitle-name">{t.title}</span>
+            </button>
+          ))}
+          {isMod && titles.length < 25 && (
+            <button className="ctitle add pressable" onClick={() => setAddingTitles(true)} aria-label="Link a title">
+              <span className="ctitle-poster add">
+                <PlusIcon size={20} />
+              </span>
+              <span className="ctitle-name">Add title</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {!active && (
         <div className="page-pad" style={{ paddingBottom: 12 }}>
@@ -185,23 +242,23 @@ export function CommunityScreen() {
         <div className="private-card">
           <div className="private-card-title">This community is private</div>
           <div className="private-card-sub">
-            {me?.status === 'pending' ? 'An admin will review your request.' : 'Request to join to see announcements, chat and members.'}
+            {me?.status === 'pending' ? 'An admin will review your request.' : 'Request to join to see the news, chat and lists.'}
           </div>
         </div>
       ) : (
         <>
-          <div className="page-pad" style={{ paddingBottom: 12 }}>
+          <div className="page-pad community-tabs">
             <Segmented
               options={[
-                { key: 'announcements', label: 'Announcements' },
+                { key: 'news', label: 'News' },
                 { key: 'chat', label: 'Chat' },
-                { key: 'members', label: 'Members' },
+                { key: 'lists', label: 'Lists' },
               ]}
               value={tab}
               onChange={setTab}
             />
           </div>
-          {tab === 'announcements' && <Announcements c={c} isMember={active} isMod={isMod} />}
+          {tab === 'news' && <Announcements c={c} isMember={active} isMod={isMod} />}
           {tab === 'chat' &&
             (active ? (
               <Chat c={c} isMod={isMod} />
@@ -211,10 +268,30 @@ export function CommunityScreen() {
                 <div className="private-card-sub">Join to talk with everyone here.</div>
               </div>
             ))}
-          {tab === 'members' && <Members c={c} me={me} onChanged={load} />}
+          {tab === 'lists' && <CommunityLists c={c} me={me} titles={titles} />}
         </>
       )}
       <div style={{ height: 28 }} />
+
+      {addingTitles && (
+        <TitlePicker
+          kind="mixed"
+          title="Link titles"
+          isPicked={(ref) => titles.some((t) => t.ref === ref)}
+          onToggle={async (ref, meta) => {
+            if (titles.some((t) => t.ref === ref)) return toast('Linked titles stay linked')
+            const r = await addCommunityTitles(c.id, [{ ref, title: meta.t, poster: meta.p, year: meta.y }])
+            if (!r.ok) return toast(r.code === 'not_set_up' ? 'Run 009_titles_lists_comments.sql in Supabase first' : 'Couldn’t link that title')
+            titlesQ.mutate((cur) => [...(cur ?? []), { community_id: c.id, ref, title: meta.t, poster: meta.p ?? null, year: meta.y ?? null }])
+            toast(`Linked ${meta.t}`)
+          }}
+          onClose={() => {
+            setAddingTitles(false)
+            void titlesQ.reload()
+            void load()
+          }}
+        />
+      )}
 
       {menu &&
         createPortal(
@@ -225,6 +302,11 @@ export function CommunityScreen() {
               {isMod && (
                 <button className="sheet-row" onClick={() => (setMenu(false), setEditing(true))}>
                   <span>Edit community</span>
+                </button>
+              )}
+              {isMod && (
+                <button className="sheet-row" onClick={() => (setMenu(false), setAddingTitles(true))}>
+                  <span>Link titles</span>
                 </button>
               )}
               {!isOwner && (
@@ -255,7 +337,7 @@ export function CommunityScreen() {
                   ? c.visibility === 'private'
                     ? 'You’ll need to request to join again.'
                     : 'You can join again any time.'
-                  : 'This permanently deletes the community, its announcements and its chat for everyone.'}
+                  : 'This permanently deletes the community, its news, chat and shared lists for everyone. Members’ own lists stay in their libraries.'}
               </div>
               <div className="confirm-actions">
                 <button className="sync-btn ghost pressable" onClick={() => setConfirm(null)}>
@@ -273,7 +355,28 @@ export function CommunityScreen() {
   )
 }
 
-function Shell({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
+const compact = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))
+
+function CommunitySkeleton() {
+  return (
+    <div aria-busy="true">
+      <div className="community-banner skeleton" />
+      <div className="community-head">
+        <span className="community-avatar large skeleton" />
+        <span className="skeleton" style={{ display: 'block', width: 140, height: 12 }} />
+      </div>
+      <div className="page-pad">
+        <span className="skeleton" style={{ display: 'block', width: '85%', height: 12, margin: '6px 0 18px' }} />
+        <span className="skeleton" style={{ display: 'block', height: 44, borderRadius: 10, marginBottom: 14 }} />
+        {Array.from({ length: 2 }, (_, i) => (
+          <span key={i} className="skeleton" style={{ display: 'block', height: 120, borderRadius: 16, marginBottom: 12 }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Shell({ title, sub, right, children }: { title: string; sub?: string; right?: React.ReactNode; children: React.ReactNode }) {
   const nav = useNavigate()
   return (
     <div className="scroll-area route-fade">
@@ -282,7 +385,10 @@ function Shell({ title, right, children }: { title: string; right?: React.ReactN
           <button className="pressable" onClick={() => nav(-1)} aria-label="Back" style={{ color: 'var(--text-dim)' }}>
             <ChevronLeft size={26} />
           </button>
-          <h1 style={{ fontSize: 22, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</h1>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ fontSize: 22, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</h1>
+            {sub && <div className="sub">{sub}</div>}
+          </div>
         </div>
         {right}
       </div>
@@ -296,16 +402,15 @@ function Shell({ title, right, children }: { title: string; right?: React.ReactN
 function Announcements({ c, isMember, isMod }: { c: Community; isMember: boolean; isMod: boolean }) {
   const toast = useToast((s) => s.show)
   const me = useSync((s) => s.userId)
-  const [posts, setPosts] = useState<Post[] | undefined>()
+  const postsQ = useCached<Post[]>(`posts:${c.id}`, () => listPosts(c.id))
+  const posts = postsQ.data
+  const setPosts = postsQ.mutate as (fn: (l: Post[] | undefined) => Post[] | undefined) => void
   const [draft, setDraft] = useState('')
   const [posting, setPosting] = useState(false)
   const [openPost, setOpenPost] = useState<string | null>(null)
   const [postMenu, setPostMenu] = useState<Post | null>(null)
 
-  const load = useCallback(() => listPosts(c.id).then(setPosts), [c.id])
-  useEffect(() => {
-    void load()
-  }, [load])
+  const load = postsQ.reload
 
   const publish = async () => {
     const body = draft.trim()
@@ -337,16 +442,14 @@ function Announcements({ c, isMember, isMod }: { c: Community; isMember: boolean
   return (
     <div className={`page-pad ${isMod ? 'has-composer' : ''}`}>
       {isMod && (
-        <ComposerBar value={draft} onChange={setDraft} onSend={() => void publish()} busy={posting} placeholder="Write an announcement…" maxLength={4000} />
+        <ComposerBar value={draft} onChange={setDraft} onSend={() => void publish()} busy={posting} placeholder="Share some news…" maxLength={4000} />
       )}
       {posts === undefined ? (
-        <div className="empty">
-          <div className="empty-sub">Loading…</div>
-        </div>
+        <PostSkeletons />
       ) : posts.length === 0 ? (
         <div className="empty">
-          <div className="empty-title">No announcements yet</div>
-          <div className="empty-sub">{isMod ? 'Write the first one below.' : 'Owners and admins post announcements here.'}</div>
+          <div className="empty-title">No news yet</div>
+          <div className="empty-sub">{isMod ? 'Write the first post below.' : 'Owners and admins post news here.'}</div>
         </div>
       ) : (
         posts.map((p) => (
@@ -417,13 +520,30 @@ function Announcements({ c, isMember, isMod }: { c: Community; isMember: boolean
                   else toast('Couldn’t delete right now')
                 }}
               >
-                <span>Delete announcement</span>
+                <span>Delete post</span>
               </button>
             </div>
           </div>,
           document.body,
         )}
     </div>
+  )
+}
+
+function PostSkeletons() {
+  return (
+    <>
+      {Array.from({ length: 2 }, (_, i) => (
+        <div key={i} className="post-card" aria-hidden="true">
+          <div className="post-head">
+            <span className="skeleton" style={{ width: 34, height: 34, borderRadius: '50%' }} />
+            <span className="skeleton" style={{ width: 120, height: 12 }} />
+          </div>
+          <span className="skeleton" style={{ display: 'block', height: 12, margin: '12px 0 6px' }} />
+          <span className="skeleton" style={{ display: 'block', height: 12, width: '70%' }} />
+        </div>
+      ))}
+    </>
   )
 }
 
@@ -457,7 +577,7 @@ function Comments({ post, isMember, isMod, onCount }: { post: Post; isMember: bo
   return (
     <div className="comments">
       {list === undefined ? (
-        <div className="vis-hint">Loading…</div>
+        <RowsSkeleton n={2} h={20} gap={6} />
       ) : list.length === 0 ? (
         <div className="vis-hint">No comments yet.</div>
       ) : (
@@ -574,8 +694,12 @@ function Chat({ c, isMod }: { c: Community; isMod: boolean }) {
         </button>
       )}
       {msgs === undefined ? (
-        <div className="empty">
-          <div className="empty-sub">Loading…</div>
+        <div aria-busy="true">
+          {[60, 42, 70, 50].map((w, i) => (
+            <div key={i} className={`msg ${i % 2 ? 'mine' : ''}`}>
+              <span className="skeleton" style={{ display: 'block', width: `${w}%`, height: 38, borderRadius: 18 }} />
+            </div>
+          ))}
         </div>
       ) : msgs.length === 0 ? (
         <div className="empty">
@@ -654,8 +778,10 @@ function Members({ c, me, onChanged }: { c: Community; me: Membership | null; on
 
   if (list === undefined)
     return (
-      <div className="empty">
-        <div className="empty-sub">Loading…</div>
+      <div className="page-pad" aria-busy="true">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i} className="skeleton" style={{ height: 58, borderRadius: 14, margin: '8px 0' }} />
+        ))}
       </div>
     )
   const pending = list.filter((m) => m.status === 'pending')
@@ -861,59 +987,5 @@ function EditSheet({ c, onClose, onSaved }: { c: Community; onClose: () => void;
       </form>
     </div>,
     document.body,
-  )
-}
-
-/** Bottom-docked composer, like a messaging app: grows to 4 lines, arrow sends. */
-function ComposerBar({
-  value,
-  onChange,
-  onSend,
-  placeholder,
-  maxLength,
-  busy,
-}: {
-  value: string
-  onChange: (v: string) => void
-  onSend: () => void
-  placeholder: string
-  maxLength: number
-  busy?: boolean
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = Math.min(el.scrollHeight, 110) + 'px'
-  }, [value])
-  return createPortal(
-    <form
-      className="composer-bar"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (value.trim() && !busy) onSend()
-      }}
-    >
-      <textarea
-        ref={ref}
-        rows={1}
-        className="composer-input"
-        maxLength={maxLength}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(pointer: fine)').matches) {
-            e.preventDefault()
-            if (value.trim() && !busy) onSend()
-          }
-        }}
-      />
-      <button type="submit" className="send-btn pressable" disabled={!value.trim() || busy} aria-label="Send">
-        <SendIcon size={18} />
-      </button>
-    </form>,
-    document.querySelector('.app-shell') ?? document.body,
   )
 }

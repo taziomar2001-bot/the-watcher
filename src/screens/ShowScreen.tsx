@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { SmartImage } from '../components/ui'
-import { SeasonCard, ActionPill } from '../ui/cards'
+import { SeasonCard } from '../ui/cards'
+import { DetailHero, ActionBar, ActionBtn, DetailTabs, useDetailTab } from '../ui/Detail'
+import { TitleComments, commentsLabel, useCommentCount } from '../ui/TitleComments'
 import { ProgressDot } from '../ui/primitives'
-import { ChevronLeft, ChevronRight, HeartIcon, BellIcon, CheckIcon, PeopleIcon } from '../components/Icons'
+import { HeartIcon, BellIcon, CheckIcon, PeopleIcon, PlusIcon, ListIcon } from '../components/Icons'
 import { useAsync } from '../hooks/useAsync'
 import { getShow } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
@@ -11,7 +12,7 @@ import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
 import { classifyShow, seasonColor, showColor, DOT_COLOR, effectiveSeen } from '../logic/status'
 import { showAverageLive, seasonSizesOf, fmtStars } from '../logic/ratings'
-import { AddToListButton } from '../ui/AddToList'
+import { AddToListSheet, useListMembership } from '../ui/AddToList'
 import { useToggleFavorite } from '../logic/favorites'
 import { PublicScore } from '../ui/PublicScore'
 import { ErrorState } from '../ui/ErrorState'
@@ -40,6 +41,10 @@ export function ShowScreen() {
   const lib = useLibrary()
   const toast = useToast((s) => s.show)
   const toggleFavorite = useToggleFavorite()
+  const [tab, setTab] = useDetailTab<'episodes' | 'about' | 'comments'>(`show:${id}`, 'episodes')
+  const [listSheet, setListSheet] = useState(false)
+  const membership = useListMembership(`show:${id}`)
+  const commentCount = useCommentCount(`show:${id}`)
 
   // Cache the enriched show summary (released/total/ended) + one-time backfill.
   useEffect(() => {
@@ -88,98 +93,44 @@ export function ShowScreen() {
   const showAvg = showAverageLive(show, lib.episodeRatings)
   const allReleasedIds = show.seasons.flatMap((s) => s.episodes).filter((e) => isReleased(e.airDate)).map((e) => e.id)
 
+  const listCount = membership
+  const ref = `show:${show.id}`
+
   return (
     <div className="scroll-area route-fade">
-      <div className="detail-hero">
-        <SmartImage src={show.backdrop} alt={show.title} />
-        <div className="detail-hero-scrim" />
-        <button className="icon-btn-float" style={{ left: 14 }} onClick={() => nav(-1)} aria-label="Back">
-          <ChevronLeft size={22} />
-        </button>
-      </div>
-
-      <div className="detail-headrow">
-        <SmartImage src={show.poster} alt={show.title} className="detail-poster" />
-        <div className="detail-headinfo">
-          <h1 className="detail-title">{show.title}</h1>
-          <div className="detail-sub">
-            {[show.firstAirYear, `${show.seasons.length} season${show.seasons.length === 1 ? '' : 's'}`, show.network]
-              .filter(Boolean)
-              .join('  ·  ')}
-          </div>
-          <div className="detail-scores">
-            <PublicScore value={show.communityRating} votes={show.communityVotes} />
-            {showAvg != null && <div className="detail-avg">{fmtStars(showAvg)} your average</div>}
-          </div>
+      <DetailHero
+        backdrop={show.backdrop}
+        poster={show.poster}
+        title={show.title}
+        onBack={() => nav(-1)}
+        meta={[show.firstAirYear, `${show.seasons.length} season${show.seasons.length === 1 ? '' : 's'}`, show.network].filter(Boolean).join(' · ')}
+      >
+        <div className="dh-scores">
+          <PublicScore value={show.communityRating} votes={show.communityVotes} />
+          {showAvg != null && <span className="dh-mine">{fmtStars(showAvg)} you</span>}
         </div>
-      </div>
+      </DetailHero>
 
-      <div className="detail-actions">
-        <ActionPill
+      <ActionBar>
+        <ActionBtn
+          icon={following ? <CheckIcon size={22} /> : <PlusIcon size={22} />}
           label={following ? 'Following' : 'Follow'}
-          icon={following ? 'check' : 'plus'}
-          active={following}
+          on={following}
+          tone="gold"
           onClick={() => {
             lib.toggleWatchlistShow(show.id, toLibraryItem(show))
             toast(following ? 'Unfollowed' : 'Following')
           }}
         />
-        <button className={`action-pill pressable ${fav ? 'active' : ''}`} onClick={() => toggleFavorite('show', show.id, toLibraryItem(show))}>
-          <HeartIcon size={15} fill={fav ? '#ff5964' : 'none'} /> Favorite
-        </button>
-        <button className={`action-pill pressable ${notify ? 'active' : ''}`} onClick={() => lib.toggleNotify(show.id)}>
-          <BellIcon size={15} /> Notify
-        </button>
-        <AddToListButton type="show" id={show.id} />
-      </div>
-
-      <button
-        className="community-link pressable"
-        onClick={() =>
-          nav(`/communities?topic=show:${show.id}`, { state: { topic: { type: 'show', id: show.id, title: show.title, poster: show.poster } } })
-        }
-      >
-        <PeopleIcon size={16} /> Communities about this show
-        <ChevronRight size={18} />
-      </button>
-
-      {/* Status controls */}
-      <div className="detail-actions" style={{ paddingTop: 0 }}>
-        {stopped ? (
-          <button
-            className="action-pill pressable"
-            onClick={() => {
-              lib.setStopped(show.id, false)
-              toast('Resumed watching')
-            }}
-          >
-            Resume Watching
-          </button>
-        ) : (
-          started && (
-            <button
-              className="action-pill pressable"
-              onClick={() => {
-                lib.setStopped(show.id, true, toLibraryItem(show))
-                toast('Marked as Stopped Watching')
-              }}
-            >
-              Stop Watching
-            </button>
-          )
-        )}
-        {cls !== 'finished' && !stopped && (
-          <button
-            className="action-pill tone-green pressable"
-            onClick={() => {
-              lib.markAllPrevious(allReleasedIds)
-              toast('Marked all released episodes watched')
-            }}
-          >
-            <CheckIcon size={15} /> Mark Completed
-          </button>
-        )}
-      </div>
+        <ActionBtn icon={<HeartIcon size={22} fill={fav ? 'currentColor' : 'none'} />} label="Favorite" on={fav} tone="red" onClick={() => toggleFavorite('show', show.id, toLibraryItem(show))} />
+        <ActionBtn icon={<BellIcon size={22} />} label={notify ? 'Notifying' : 'Notify'} on={notify} onClick={() => lib.toggleNotify(show.id)} />
+        <ActionBtn icon={<ListIcon size={22} />} label={listCount ? `${listCount} list${listCount > 1 ? 's' : ''}` : 'Add to list'} on={listCount > 0} onClick={() => setListSheet(true)} />
+        <ActionBtn
+          icon={<PeopleIcon size={22} />}
+          label="Community"
+          onClick={() => nav(`/communities?topic=show:${show.id}`, { state: { topic: { type: 'show', id: show.id, title: show.title, poster: show.poster } } })}
+        />
+      </ActionBar>
 
       <div className="detail-progress">
         <ProgressDot color={color} />
@@ -191,33 +142,105 @@ export function ShowScreen() {
         </span>
       </div>
 
-      {show.overview && <p className="detail-overview">{show.overview}</p>}
-      {show.genres.length > 0 && (
-        <div className="genre-row">
-          {show.genres.map((g) => (
-            <span key={g} className="genre-chip">
-              {g}
-            </span>
-          ))}
+      <DetailTabs
+        tabs={[
+          { key: 'episodes', label: 'Episodes' },
+          { key: 'about', label: 'About' },
+          { key: 'comments', label: commentsLabel(commentCount) },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+
+      {tab === 'episodes' && (
+        <>
+          <div className="detail-chips">
+            {cls !== 'finished' && !stopped && (
+              <button
+                className="action-pill tone-green pressable"
+                onClick={() => {
+                  lib.markAllPrevious(allReleasedIds)
+                  toast('Marked all released episodes watched')
+                }}
+              >
+                <CheckIcon size={15} /> Mark completed
+              </button>
+            )}
+            {stopped ? (
+              <button
+                className="action-pill pressable"
+                onClick={() => {
+                  lib.setStopped(show.id, false)
+                  toast('Resumed watching')
+                }}
+              >
+                Resume watching
+              </button>
+            ) : (
+              started && (
+                <button
+                  className="action-pill pressable"
+                  onClick={() => {
+                    lib.setStopped(show.id, true, toLibraryItem(show))
+                    toast('Marked as Stopped Watching')
+                  }}
+                >
+                  Stop watching
+                </button>
+              )
+            )}
+          </div>
+          <div className="card-list">
+            {show.seasons.map((s) => (
+              <SeasonCard
+                key={s.season}
+                artwork={show.backdrop}
+                name={s.name}
+                episodeCount={s.episodes.length}
+                color={seasonColorOf(s, lib.watchedEpisodes)}
+                onClick={() => nav(`/show/${show.id}/season/${s.season}`)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {tab === 'about' && (
+        <div className="about">
+          {show.overview && <p className="detail-overview">{show.overview}</p>}
+          {show.genres.length > 0 && (
+            <div className="genre-row">
+              {show.genres.map((g) => (
+                <span key={g} className="genre-chip">
+                  {g}
+                </span>
+              ))}
+            </div>
+          )}
+          <dl className="facts">
+            {show.network && <Fact k="Network" v={show.network} />}
+            {show.status && <Fact k="Status" v={show.status} />}
+            {show.firstAirYear && <Fact k="First aired" v={String(show.firstAirYear)} />}
+            <Fact k="Episodes" v={`${total} across ${show.seasons.length} season${show.seasons.length === 1 ? '' : 's'}`} />
+            {show.platforms.length > 0 && <Fact k="Where to watch" v={show.platforms.join(', ')} />}
+            {showAvg != null && <Fact k="Your average" v={fmtStars(showAvg)} />}
+          </dl>
         </div>
       )}
 
-      <div className="section-header">
-        <div className="section-header-title">Seasons</div>
-      </div>
-      <div className="card-list">
-        {show.seasons.map((s) => (
-          <SeasonCard
-            key={s.season}
-            artwork={show.backdrop}
-            name={s.name}
-            episodeCount={s.episodes.length}
-            color={seasonColorOf(s, lib.watchedEpisodes)}
-            onClick={() => nav(`/show/${show.id}/season/${s.season}`)}
-          />
-        ))}
-      </div>
+      {tab === 'comments' && <TitleComments target={ref} what={show.title} />}
+
       <div style={{ height: 20 }} />
+      {listSheet && <AddToListSheet itemRef={ref} meta={{ t: show.title, p: show.poster, y: show.firstAirYear }} onClose={() => setListSheet(false)} />}
+    </div>
+  )
+}
+
+export function Fact({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="fact">
+      <dt>{k}</dt>
+      <dd>{v}</dd>
     </div>
   )
 }

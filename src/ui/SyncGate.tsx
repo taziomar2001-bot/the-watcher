@@ -1,3 +1,4 @@
+import { Wordmark } from './Wordmark'
 import { useSync } from '../logic/sync'
 
 /**
@@ -12,7 +13,7 @@ export function SyncGate() {
   return (
     <main className="sync-gate" aria-busy={!error}>
       <div className="sync-gate-card" style={{ textAlign: 'center' }}>
-        <div className="welcome-logo">W</div>
+        <Wordmark size={40} />
         {error ? (
           <>
             <div className="sync-gate-progress" role="status">

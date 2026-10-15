@@ -13,16 +13,17 @@ export function SmartImage({
   style?: React.CSSProperties
 }) {
   const [loaded, setLoaded] = useState(false)
+  const [broken, setBroken] = useState(false)
   return (
     <span className={`smart-img ${className ?? ''}`} style={style}>
       {!loaded && <span className="smart-img-skeleton" />}
-      {src && (
+      {src && !broken && (
         <img
           src={src}
           alt={alt}
           loading="lazy"
           onLoad={() => setLoaded(true)}
-          onError={() => setLoaded(true)}
+          onError={() => (setLoaded(true), setBroken(true))}
           style={{ opacity: loaded ? 1 : 0 }}
         />
       )}

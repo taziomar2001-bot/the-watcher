@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, PlusIcon } from '../components/Icons'
+import { ChevronRight, ChevronLeft, SettingsIcon, HeartIcon, ClapperboardIcon, TvIcon, PlusIcon, ListIcon } from '../components/Icons'
+import { NewListSheet } from '../ui/NewListSheet'
+import { kindLabel, listSummary } from '../logic/lists'
 import { useLibrary } from '../store/useLibrary'
 import { useSync } from '../logic/sync'
 import { useMe, useMyProfile } from '../store/useMe'
 import { useShowEntries, useMovieEntries } from '../logic/useLibraryData'
 import { effectiveSeen } from '../logic/status'
-import { compositionLabel, countRefs } from '../logic/stats'
+import { compositionLabel } from '../logic/stats'
 import { ListBadge } from '../ui/ListBadge'
 import { formatDuration as hm } from '../utils/duration'
 
@@ -18,9 +19,6 @@ export function ProfileScreen() {
   const nav = useNavigate()
   const signedIn = useSync((s) => s.status === 'signedIn')
   const me = useSync((s) => s.userId)
-  const [newList, setNewList] = useState(false)
-  const [listName, setListName] = useState('')
-  const [listRanked, setListRanked] = useState(false)
   const social = useMyProfile(signedIn ? me : undefined)
   const requests = useMe((s) => s.requests)
   // Refresh in the background (cached copy shows instantly); adopt the
@@ -58,14 +56,12 @@ export function ProfileScreen() {
   const unwatchedMovies = movies.filter((e) => lib.watchlistMovies[e.item.id] && e.status !== 'completed')
   const remainingTotal = remainingEps * EP_MIN + unwatchedMovies.reduce((n, e) => n + (e.item.runtime || MOVIE_MIN), 0)
 
-  const createList = () => {
-    const n = listName.trim()
-    if (!n) return
-    lib.addList({ name: n, visibility: 'public', kind: 'mixed', items: [], ranked: listRanked })
-    setListName('')
-    setListRanked(false)
-    setNewList(false)
-  }
+  const tvInProgress = shows.filter((e) => !e.stopped && e.cls === 'incomplete').length
+  const moviesToWatch = unwatchedMovies.length
+  const tvShare = totalWatched > 0 ? tvMin / totalWatched : 0.5
+  // How far through everything you follow you are, by time.
+  const through = totalWatched + remainingTotal > 0 ? totalWatched / (totalWatched + remainingTotal) : 0
+  const covers = lib.lists.map((l) => l.cover).filter(Boolean).slice(0, 3) as string[]
 
   return (
     <div className="scroll-area route-fade">
@@ -77,7 +73,6 @@ export function ProfileScreen() {
         <div className="profile-head-text">
           <div className="profile-name">{name}</div>
           {social?.username && <div className="profile-at">@{social.username}</div>}
-          <div className="profile-handle">{hm(totalWatched)} watched</div>
           {social && (
             <div className="profile-social-row">
               <button className="profile-social-stat pressable" onClick={() => nav('/people/me/followers')}>
@@ -99,148 +94,162 @@ export function ProfileScreen() {
         </button>
       </div>
 
-      {/* ---- Media dashboard cards ---- */}
-      <div className="dash-card remaining">
-        <div className="dash-label">Remaining in your watchlist</div>
-        <div className="dash-value">{hm(remainingTotal)}</div>
-        <div className="dash-sub">
-          {unwatchedMovies.length} movies · {remainingEps.toLocaleString()} episodes
+      <div className="page-pad pf">
+        {/* Time watched: one number, split TV / movies */}
+        <div className="pf-hero">
+          <div className="pf-label">Time watched</div>
+          <div className="pf-big">{hm(totalWatched)}</div>
+          <div className="pf-split" aria-hidden="true">
+            <span className="tv" style={{ flexGrow: Math.max(tvShare, 0.02) }} />
+            <span className="mv" style={{ flexGrow: Math.max(1 - tvShare, 0.02) }} />
+          </div>
+          <div className="pf-legend">
+            <span><i className="tv" /> TV {hm(tvMin)}</span>
+            <span><i className="mv" /> Movies {hm(movieMin)}</span>
+          </div>
+        </div>
+
+        {/* TV and Movies side by side */}
+        <div className="pf-pair">
+          <button className="pf-card pressable" onClick={() => nav('/profile/tv')}>
+            <span className="pf-card-head">
+              <TvIcon size={18} /> TV Shows <ChevronRight size={16} className="pf-chev" />
+            </span>
+            <span className="pf-num">{showsFollowed.toLocaleString()}</span>
+            <span className="pf-cap">followed</span>
+            <span className="pf-facts">
+              <span><b>{tvInProgress.toLocaleString()}</b> in progress</span>
+              <span><b>{showsFinished.toLocaleString()}</b> finished</span>
+              <span><b>{episodesWatched.toLocaleString()}</b> episodes</span>
+            </span>
+          </button>
+          <button className="pf-card pressable" onClick={() => nav('/profile/movies')}>
+            <span className="pf-card-head">
+              <ClapperboardIcon size={18} /> Movies <ChevronRight size={16} className="pf-chev" />
+            </span>
+            <span className="pf-num">{moviesWatched.toLocaleString()}</span>
+            <span className="pf-cap">watched</span>
+            <span className="pf-facts">
+              <span><b>{moviesToWatch.toLocaleString()}</b> to watch</span>
+              <span><b>{moviesFollowed.toLocaleString()}</b> followed</span>
+              <span><b>{showsWatched.toLocaleString()}</b> shows started</span>
+            </span>
+          </button>
+        </div>
+
+        {/* What's left of what you follow */}
+        <button className="pf-left pressable" onClick={() => nav('/upcoming')} aria-label="What's left in your watchlist">
+          <span className="pf-ring" style={{ ['--p' as string]: `${Math.round(through * 100)}` }}>
+            <span>{Math.round(through * 100)}%</span>
+          </span>
+          <span className="pf-left-text">
+            <span className="pf-left-title">{hm(remainingTotal)} left in your watchlist</span>
+            <span className="pf-left-sub">
+              {remainingEps.toLocaleString()} episode{remainingEps === 1 ? '' : 's'} · {moviesToWatch.toLocaleString()} movie{moviesToWatch === 1 ? '' : 's'} to go
+            </span>
+          </span>
+        </button>
+
+        {/* Stats and Lists */}
+        <div className="pf-pair">
+          <button className="pf-card short pressable" onClick={() => nav('/profile/stats')}>
+            <span className="pf-tile-icon stats" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M5 20V11M12 20V4M19 20v-6" /></svg>
+            </span>
+            <span className="pf-tile-title">Stats</span>
+            <span className="pf-tile-sub">Genres, decades, ratings</span>
+          </button>
+          <button className="pf-card short pressable" onClick={() => nav('/profile/lists')}>
+            {covers.length > 0 ? (
+              <span className="pf-covers" aria-hidden="true">
+                {covers.map((c, i) => (
+                  <img key={i} src={c} alt="" style={{ zIndex: 3 - i }} />
+                ))}
+              </span>
+            ) : (
+              <span className="pf-tile-icon lists" aria-hidden="true">
+                <ListIcon size={20} />
+              </span>
+            )}
+            <span className="pf-tile-title">Lists</span>
+            <span className="pf-tile-sub">
+              {lib.lists.length} list{lib.lists.length === 1 ? '' : 's'} · Favorites
+            </span>
+          </button>
         </div>
       </div>
+      <div style={{ height: 20 }} />
+    </div>
+  )
+}
 
-      <button className="dash-card pressable" onClick={() => nav('/profile/tv')}>
-        <div className="dash-card-head">
-          <span className="dash-icon tv">
-            <TvIcon size={18} />
-          </span>
-          TV Shows
-          <ChevronRight size={20} className="dash-chevron" />
-        </div>
-        <div className="dash-metrics">
-          <div className="dash-metric">
-            <b>{showsFollowed.toLocaleString()}</b>
-            <span>followed</span>
-          </div>
-          <div className="dash-metric">
-            <b>{showsWatched.toLocaleString()}</b>
-            <span>watched</span>
-          </div>
-          <div className="dash-metric">
-            <b>{showsFinished.toLocaleString()}</b>
-            <span>finished</span>
-          </div>
-          <div className="dash-metric">
-            <b>{hm(tvMin)}</b>
-            <span>time watched</span>
+/** Favorites and every list, with create. */
+export function ProfileListsScreen() {
+  const nav = useNavigate()
+  const lib = useLibrary()
+  const [creating, setCreating] = useState(false)
+  const lists = [...lib.lists].sort((a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0))
+  return (
+    <div className="scroll-area route-fade">
+      <div className="app-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <button className="pressable" onClick={() => nav(-1)} aria-label="Back">
+            <ChevronLeft size={26} />
+          </button>
+          <div>
+            <h1>Lists</h1>
+            <div className="sub">{lib.lists.length} list{lib.lists.length === 1 ? '' : 's'}</div>
           </div>
         </div>
-      </button>
-
-      <button className="dash-card pressable" onClick={() => nav('/profile/movies')}>
-        <div className="dash-card-head">
-          <span className="dash-icon movie">
-            <ClapperboardIcon size={18} />
-          </span>
-          Movies
-          <ChevronRight size={20} className="dash-chevron" />
-        </div>
-        <div className="dash-metrics">
-          <div className="dash-metric">
-            <b>{moviesFollowed.toLocaleString()}</b>
-            <span>followed</span>
-          </div>
-          <div className="dash-metric">
-            <b>{moviesWatched.toLocaleString()}</b>
-            <span>watched</span>
-          </div>
-          <div className="dash-metric">
-            <b>{hm(movieMin)}</b>
-            <span>time watched</span>
-          </div>
-        </div>
-      </button>
-
-      <button className="cta-row stats-entry pressable" onClick={() => nav('/profile/stats')}>
-        <span className="stats-entry-icon" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M5 20V11M12 20V4M19 20v-6" /></svg>
-        </span>
-        <span>
-          <span className="stats-entry-title">Your stats</span>
-          <span className="stats-entry-sub">Genres, decades, languages & how you rate</span>
-        </span>
-        <ChevronRight size={20} />
-      </button>
-
-      {/* ---- Lists ---- */}
-      <div className="section-header" style={{ marginTop: 18 }}>
-        <div className="section-header-title">Lists</div>
-        <button className="section-more pressable" onClick={() => setNewList(true)} aria-label="New list">
+        <button className="icon-round pressable" onClick={() => setCreating(true)} aria-label="New list">
           <PlusIcon size={20} />
         </button>
       </div>
-
-      <button className="list-row pressable" onClick={() => nav('/favorites')}>
-        <span className="fav-badge">
-          <HeartIcon size={14} fill="#fff" strokeWidth={0} />
-        </span>
-        <span className="list-row-text">
-          <span className="list-row-name">Favorites</span>
-          <span className="list-row-sub">
-            {compositionLabel(Object.keys(lib.favoriteMovies).length, Object.keys(lib.favoriteShows).length)}
+      <div className="page-pad">
+        <button className="list-row pressable" onClick={() => nav('/favorites')}>
+          <span className="fav-badge">
+            <HeartIcon size={14} fill="#fff" strokeWidth={0} />
           </span>
-        </span>
-        <ChevronRight size={20} />
-      </button>
-
-      {lib.lists.map((l) => (
-        <button key={l.id} className="list-row pressable" onClick={() => nav(`/list/${l.id}`)}>
-          <ListBadge cover={l.cover} ranked={l.ranked} />
           <span className="list-row-text">
-            <span className="list-row-name">{l.name}</span>
-            <span className="list-row-sub">
-              {compositionLabel(countRefs(l.items).movies, countRefs(l.items).shows)}
-              {l.ranked ? ' · Ranked' : ''}
-            </span>
+            <span className="list-row-name">Favorites</span>
+            <span className="list-row-sub">{compositionLabel(Object.keys(lib.favoriteMovies).length, Object.keys(lib.favoriteShows).length)}</span>
           </span>
           <ChevronRight size={20} />
         </button>
-      ))}
-
-      <div style={{ height: 28 }} />
-
-      {newList && createPortal(
-        <div className="dialog-backdrop" onClick={() => { setNewList(false); setListRanked(false) }}>
-          <div className="dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="dialog-title">New list</div>
-            <div className="list-create-row">
-              <input
-                className="sync-input"
-                autoFocus
-                placeholder="List name"
-                value={listName}
-                onChange={(e) => setListName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && createList()}
-              />
-              <button className="sync-btn primary pressable" disabled={!listName.trim()} onClick={createList}>
-                Create
-              </button>
-            </div>
-            <button
-              className={`ranked-toggle pressable ${listRanked ? 'on' : ''}`}
-              onClick={() => setListRanked((v) => !v)}
-              type="button"
-            >
-              <span className="ranked-toggle-text">
-                <span className="ranked-toggle-title">Ranked list</span>
-                <span className="ranked-toggle-sub">Number titles 1, 2, 3… and reorder them</span>
+        {lists.map((l) => (
+          <button key={l.id} className="list-row pressable" onClick={() => nav(`/list/${l.id}`)}>
+            <ListBadge cover={l.cover} ranked={l.ranked} />
+            <span className="list-row-text">
+              <span className="list-row-name">{l.name}</span>
+              <span className="list-row-sub">
+                {l.items.length ? listSummary(l) : `${kindLabel(l.kind)} · empty`}
+                {l.ranked ? ' · Ranked' : ''}
+                {l.communities?.length ? ' · Shared' : ''}
+                {l.visibility === 'private' ? ' · Only you' : ''}
               </span>
-              <span className={`switch ${listRanked ? 'on' : ''}`}>
-                <span className="switch-knob" />
-              </span>
+            </span>
+            <ChevronRight size={20} />
+          </button>
+        ))}
+        {lists.length === 0 && (
+          <div className="empty compact">
+            <div className="empty-sub">Make a list of shows, seasons, episodes or movies — ranked or not.</div>
+            <button className="sync-btn primary pressable" style={{ marginTop: 12 }} onClick={() => setCreating(true)}>
+              <PlusIcon size={15} /> New list
             </button>
           </div>
-        </div>,
-        document.body,
+        )}
+      </div>
+      <div style={{ height: 24 }} />
+      {creating && (
+        <NewListSheet
+          onClose={() => setCreating(false)}
+          onCreate={(d) => {
+            const id = lib.addList({ name: d.name, kind: d.kind, ranked: d.ranked, visibility: 'public', items: [] })
+            setCreating(false)
+            nav(`/list/${id}`)
+          }}
+        />
       )}
     </div>
   )

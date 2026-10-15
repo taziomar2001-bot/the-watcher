@@ -389,6 +389,12 @@ function clearLocalAccount() {
     localStorage.removeItem('tw-onboarded')
     localStorage.removeItem(PENDING_USERNAME_KEY)
     localStorage.removeItem('tw-me')
+    localStorage.removeItem('tw-clsync')
+    // Cached community/comment screens (stale-while-revalidate copies).
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i)
+      if (k?.startsWith('tw-cache:')) localStorage.removeItem(k)
+    }
   } catch {
     /* ignore */
   }

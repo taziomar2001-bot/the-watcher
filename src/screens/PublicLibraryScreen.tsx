@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { SmartImage } from '../components/ui'
+import { SnapshotList, type SnapRow } from '../ui/SnapshotList'
 import { Segmented } from '../ui/primitives'
 import { ChevronLeft } from '../components/Icons'
 import { getProfileById, getShowcase, type Showcase, type ShowcaseItem, type SocialProfile } from '../data/social'
@@ -9,27 +9,9 @@ import { nameOf } from '../ui/social'
 
 type Kind = 'tv' | 'movies' | 'favorites' | 'list'
 
-function Grid({ items, ranked }: { items: ShowcaseItem[]; ranked?: boolean }) {
-  const nav = useNavigate()
-  if (items.length === 0)
-    return (
-      <div className="empty">
-        <div className="empty-title">Nothing here</div>
-      </div>
-    )
-  return (
-    <div className="poster-grid">
-      {items.map((it, i) => (
-        <button key={`${it.type}:${it.id}`} className="poster-thumb pressable" style={{ width: 'auto', textAlign: 'left' }} onClick={() => nav(`/${it.type}/${it.id}`)}>
-          <div className="poster-thumb-art">
-            <SmartImage src={it.poster} alt={it.title} />
-            {ranked && <span className="rank-badge">{i + 1}</span>}
-          </div>
-          <div className="poster-thumb-title">{it.title}</div>
-        </button>
-      ))}
-    </div>
-  )
+const rowOf = (it: ShowcaseItem): SnapRow => ({ ref: it.ref ?? `${it.type}:${it.id}`, title: it.title, sub: it.sub, poster: it.poster })
+function Grid({ items, ranked, episodes }: { items: ShowcaseItem[]; ranked?: boolean; episodes?: boolean }) {
+  return <SnapshotList items={items.map(rowOf)} ranked={ranked} episodes={episodes} />
 }
 
 /** Another member's favorites or one of their public lists (from their showcase). */
@@ -57,8 +39,12 @@ export function PublicLibraryScreen({ kind }: { kind: Kind }) {
   let body: React.ReactNode
   if (data === undefined)
     body = (
-      <div className="empty">
-        <div className="empty-sub">Loading…</div>
+      <div className="poster-grid" aria-busy="true">
+        {Array.from({ length: 9 }, (_, i) => (
+          <div key={i} className="poster-thumb" style={{ width: 'auto' }}>
+            <div className="poster-thumb-art skeleton" />
+          </div>
+        ))}
       </div>
     )
   else if (!data.showcase)
@@ -85,7 +71,7 @@ export function PublicLibraryScreen({ kind }: { kind: Kind }) {
         <Grid items={favs.filter((f) => f.type === favTab)} />
       </>
     )
-  } else body = list ? <Grid items={list.items} ranked={list.ranked} /> : <div className="empty"><div className="empty-title">List not found</div></div>
+  } else body = list ? <Grid items={list.items} ranked={list.ranked} episodes={list.kind === 'episodes'} /> : <div className="empty"><div className="empty-title">List not found</div></div>
 
   return (
     <div className="scroll-area route-fade" ref={scrollRef}>

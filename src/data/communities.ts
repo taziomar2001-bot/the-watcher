@@ -356,3 +356,124 @@ export function subscribeMessages(id: string, onInsert: (m: Message) => void, on
     void supabase!.removeChannel(channel)
   }
 }
+
+// ---------------------------------------------------------------- titles (009)
+
+export interface CommunityTitle {
+  community_id: string
+  ref: string // "show:ID" | "movie:ID"
+  title: string
+  poster: string | null
+  year: number | null
+}
+
+/** The titles a community is about. Falls back to its single topic before 009 runs. */
+export async function communityTitles(c: Community): Promise<CommunityTitle[]> {
+  const legacy: CommunityTitle[] =
+    c.topic_type && c.topic_id ? [{ community_id: c.id, ref: `${c.topic_type}:${c.topic_id}`, title: c.topic_title ?? '', poster: c.topic_poster, year: null }] : []
+  if (!supabase) return legacy
+  const { data, error } = await supabase.from('community_titles').select('community_id,ref,title,poster,year').eq('community_id', c.id).order('added_at').limit(50)
+  if (error) return legacy
+  return (data as CommunityTitle[]) ?? []
+}
+
+/** Owners/admins: link more titles. Titles can't be removed. */
+export async function addCommunityTitles(id: string, items: { ref: string; title: string; poster?: string; year?: number }[]): Promise<Result<number>> {
+  if (!supabase) return { ok: false, code: 'disabled' }
+  if (items.length === 0) return { ok: true, value: 0 }
+  const { data, error } = await supabase.rpc('add_community_titles', { cid: id, p_items: items })
+  return error ? { ok: false, code: codeOf(error) } : { ok: true, value: (data as number) ?? 0 }
+}
+
+/** Communities about a title (any of their linked titles). */
+export async function communitiesForTitle(ref: string): Promise<Result<Community[]>> {
+  if (!supabase) return { ok: false, code: 'disabled' }
+  const { data, error } = await supabase.from('community_titles').select('community_id').eq('ref', ref).limit(100)
+  if (error) {
+    const [type, id] = ref.split(':')
+    return findCommunities('', { type, id })
+  }
+  const ids = ((data as { community_id: string }[]) ?? []).map((r) => r.community_id)
+  if (ids.length === 0) return { ok: true, value: [] }
+  const { data: cs, error: e2 } = await selectCommunities<Community[]>((cols) => supabase!.from('communities').select(cols).in('id', ids).order('member_count', { ascending: false }) as never)
+  if (e2) return { ok: false, code: codeOf(e2) }
+  return { ok: true, value: (cs as Community[]) ?? [] }
+}
+
+// ---------------------------------------------------------------- lists (009)
+
+/** One item of a list snapshot: ref, title, show name, poster, year. */
+export interface SnapItem {
+  r: string
+  t: string
+  s?: string
+  p?: string
+  y?: number
+}
+
+export interface CommunityList {
+  community_id: string
+  owner_id: string
+  list_id: string
+  official: boolean
+  name: string
+  kind: 'mixed' | 'shows' | 'seasons' | 'episodes' | 'movies'
+  ranked: boolean
+  cover: string | null
+  items: SnapItem[]
+  updated_at: string
+  owner?: SocialProfile
+}
+
+export async function communityLists(id: string): Promise<CommunityList[] | null> {
+  if (!supabase) return null
+  const { data, error } = await supabase
+    .from('community_lists')
+    .select('community_id,owner_id,list_id,official,name,kind,ranked,cover,items,updated_at')
+    .eq('community_id', id)
+    .order('official', { ascending: false })
+    .order('updated_at', { ascending: false })
+    .limit(200)
+  if (error) return null
+  const rows = (data as CommunityList[]) ?? []
+  const profs = await profilesByIds(rows.map((r) => r.owner_id))
+  return rows.map((r) => ({ ...r, owner: profs.get(r.owner_id) }))
+}
+
+export async function getCommunityList(id: string, owner: string, listId: string): Promise<CommunityList | null> {
+  if (!supabase) return null
+  const { data } = await supabase
+    .from('community_lists')
+    .select('community_id,owner_id,list_id,official,name,kind,ranked,cover,items,updated_at')
+    .eq('community_id', id)
+    .eq('owner_id', owner)
+    .eq('list_id', listId)
+    .maybeSingle()
+  if (!data) return null
+  const profs = await profilesByIds([owner])
+  return { ...(data as CommunityList), owner: profs.get(owner) }
+}
+
+export async function linkList(
+  id: string,
+  list: { id: string; name: string; kind: string; ranked: boolean; cover?: string; items: SnapItem[] },
+): Promise<Result<boolean>> {
+  if (!supabase) return { ok: false, code: 'disabled' }
+  const { data, error } = await supabase.rpc('link_community_list', {
+    cid: id,
+    p_list_id: list.id,
+    p_name: list.name,
+    p_kind: list.kind,
+    p_ranked: list.ranked,
+    p_cover: list.cover ?? null,
+    p_items: list.items.slice(0, 500),
+  })
+  if (error) return { ok: false, code: /too_many_lists/.test(error.message) ? 'too_many_lists' : codeOf(error) }
+  return { ok: true, value: !!data }
+}
+
+export async function unlinkList(id: string, listId: string, owner?: string): Promise<Result<null>> {
+  if (!supabase) return { ok: false, code: 'disabled' }
+  const { error } = await supabase.rpc('unlink_community_list', { cid: id, p_list_id: listId, p_owner: owner ?? null })
+  return error ? { ok: false, code: codeOf(error) } : { ok: true, value: null }
+}

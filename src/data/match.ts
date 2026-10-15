@@ -13,6 +13,19 @@ export interface MatchSession {
   seed: number
   status: 'waiting' | 'active' | 'closed'
   expires_at: string
+  // 009 filters (absent before it runs)
+  source?: 'anything' | 'watchlist' | 'not_started'
+  min_len?: number | null
+  max_len?: number | null
+  deck?: DeckItem[] | null
+}
+
+/** A title the host chose to share for a "from my watchlist" session. */
+export interface DeckItem {
+  id: string
+  title: string
+  poster?: string
+  year?: number
 }
 
 export interface Swipe {
@@ -24,7 +37,18 @@ export interface Swipe {
   poster: string | null
 }
 
-const S_COLS = 'id,code,host_id,guest_id,kind,genre_id,genre_name,seed,status,expires_at'
+const BASE_COLS = 'id,code,host_id,guest_id,kind,genre_id,genre_name,seed,status,expires_at'
+const V2_COLS = BASE_COLS + ',source,min_len,max_len,deck'
+let v2 = true
+/** Select sessions, falling back to the 008 columns until 009 has run. */
+async function selectSessions<T>(run: (cols: string) => PromiseLike<{ data: T | null; error: { message?: string } | null }>) {
+  if (v2) {
+    const r = await run(V2_COLS)
+    if (!r.error || !/source|min_len|max_len|deck|column/.test(r.error.message ?? '')) return r
+    v2 = false
+  }
+  return run(BASE_COLS)
+}
 
 export function errorCode(message?: string): string {
   const m = message ?? ''
@@ -33,9 +57,24 @@ export function errorCode(message?: string): string {
   return 'error'
 }
 
-export async function createSession(kind: 'movie' | 'show', genre?: { id: number; name: string }): Promise<{ ok: true; id: string; code: string } | { ok: false; code: string }> {
+export async function createSession(
+  kind: 'movie' | 'show',
+  genre?: { id: number; name: string },
+  extra?: { min?: number; max?: number; source?: 'anything' | 'watchlist' | 'not_started'; deck?: DeckItem[] },
+): Promise<{ ok: true; id: string; code: string } | { ok: false; code: string }> {
   if (!supabase) return { ok: false, code: 'disabled' }
-  const { data, error } = await supabase.rpc('create_match_session', { p_kind: kind, p_genre_id: genre?.id ?? null, p_genre_name: genre?.name ?? null })
+  const needsV2 = !!(extra?.min || extra?.max || (extra?.source && extra.source !== 'anything'))
+  const { data, error } = needsV2
+    ? await supabase.rpc('create_match_session_v2', {
+        p_kind: kind,
+        p_genre_id: genre?.id ?? null,
+        p_genre_name: genre?.name ?? null,
+        p_min_len: extra?.min ?? null,
+        p_max_len: extra?.max ?? null,
+        p_source: extra?.source ?? 'anything',
+        p_deck: extra?.deck ?? null,
+      })
+    : await supabase.rpc('create_match_session', { p_kind: kind, p_genre_id: genre?.id ?? null, p_genre_name: genre?.name ?? null })
   if (error) return { ok: false, code: errorCode(error.message) }
   const row = (Array.isArray(data) ? data[0] : data) as { id: string; code: string }
   return { ok: true, id: row.id, code: row.code }
@@ -50,20 +89,23 @@ export async function joinSession(code: string): Promise<{ ok: true; id: string 
 
 export async function getSession(id: string): Promise<MatchSession | null> {
   if (!supabase) return null
-  const { data } = await supabase.from('match_sessions').select(S_COLS).eq('id', id).maybeSingle()
+  const { data } = await selectSessions<MatchSession>((cols) => supabase!.from('match_sessions').select(cols).eq('id', id).maybeSingle() as never)
   return (data as MatchSession) ?? null
 }
 
 /** Your most recent unexpired session, to resume after leaving the screen. */
 export async function latestOpenSession(): Promise<MatchSession | null> {
   if (!supabase) return null
-  const { data } = await supabase
-    .from('match_sessions')
-    .select(S_COLS)
-    .neq('status', 'closed')
-    .gt('expires_at', new Date().toISOString())
-    .order('created_at', { ascending: false })
-    .limit(1)
+  const { data } = await selectSessions<MatchSession[]>(
+    (cols) =>
+      supabase!
+        .from('match_sessions')
+        .select(cols)
+        .neq('status', 'closed')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1) as never,
+  )
   return ((data as MatchSession[]) ?? [])[0] ?? null
 }
 
