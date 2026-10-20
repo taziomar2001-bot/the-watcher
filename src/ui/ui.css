@@ -3032,3 +3032,7 @@ textarea.sync-input { font-family: inherit; }
 .profile-tab .pf-left .pf-ring span { width: 33px; height: 33px; font-size: 10.5px; }
 .profile-tab .pf-left-title { font-size: 14px; }
 .profile-tab .pf-left-sub { font-size: 12px; margin-top: 1px; }
+
+/* Poster grids keep the view still themselves when rows are added above you
+   (PosterGrid); the browser's own scroll anchoring would adjust a second time. */
+.scroll-area:has(.poster-grid) { overflow-anchor: none; }
