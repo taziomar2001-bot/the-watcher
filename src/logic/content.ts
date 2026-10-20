@@ -37,7 +37,7 @@ const ALL_CATEGORIES: (ContentCategory & { on: boolean })[] = [
   { key: 'games', label: 'Video Games', path: '/games', Icon: GamepadIcon, matches: (p: string) => p === '/games', on: GAMES_ON },
 ]
 export const CONTENT_CATEGORIES: ContentCategory[] = ALL_CATEGORIES.filter((c) => c.on)
-const DEFAULT_CATEGORY = CONTENT_CATEGORIES.find((c) => c.key === 'movies')!
+const DEFAULT_CATEGORY = CONTENT_CATEGORIES.find((c) => c.key === 'tv')!
 
 /** Kinds available in this build, in display order. */
 export const KINDS_ON: ('show' | 'movie' | 'book' | 'game')[] = KIND_ORDER.filter((k) => (k === 'book' ? BOOKS_ON : k === 'game' ? GAMES_ON : true))
@@ -48,7 +48,7 @@ export function nextContentPath(pathname: string): string {
   return CONTENT_CATEGORIES[(i + 1) % CONTENT_CATEGORIES.length].path
 }
 
-// The Content tab opens on Movies each time the app starts, then remembers the
+// The Content tab opens on TV Shows each time the app starts, then remembers the
 // category you were last on for the rest of that visit.
 let lastKey: string | null = null
 
