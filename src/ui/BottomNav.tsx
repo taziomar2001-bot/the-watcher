@@ -1,6 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { GridIcon, CalendarIcon, SearchIcon, PeopleIcon, PersonIcon } from '../components/Icons'
 import { isContentPath, lastContentPath, nextContentPath } from '../logic/content'
+import { FOCUS_SEARCH } from '../logic/nav'
 
 const items = [
   { to: '/content', label: 'Content', Icon: GridIcon },
@@ -24,6 +25,13 @@ export function BottomNav() {
             to={isContent ? lastContentPath() : to}
             className={`nav-item ${active ? 'active' : ''}`}
             onClick={(e) => {
+              // Already on Discover: same as tapping its search bar. (Dispatched
+              // synchronously so the phone keyboard can open from this tap.)
+              if (to === '/discover' && pathname === '/discover') {
+                e.preventDefault()
+                window.dispatchEvent(new Event(FOCUS_SEARCH))
+                return
+              }
               // Already on a content tab: step to the next kind (Books → Movies → TV Shows → Games → …).
               if (!isContent || !isContentPath(pathname)) return
               e.preventDefault()

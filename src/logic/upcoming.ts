@@ -5,6 +5,7 @@ import { gamesByIds } from '../data/games'
 import { useLibrary } from '../store/useLibrary'
 import { toTrackItem } from './tracks'
 import { toLibraryItem } from '../utils/media'
+import { latestAired } from './status'
 
 export interface UpEp {
   season: number
@@ -141,7 +142,12 @@ async function sync(force: boolean, onlyId?: string): Promise<void> {
 
   const now = Date.now()
   const toFetch = (onlyId ? [onlyId] : wantedIds).filter(
-    (id) => force || !fetchedAt[id] || now - fetchedAt[id] > SHOW_TTL,
+    (id) =>
+      force ||
+      !fetchedAt[id] ||
+      now - fetchedAt[id] > SHOW_TTL ||
+      // Saved before the latest episode was recorded: fetch once to fill it in.
+      lib.libraryShows[id]?.latestEpisodeId === undefined,
   )
   if (!toFetch.length) {
     store._apply({ builtAt: now })
@@ -171,6 +177,7 @@ async function sync(force: boolean, onlyId?: string): Promise<void> {
           totalEpisodes: s.totalEpisodes || all.length,
           releasedEpisodes: all.filter((e) => isReleased(e.airDate)).length,
           latestReleaseDate: airedDates.length ? airedDates.sort()[airedDates.length - 1] : undefined,
+          latestEpisodeId: latestAired(all, todayIso)?.id ?? '',
           ended: isEnded(s.status),
         })
         useUpcoming.getState()._patchShow(id, { title: s.title, poster: s.poster, eps }, Date.now())

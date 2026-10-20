@@ -12,7 +12,7 @@ import { getShow } from '../data/catalog'
 import { useLibrary } from '../store/useLibrary'
 import { toLibraryItem } from '../utils/media'
 import { useToast } from '../store/useToast'
-import { classifyShow, seasonColor, showColor, DOT_COLOR, effectiveSeen } from '../logic/status'
+import { classifyShow, seasonColor, showColor, DOT_COLOR, effectiveSeen, latestAired } from '../logic/status'
 import { showAverageLive, seasonSizesOf, fmtStars } from '../logic/ratings'
 import { AddToListSheet, useListMembership } from '../ui/AddToList'
 import { useToggleFavorite } from '../logic/favorites'
@@ -31,6 +31,7 @@ function enrichedItem(show: Show, existing?: import('../store/useLibrary').Libra
     ...toLibraryItem(show),
     totalEpisodes: show.totalEpisodes || all.length,
     releasedEpisodes: all.filter((e) => isReleased(e.airDate)).length,
+    latestEpisodeId: latestAired(all)?.id ?? '',
     ended: isEnded(show),
     seen: existing?.seen,
   } as import('../store/useLibrary').LibraryItem
@@ -60,6 +61,7 @@ export function ShowScreen() {
       totalEpisodes: show.totalEpisodes || allEps.length,
       releasedEpisodes: allEps.filter((e) => isReleased(e.airDate)).length,
       latestReleaseDate: aired.length ? aired.sort()[aired.length - 1] : undefined,
+      latestEpisodeId: latestAired(allEps)?.id ?? '',
       ended: isEnded(show),
       seasonSizes: seasonSizesOf(show),
     })

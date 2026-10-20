@@ -45,3 +45,6 @@ export function useUpNavigation() {
     else nav(parentPath)
   }
 }
+
+/** Fired when the Discover tab is tapped while already on Discover. */
+export const FOCUS_SEARCH = 'tw:focus-search'

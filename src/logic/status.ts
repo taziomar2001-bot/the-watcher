@@ -78,7 +78,8 @@ export function effectiveSeen(item: LibraryItem, watched: Record<string, true>):
  * Classify a show:
  *  - notStarted: no watched episodes
  *  - finished:   ended AND every episode watched
- *  - upToDate:   every *released* episode watched, but more content expected
+ *  - upToDate:   every *released* episode watched, or at least the latest
+ *                aired one (earlier ones may be skipped); more content expected
  *  - incomplete: at least one released episode still unwatched
  * `releasedEpisodes`/`ended` come from the show's cached summary (enriched from
  * getShow); when absent we fall back to totalEpisodes.
@@ -89,17 +90,30 @@ export function classifyShow(item: LibraryItem, watched: Record<string, true>): 
   const total = item.totalEpisodes
   const released = item.releasedEpisodes ?? total // fallback: assume all released
   const ended = !!item.ended
+  // Watching the latest aired episode is enough to be up to date, even with
+  // earlier episodes skipped. ("Finished" still needs every episode.)
+  const sawLatest = !!item.latestEpisodeId && !!watched[item.latestEpisodeId]
   if (released != null && released > 0) {
     if (seen >= released) {
       // Caught up on everything aired.
       if (ended && (total == null || seen >= total)) return 'finished'
       return 'upToDate'
     }
-    return 'incomplete'
+    return sawLatest ? 'upToDate' : 'incomplete'
   }
   // No episode-count info yet — best-effort.
   if (total != null && total > 0 && seen >= total) return ended ? 'finished' : 'upToDate'
-  return 'incomplete'
+  return sawLatest ? 'upToDate' : 'incomplete'
+}
+
+/**
+ * The most recent episode that has already aired (latest air date; for a tie,
+ * the later one in running order). Undefined when nothing has aired.
+ */
+export function latestAired<E extends { id: string; airDate?: string }>(eps: E[], todayIso = new Date().toISOString().slice(0, 10)): E | undefined {
+  let best: E | undefined
+  for (const e of eps) if (e.airDate && e.airDate <= todayIso && (!best || e.airDate >= best.airDate!)) best = e
+  return best
 }
 
 /** Overall TV show colour (priority: stopped→finished→upToDate→notStarted→incomplete). */

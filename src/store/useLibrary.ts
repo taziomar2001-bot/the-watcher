@@ -57,6 +57,7 @@ export interface LibraryItem {
   totalEpisodes?: number
   releasedEpisodes?: number // episodes aired as of last enrichment
   latestReleaseDate?: string // air date of the most recent already-aired episode
+  latestEpisodeId?: string // id of that episode ('' when nothing has aired yet)
   ended?: boolean // show concluded (TMDB status Ended/Canceled)
   seasonCount?: number
   seasonSizes?: Record<string, number> // season number -> episode count (for offline rating averages)

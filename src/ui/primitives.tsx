@@ -80,16 +80,19 @@ export function SearchField({
   onChange,
   placeholder = 'Search',
   autoFocus,
+  inputRef,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
   autoFocus?: boolean
+  inputRef?: React.Ref<HTMLInputElement>
 }) {
   return (
     <label className="search-field">
       <SearchIcon size={20} />
       <input
+        ref={inputRef}
         value={value}
         autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)}

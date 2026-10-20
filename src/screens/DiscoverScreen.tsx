@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { SmartImage } from '../components/ui'
 import { Segmented, SearchField, SectionHeader } from '../ui/primitives'
@@ -24,6 +24,7 @@ import { KIND, KindIcon } from '../ui/kinds'
 import { toTrackItem, trackColor, WORDS } from '../logic/tracks'
 import { FAV_LIMIT } from '../logic/stats'
 import type { TrackKind } from '../store/useLibrary'
+import { FOCUS_SEARCH } from '../logic/nav'
 
 // Module-scoped so Discover's mode + query survive navigating to a detail page
 // and back (scroll position is preserved separately by useScrollMemory).
@@ -33,6 +34,17 @@ export function DiscoverScreen() {
   const nav = useNavigate()
   const location = useLocation()
   const scrollRef = useScrollMemory<HTMLDivElement>('discover')
+  const searchRef = useRef<HTMLInputElement>(null)
+  // Discover tapped in the dock while already here: back to the top, into the
+  // search bar — exactly like tapping the bar itself.
+  useEffect(() => {
+    const focus = () => {
+      searchRef.current?.focus({ preventScroll: true })
+      scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+    window.addEventListener(FOCUS_SEARCH, focus)
+    return () => window.removeEventListener(FOCUS_SEARCH, focus)
+  }, [scrollRef])
   const asked = (location.state as { kind?: ContentKind } | null)?.kind
   if (asked && KINDS_ON.includes(asked) && discoverMem.kind !== asked) discoverMem.kind = asked
   const [kind, setKindState] = useState<ContentKind>(discoverMem.kind)
@@ -187,7 +199,7 @@ export function DiscoverScreen() {
 
       {/* 1. Search bar (above the toggle) */}
       <div className="page-pad" style={{ paddingBottom: 10 }}>
-        <SearchField value={q} onChange={setQ} placeholder={KINDS_ON.length > 2 ? 'Search titles & people' : 'Search movies, TV shows & people'} />
+        <SearchField inputRef={searchRef} value={q} onChange={setQ} placeholder={KINDS_ON.length > 2 ? 'Search titles & people' : 'Search movies, TV shows & people'} />
       </div>
 
       {/* 2. TV/Movies toggle — only relevant to the discovery sections, so it
